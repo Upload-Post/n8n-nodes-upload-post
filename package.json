@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-upload-post",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "n8n community node for Upload Post",
   "keywords": [
     "n8n-community-node-package",
@@ -8,14 +8,14 @@
     "social media"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/your-github-username/n8n-nodes-upload-post",
+  "homepage": "https://github.com/Upload-Post/n8n-nodes-upload-post",
   "author": {
-    "name": "Your Name or Org",
-    "email": "your.email@example.com"
+    "name": "Upload-Post",
+    "email": "info@upload-post.com"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-github-username/n8n-nodes-upload-post.git"
+    "url": "https://github.com/Upload-Post/n8n-nodes-upload-post"
   },
   "engines": {
     "node": ">=20.15"

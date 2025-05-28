@@ -34,16 +34,6 @@ export class UploadPost implements INodeType {
 			},
 		},
 		properties: [
-			// Node properties which the user gets displayed and
-			// can change on the node.
-			{
-				displayName: 'My String',
-				name: 'myString',
-				type: 'string',
-				default: '',
-				placeholder: 'Placeholder value',
-				description: 'The description text',
-			},
 			{
 				displayName: 'Operation',
 				name: 'operation',

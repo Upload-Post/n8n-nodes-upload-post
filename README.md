@@ -60,7 +60,7 @@ Requires Node.js version 20.15 or later.
 
 If you want to contribute to this node or run it locally for development:
 
-1.  Clone this repository: `git clone https://github.com/your-github-username/n8n-nodes-upload-post.git` (replace `your-github-username`)
+1.  Clone this repository: `git clone https://github.com/Upload-Post/n8n-nodes-upload-post` (replace `your-github-username`)
 2.  Install dependencies: `npm i`
 3.  Build the node: `npm run build`
 4.  Link the package to your n8n instance for testing. Refer to [Run your node locally](https://docs.n8n.io/integrations/creating-nodes/test/run-node-locally/).
