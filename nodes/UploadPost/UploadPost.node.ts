@@ -1,11 +1,13 @@
 import {
 	IDataObject,
 	IExecuteFunctions,
+	IHttpRequestMethods,
 	INodeExecutionData,
 	INodeProperties,
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
+	IRequestOptions,
 	NodeConnectionType,
 	NodeOperationError,
 } from 'n8n-workflow';
@@ -52,7 +54,6 @@ export class UploadPost implements INodeType {
 							request: {
 								method: 'POST',
 								url: '/upload_photos',
-								body: {},
 							},
 						},
 					},
@@ -65,7 +66,6 @@ export class UploadPost implements INodeType {
 							request: {
 								method: 'POST',
 								url: '/upload', // Video endpoint is /upload
-								body: {},
 							},
 						},
 					},
@@ -78,7 +78,6 @@ export class UploadPost implements INodeType {
 							request: {
 								method: 'POST',
 								url: '/upload_text',
-								body: {},
 							},
 						},
 					},
@@ -1170,47 +1169,69 @@ export class UploadPost implements INodeType {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
 		const length = items.length;
+		const baseApiUrl = 'https://api.upload-post.com/api'; // Define base URL directly
+
+		// Node description for operation details
 		const nodeDescription = (this as any as INodeType).description;
-		const defaultBaseUrl = nodeDescription.requestDefaults?.baseURL;
 
 		for (let i = 0; i < length; i++) {
 			try {
+				// Get credentials for manual authentication
+				const credentials = await this.getCredentials('uploadPostApi', i);
+				if (!credentials || !credentials.apiKey) {
+					throw new NodeOperationError(this.getNode(), 'API key is missing from UploadPostApi credentials.', { itemIndex: i });
+				}
+				const apiKey = credentials.apiKey as string;
+				const authorizationHeader = `Apikey ${apiKey}`;
+
 				const operation = this.getNodeParameter('operation', i) as string;
 
 				const operationProperty = nodeDescription.properties.find((prop: INodeProperties) => prop.name === 'operation');
 				const operationOptions = operationProperty?.options as INodePropertyOptions[] | undefined;
 				const operationConfig = operationOptions?.find(opt => opt.value === operation);
 
-				const routingInfo = operationConfig?.routing as IDataObject | undefined;
-
-				if (!routingInfo || !routingInfo.request || !(routingInfo.request as IDataObject).url || !(routingInfo.request as IDataObject).method) {
-					throw new NodeOperationError(this.getNode(), `Routing information incomplete for operation: ${operation}`);
+				if (!operationConfig || !operationConfig.routing || !(operationConfig.routing as IDataObject).request) {
+					throw new NodeOperationError(this.getNode(), `Routing information not found for operation: ${operation}`, { itemIndex: i });
 				}
 
-				const requestDetails = routingInfo.request as IDataObject;
-				const relativeUrl = requestDetails.url as string; // This is the relative path e.g. /upload_photos
-				const httpMethod = requestDetails.method as string;
+				const requestDetails = (operationConfig.routing as IDataObject).request as IDataObject;
+				const relativeUrl = requestDetails.url as string;
+				const httpMethod = requestDetails.method as IHttpRequestMethods;
 
-				if (!defaultBaseUrl) {
-					throw new NodeOperationError(this.getNode(), 'Base URL is not defined in node requestDefaults.');
+				if (!relativeUrl || !httpMethod) {
+					throw new NodeOperationError(this.getNode(), `Incomplete routing details (URL or Method missing) for operation: ${operation}`, { itemIndex: i });
 				}
 
-				// Options for the request helper. By providing a relative uri,
-				// n8n's request helper will combine it with requestDefaults.baseURL.
-				const requestOptions: Record<string, unknown> = {
+				// Construct the full URL
+				let fullUrl;
+				if (baseApiUrl.endsWith('/') && relativeUrl.startsWith('/')) {
+					fullUrl = baseApiUrl + relativeUrl.substring(1);
+				} else if (!baseApiUrl.endsWith('/') && !relativeUrl.startsWith('/')) {
+					fullUrl = `${baseApiUrl}/${relativeUrl}`;
+				} else {
+					fullUrl = baseApiUrl + relativeUrl;
+				}
+
+				const requestOptions: IRequestOptions = {
 					method: httpMethod,
-					uri: relativeUrl, // Pass the relative URL
-					// n8n will automatically handle body/formData population based on node parameters and their routing.send definitions.
-					// It will also infer json:true for POST/PUT if not formData.
+					uri: fullUrl,
+					headers: {
+						'Accept': 'application/json',
+						'Authorization': authorizationHeader,
+					},
+					json: true, // Send body as JSON and parse response as JSON
+					// Body will be automatically assembled by n8n from parameters
+					// that have `routing: { send: { type: 'body', ...}}`
 				};
 
-				this.logger.debug(`[UploadPost Node] Calling request helper with method: ${httpMethod}, relative URI: ${relativeUrl}, baseURL from defaults: ${defaultBaseUrl}`);
+				// Set Content-Type for methods that have a body
+				if (httpMethod === 'POST' || httpMethod === 'PUT' || httpMethod === 'PATCH') {
+					requestOptions.headers!['Content-Type'] = 'application/json';
+				}
+				
+				this.logger.debug(`[UploadPost Node] Executing direct request: ${httpMethod} ${fullUrl} with API Key auth.`);
 
-				const responseData = await this.helpers.requestWithAuthentication.call(
-					this,
-					'uploadPostApi',
-					requestOptions,
-				);
+				const responseData = await this.helpers.request.call(this, requestOptions);
 
 				returnData.push({ json: responseData, pairedItem: i });
 			} catch (error) {
@@ -1218,14 +1239,13 @@ export class UploadPost implements INodeType {
 					returnData.push({ json: { error: error.message }, pairedItem: i });
 					continue;
 				}
-				// Throw error if it is not handled
 				if (error.context) {
+					// If it's already a NodeApiError or NodeOperationError with context
 					error.context.itemIndex = i;
 					throw error;
 				}
-				throw new NodeOperationError(this.getNode(), error, {
-					itemIndex: i,
-				});
+				// For other errors, wrap them in NodeOperationError
+				throw new NodeOperationError(this.getNode(), error, { itemIndex: i });
 			}
 		}
 		return [returnData];
