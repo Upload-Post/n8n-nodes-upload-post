@@ -1188,26 +1188,23 @@ export class UploadPost implements INodeType {
 				}
 
 				const requestDetails = routingInfo.request as IDataObject;
-				const relativeUrl = requestDetails.url as string;
+				const relativeUrl = requestDetails.url as string; // This is the relative path e.g. /upload_photos
 				const httpMethod = requestDetails.method as string;
 
 				if (!defaultBaseUrl) {
 					throw new NodeOperationError(this.getNode(), 'Base URL is not defined in node requestDefaults.');
 				}
 
-				// Ensure no double slashes if relativeUrl already starts with one
-				const fullUrl = defaultBaseUrl.endsWith('/') && relativeUrl.startsWith('/')
-					? defaultBaseUrl + relativeUrl.substring(1)
-					: !defaultBaseUrl.endsWith('/') && !relativeUrl.startsWith('/')
-						? defaultBaseUrl + '/' + relativeUrl
-						: defaultBaseUrl + relativeUrl;
-
+				// Options for the request helper. By providing a relative uri,
+				// n8n's request helper will combine it with requestDefaults.baseURL.
 				const requestOptions: Record<string, unknown> = {
 					method: httpMethod,
-					uri: fullUrl, // Using uri here which is common for request libraries to specify the full path
+					uri: relativeUrl, // Pass the relative URL
+					// n8n will automatically handle body/formData population based on node parameters and their routing.send definitions.
+					// It will also infer json:true for POST/PUT if not formData.
 				};
 
-				this.logger.debug(`[UploadPost Node] Requesting: ${httpMethod} ${fullUrl}`);
+				this.logger.debug(`[UploadPost Node] Calling request helper with method: ${httpMethod}, relative URI: ${relativeUrl}, baseURL from defaults: ${defaultBaseUrl}`);
 
 				const responseData = await this.helpers.requestWithAuthentication.call(
 					this,
