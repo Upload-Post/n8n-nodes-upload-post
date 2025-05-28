@@ -1,10 +1,13 @@
 import {
+	IDataObject,
 	IExecuteFunctions,
 	INodeExecutionData,
+	INodeProperties,
+	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
 	NodeConnectionType,
-	NodeOperationError
+	NodeOperationError,
 } from 'n8n-workflow';
 
 export class UploadPost implements INodeType {
@@ -1167,19 +1170,34 @@ export class UploadPost implements INodeType {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
 		const length = items.length;
+		const nodeDescription = (this as any as INodeType).description;
 
 		for (let i = 0; i < length; i++) {
 			try {
-				// const operation = this.getNodeParameter('operation', i) as string;
-				// const endpoint = this.getNodeParameter('operation', i, '', { includeRouting: true }) as { routing?: { request?: { url?: string }}};
-				// const url = endpoint.routing?.request?.url ?? '';
+				const operation = this.getNodeParameter('operation', i) as string;
+
+				const operationProperty = nodeDescription.properties.find((prop: INodeProperties) => prop.name === 'operation');
+
+				// Ensure operationProperty and its options are defined and correctly typed
+				const operationOptions = operationProperty?.options as INodePropertyOptions[] | undefined;
+				const operationConfig = operationOptions?.find(opt => opt.value === operation);
+
+				const routingInfo = operationConfig?.routing as IDataObject | undefined;
+
+				if (!routingInfo || !routingInfo.request || !(routingInfo.request as IDataObject).url || !(routingInfo.request as IDataObject).method) {
+					throw new NodeOperationError(this.getNode(), `Routing information incomplete for operation: ${operation}`);
+				}
+
+				const requestDetails = routingInfo.request as IDataObject;
+				const requestOptions: Record<string, unknown> = {
+					method: requestDetails.method as string,
+					url: requestDetails.url as string,
+				};
 
 				const responseData = await this.helpers.requestWithAuthentication.call(
 					this,
 					'uploadPostApi',
-					{
-						// Generic request options will be filled by routing defined in properties
-					},
+					requestOptions,
 				);
 
 				returnData.push({ json: responseData, pairedItem: i });
