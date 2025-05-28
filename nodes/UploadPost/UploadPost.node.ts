@@ -1171,14 +1171,13 @@ export class UploadPost implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 		const length = items.length;
 		const nodeDescription = (this as any as INodeType).description;
+		const defaultBaseUrl = nodeDescription.requestDefaults?.baseURL;
 
 		for (let i = 0; i < length; i++) {
 			try {
 				const operation = this.getNodeParameter('operation', i) as string;
 
 				const operationProperty = nodeDescription.properties.find((prop: INodeProperties) => prop.name === 'operation');
-
-				// Ensure operationProperty and its options are defined and correctly typed
 				const operationOptions = operationProperty?.options as INodePropertyOptions[] | undefined;
 				const operationConfig = operationOptions?.find(opt => opt.value === operation);
 
@@ -1189,10 +1188,26 @@ export class UploadPost implements INodeType {
 				}
 
 				const requestDetails = routingInfo.request as IDataObject;
+				const relativeUrl = requestDetails.url as string;
+				const httpMethod = requestDetails.method as string;
+
+				if (!defaultBaseUrl) {
+					throw new NodeOperationError(this.getNode(), 'Base URL is not defined in node requestDefaults.');
+				}
+
+				// Ensure no double slashes if relativeUrl already starts with one
+				const fullUrl = defaultBaseUrl.endsWith('/') && relativeUrl.startsWith('/')
+					? defaultBaseUrl + relativeUrl.substring(1)
+					: !defaultBaseUrl.endsWith('/') && !relativeUrl.startsWith('/')
+						? defaultBaseUrl + '/' + relativeUrl
+						: defaultBaseUrl + relativeUrl;
+
 				const requestOptions: Record<string, unknown> = {
-					method: requestDetails.method as string,
-					url: requestDetails.url as string,
+					method: httpMethod,
+					uri: fullUrl, // Using uri here which is common for request libraries to specify the full path
 				};
+
+				this.logger.debug(`[UploadPost Node] Requesting: ${httpMethod} ${fullUrl}`);
 
 				const responseData = await this.helpers.requestWithAuthentication.call(
 					this,
