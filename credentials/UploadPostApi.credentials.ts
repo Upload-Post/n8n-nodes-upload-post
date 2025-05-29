@@ -20,7 +20,7 @@ export class UploadPostApi implements ICredentialType {
 				password: true,
 			},
 			default: '',
-			description: 'Your Upload Post API key.',
+			placeholder: 'Enter your Upload-Post API Key',
 		},
 	];
 
@@ -28,8 +28,8 @@ export class UploadPostApi implements ICredentialType {
 		type: 'generic',
 		properties: {
 			headers: {
-				'Authorization': '=Apikey {{ $credentials.apiKey }}',
-			},
+				'Authorization': '=Apikey {{$credentials.apiKey}}'
+			}
 		},
 	};
 

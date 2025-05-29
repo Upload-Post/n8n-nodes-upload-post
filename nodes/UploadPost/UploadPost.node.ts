@@ -1,15 +1,11 @@
 import {
 	IDataObject,
 	IExecuteFunctions,
-	IHttpRequestMethods,
 	INodeExecutionData,
-	INodeProperties,
-	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
 	IRequestOptions,
-	NodeConnectionType,
-	NodeOperationError,
+	NodeConnectionType
 } from 'n8n-workflow';
 
 export class UploadPost implements INodeType {
@@ -32,12 +28,6 @@ export class UploadPost implements INodeType {
 				required: true,
 			},
 		],
-		requestDefaults: {
-			baseURL: 'https://api.upload-post.com/api',
-			headers: {
-				'Accept': 'application/json',
-			},
-		},
 		properties: [
 			{
 				displayName: 'Operation',
@@ -50,36 +40,18 @@ export class UploadPost implements INodeType {
 						value: 'uploadPhotos',
 						action: 'Upload photos',
 						description: 'Upload one or more photos',
-						routing: {
-							request: {
-								method: 'POST',
-								url: '/upload_photos',
-							},
-						},
 					},
 					{
 						name: 'Upload Video',
 						value: 'uploadVideo',
 						action: 'Upload a video',
 						description: 'Upload a single video',
-						routing: {
-							request: {
-								method: 'POST',
-								url: '/upload', // Video endpoint is /upload
-							},
-						},
 					},
 					{
 						name: 'Upload Text',
 						value: 'uploadText',
 						action: 'Upload a text post',
 						description: 'Upload a text-based post',
-						routing: {
-							request: {
-								method: 'POST',
-								url: '/upload_text',
-							},
-						},
 					},
 				],
 				default: 'uploadPhotos',
@@ -93,12 +65,6 @@ export class UploadPost implements INodeType {
 				required: true,
 				default: '',
 				description: 'User identifier for Upload-Post',
-				routing: {
-					send: {
-						type: 'body',
-						property: 'user',
-					}
-				}
 			},
 			{
 				displayName: 'Platform(s)',
@@ -111,17 +77,11 @@ export class UploadPost implements INodeType {
 					{ name: 'LinkedIn', value: 'linkedin' },
 					{ name: 'Threads', value: 'threads' },
 					{ name: 'TikTok', value: 'tiktok' },
-					{ name: 'X (Twitter)', value: 'x' },
+					{ name: 'X (Twitter)', value: 'x' },					
 					{ name: 'YouTube', value: 'youtube' }, // Only for video
 				],
 				default: [],
 				description: 'Platform(s) to upload to',
-				routing: {
-					send: {
-						type: 'body',
-						property: 'platform[]', // API expects platform[]
-					}
-				}
 			},
 			{
 				displayName: 'Title',
@@ -130,12 +90,6 @@ export class UploadPost implements INodeType {
 				required: true,
 				default: '',
 				description: 'Title of the post/video/text',
-				routing: {
-					send: {
-						type: 'body',
-						property: 'title',
-					}
-				}
 			},
 
 		// Fields for Upload Photo(s)
@@ -155,31 +109,18 @@ export class UploadPost implements INodeType {
 					multiple: true, // Allows adding multiple photo fields
 					multipleValueButtonText: 'Add Photo',
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'photos[]',
-						value: '={{ $value.startsWith("http") ? $value : { "data": $value, "isBinary": true } }}',
-					}
-				}
 			},
 			{
 				displayName: 'Caption',
 				name: 'caption',
 				type: 'string',
 				default: '',
-				description: 'Caption/description for the photos (post commentary)',
+				description: 'Caption/description for the post (post commentary)',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos'],
+						operation: ['uploadPhotos', 'uploadText'],
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'caption',
-					}
-				}
 			},
 
 		// Fields for Upload Video
@@ -195,13 +136,6 @@ export class UploadPost implements INodeType {
 						operation: ['uploadVideo'],
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'video',
-						value: '={{ $value.startsWith("http") ? $value : { "data": $value, "isBinary": true } }}',
-					}
-				}
 			},
 		// Note: Text upload uses the common 'title' field as its main content based on API docs.
 		// Platform specific parameters will be added as separate optional fields
@@ -226,12 +160,6 @@ export class UploadPost implements INodeType {
 						platform: ['linkedin']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'visibility',
-					}
-				}
 			},
 			{
 				displayName: 'Target LinkedIn Page ID',
@@ -245,12 +173,6 @@ export class UploadPost implements INodeType {
 						platform: ['linkedin']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'target_linkedin_page_id',
-					}
-				}
 			},
 			{
 				displayName: 'LinkedIn Description',
@@ -264,12 +186,6 @@ export class UploadPost implements INodeType {
 						platform: ['linkedin']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'description',
-					}
-				}
 			},
 
 		// ----- Facebook Specific Parameters (Photo & Video & Text) -----
@@ -286,14 +202,8 @@ export class UploadPost implements INodeType {
 						platform: ['facebook']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'facebook_page_id',
-					}
-				}
 			},
-			{ // Facebook specific for Video
+			{
 				displayName: 'Facebook Video Description',
 				name: 'facebookVideoDescription',
 				type: 'string',
@@ -305,12 +215,6 @@ export class UploadPost implements INodeType {
 						platform: ['facebook']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'description',
-					}
-				}
 			},
 			{
 				displayName: 'Facebook Video State',
@@ -329,16 +233,10 @@ export class UploadPost implements INodeType {
 						platform: ['facebook']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'video_state',
-					}
-				}
 			},
 
 		// ----- TikTok Specific Parameters (Photo & Video) -----
-			{ // TikTok specific for Photo
+			{
 				displayName: 'TikTok Auto Add Music',
 				name: 'tiktokAutoAddMusic',
 				type: 'boolean',
@@ -350,14 +248,8 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'auto_add_music',
-					}
-				}
 			},
-			{ // TikTok specific for Photo & Video
+			{
 				displayName: 'TikTok Disable Comment',
 				name: 'tiktokDisableComment',
 				type: 'boolean',
@@ -369,14 +261,8 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'disable_comment',
-					}
-				}
 			},
-			{ // TikTok specific for Photo (branded_content & disclose_commercial)
+			{
 				displayName: 'TikTok Branded Content (Photo)',
 				name: 'tiktokBrandedContentPhoto',
 				type: 'boolean',
@@ -388,12 +274,6 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'branded_content',
-					}
-				}
 			},
 			{
 				displayName: 'TikTok Disclose Commercial (Photo)',
@@ -407,12 +287,6 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'disclose_commercial',
-					}
-				}
 			},
 			{
 				displayName: 'TikTok Photo Cover Index',
@@ -427,14 +301,8 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'photo_cover_index',
-					}
-				}
 			},
-			{ // TikTok specific for Photo - Description
+			{
 				displayName: 'TikTok Photo Description',
 				name: 'tiktokPhotoDescription',
 				type: 'string',
@@ -446,14 +314,8 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'description',
-					}
-				}
 			},
-			{ // TikTok specific for Video
+			{
 				displayName: 'TikTok Privacy Level',
 				name: 'tiktokPrivacyLevel',
 				type: 'options',
@@ -471,12 +333,6 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'privacy_level',
-					}
-				}
 			},
 			{
 				displayName: 'TikTok Disable Duet',
@@ -490,12 +346,6 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'disable_duet',
-					}
-				}
 			},
 			{
 				displayName: 'TikTok Disable Stitch',
@@ -509,12 +359,6 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'disable_stitch',
-					}
-				}
 			},
 			{
 				displayName: 'TikTok Cover Timestamp (Ms)',
@@ -528,12 +372,6 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'cover_timestamp',
-					}
-				}
 			},
 			{
 				displayName: 'TikTok Brand Content Toggle',
@@ -547,12 +385,6 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'brand_content_toggle',
-					}
-				}
 			},
 			{
 				displayName: 'TikTok Brand Organic',
@@ -566,12 +398,6 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'brand_organic',
-					}
-				}
 			},
 			{
 				displayName: 'TikTok Branded Content (Video)',
@@ -585,12 +411,6 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'branded_content',
-					}
-				}
 			},
 			{
 				displayName: 'TikTok Brand Organic Toggle',
@@ -604,12 +424,6 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'brand_organic_toggle',
-					}
-				}
 			},
 			{
 				displayName: 'TikTok Is AIGC',
@@ -623,16 +437,10 @@ export class UploadPost implements INodeType {
 						platform: ['tiktok']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'is_aigc',
-					}
-				}
 			},
 
 		// ----- Instagram Specific Parameters (Photo & Video) -----
-			{ // Instagram specific for Photo
+			{
 				displayName: 'Instagram Photo Media Type',
 				name: 'instagramPhotoMediaType',
 				type: 'options',
@@ -648,14 +456,8 @@ export class UploadPost implements INodeType {
 						platform: ['instagram']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'media_type',
-					}
-				}
 			},
-			{ // Instagram specific for Video
+			{
 				displayName: 'Instagram Video Media Type',
 				name: 'instagramVideoMediaType',
 				type: 'options',
@@ -671,12 +473,6 @@ export class UploadPost implements INodeType {
 						platform: ['instagram']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'media_type',
-					}
-				}
 			},
 			{
 				displayName: 'Instagram Share to Feed',
@@ -690,12 +486,6 @@ export class UploadPost implements INodeType {
 						platform: ['instagram']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'share_to_feed',
-					}
-				}
 			},
 			{
 				displayName: 'Instagram Collaborators',
@@ -709,12 +499,6 @@ export class UploadPost implements INodeType {
 						platform: ['instagram']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'collaborators',
-					}
-				}
 			},
 			{
 				displayName: 'Instagram Cover URL',
@@ -728,12 +512,6 @@ export class UploadPost implements INodeType {
 						platform: ['instagram']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'cover_url',
-					}
-				}
 			},
 			{
 				displayName: 'Instagram Audio Name',
@@ -747,12 +525,6 @@ export class UploadPost implements INodeType {
 						platform: ['instagram']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'audio_name',
-					}
-				}
 			},
 			{
 				displayName: 'Instagram User Tags',
@@ -766,12 +538,6 @@ export class UploadPost implements INodeType {
 						platform: ['instagram']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'user_tags',
-					}
-				}
 			},
 			{
 				displayName: 'Instagram Location ID',
@@ -785,12 +551,6 @@ export class UploadPost implements INodeType {
 						platform: ['instagram']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'location_id',
-					}
-				}
 			},
 			{
 				displayName: 'Instagram Thumb Offset',
@@ -804,12 +564,6 @@ export class UploadPost implements INodeType {
 						platform: ['instagram']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'thumb_offset',
-					}
-				}
 			},
 
 		// ----- YouTube Specific Parameters (Video) -----
@@ -825,12 +579,6 @@ export class UploadPost implements INodeType {
 						platform: ['youtube']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'description',
-					}
-				}
 			},
 			{
 				displayName: 'YouTube Tags',
@@ -844,13 +592,6 @@ export class UploadPost implements INodeType {
 						platform: ['youtube']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'tags',
-						value: '={{ $value ? $value.split(",").map(tag => tag.trim()) : [] }}',
-					}
-				}
 			},
 			{
 				displayName: 'YouTube Category ID',
@@ -864,12 +605,6 @@ export class UploadPost implements INodeType {
 						platform: ['youtube']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'categoryId',
-					}
-				}
 			},
 			{
 				displayName: 'YouTube Privacy Status',
@@ -888,12 +623,6 @@ export class UploadPost implements INodeType {
 						platform: ['youtube']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'privacyStatus',
-					}
-				}
 			},
 			{
 				displayName: 'YouTube Embeddable',
@@ -907,12 +636,6 @@ export class UploadPost implements INodeType {
 						platform: ['youtube']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'embeddable',
-					}
-				}
 			},
 			{
 				displayName: 'YouTube License',
@@ -930,12 +653,6 @@ export class UploadPost implements INodeType {
 						platform: ['youtube']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'license',
-					}
-				}
 			},
 			{
 				displayName: 'YouTube Public Stats Viewable',
@@ -949,12 +666,6 @@ export class UploadPost implements INodeType {
 						platform: ['youtube']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'publicStatsViewable',
-					}
-				}
 			},
 			{
 				displayName: 'YouTube Made For Kids',
@@ -968,12 +679,6 @@ export class UploadPost implements INodeType {
 						platform: ['youtube']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'madeForKids',
-					}
-				}
 			},
 
 		// ----- Threads Specific Parameters (Video & Text) -----
@@ -989,12 +694,6 @@ export class UploadPost implements INodeType {
 						platform: ['threads']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'description',
-					}
-				}
 			},
 
 		// ----- X (Twitter) Specific Parameters (Video & Text) -----
@@ -1010,13 +709,6 @@ export class UploadPost implements INodeType {
 						platform: ['x']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'tagged_user_ids',
-						value: '={{ $value ? $value.split(",").map(id => id.trim()) : [] }}',
-					}
-				}
 			},
 			{
 				displayName: 'X Reply Settings',
@@ -1034,15 +726,10 @@ export class UploadPost implements INodeType {
 						operation: ['uploadVideo', 'uploadText'],
 						platform: ['x']
 					},
+					
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'reply_settings',
-					}
-				}
 			},
-			{ // X specific for Video
+			{
 				displayName: 'X Nullcast (Video)',
 				name: 'xNullcastVideo',
 				type: 'boolean',
@@ -1054,14 +741,8 @@ export class UploadPost implements INodeType {
 						platform: ['x']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'nullcast',
-					}
-				}
 			},
-			{ // X specific for Video
+			{
 				displayName: 'X Place ID (Video)',
 				name: 'xPlaceIdVideo',
 				type: 'string',
@@ -1073,14 +754,8 @@ export class UploadPost implements INodeType {
 						platform: ['x']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'place_id',
-					}
-				}
 			},
-			{ // X specific for Video - Poll options
+			{
 				displayName: 'X Poll Duration (Minutes, Video)',
 				name: 'xPollDurationVideo',
 				type: 'number',
@@ -1092,12 +767,6 @@ export class UploadPost implements INodeType {
 						platform: ['x']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'poll_duration',
-					}
-				}
 			},
 			{
 				displayName: 'X Poll Options (Video)',
@@ -1111,13 +780,6 @@ export class UploadPost implements INodeType {
 						platform: ['x']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'poll_options',
-						value: '={{ $value ? $value.split(",").map(opt => opt.trim()) : [] }}',
-					}
-				}
 			},
 			{
 				displayName: 'X Poll Reply Settings (Video)',
@@ -1136,14 +798,8 @@ export class UploadPost implements INodeType {
 						platform: ['x']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'poll_reply_settings',
-					}
-				}
 			},
-			{ // X specific for Text
+			{
 				displayName: 'X Post URL (Text)',
 				name: 'xPostUrlText',
 				type: 'string',
@@ -1155,12 +811,6 @@ export class UploadPost implements INodeType {
 						platform: ['x']
 					},
 				},
-				routing: {
-					send: {
-						type: 'body',
-						property: 'post_url',
-					}
-				}
 			},
 		],
 	};
@@ -1168,86 +818,240 @@ export class UploadPost implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
-		const length = items.length;
-		const baseApiUrl = 'https://api.upload-post.com/api'; // Define base URL directly
 
-		// Node description for operation details
-		const nodeDescription = (this as any as INodeType).description;
+		for (let i = 0; i < items.length; i++) {
+			const operation = this.getNodeParameter('operation', i) as string;
+			const user = this.getNodeParameter('user', i) as string;
+			const platforms = this.getNodeParameter('platform', i) as string[];
+			const title = this.getNodeParameter('title', i) as string;
 
-		for (let i = 0; i < length; i++) {
-			try {
-				// Get credentials for manual authentication
-				const credentials = await this.getCredentials('uploadPostApi', i);
-				if (!credentials || !credentials.apiKey) {
-					throw new NodeOperationError(this.getNode(), 'API key is missing from UploadPostApi credentials.', { itemIndex: i });
-				}
-				const apiKey = credentials.apiKey as string;
-				const authorizationHeader = `Apikey ${apiKey}`;
+			let endpoint = '';
+			const formData: IDataObject = {};
 
-				const operation = this.getNodeParameter('operation', i) as string;
+			formData.user = user;
+			formData['platform[]'] = platforms;
+			formData.title = title;
 
-				const operationProperty = nodeDescription.properties.find((prop: INodeProperties) => prop.name === 'operation');
-				const operationOptions = operationProperty?.options as INodePropertyOptions[] | undefined;
-				const operationConfig = operationOptions?.find(opt => opt.value === operation);
+			switch (operation) {
+				case 'uploadPhotos':
+					endpoint = '/upload_photos';
+					const photos = this.getNodeParameter('photos', i, []) as string[];
+					const caption = this.getNodeParameter('caption', i) as string | undefined;
 
-				if (!operationConfig || !operationConfig.routing || !(operationConfig.routing as IDataObject).request) {
-					throw new NodeOperationError(this.getNode(), `Routing information not found for operation: ${operation}`, { itemIndex: i });
-				}
+					if (photos && photos.length > 0) {
+						// If multiple photos, add as array or as multiple fields
+						// We'll use 'photos[]' as field name for each photo
+						for (let idx = 0; idx < photos.length; idx++) {
+							const photo = photos[idx];
+							if (photo.startsWith('{{\$binary')) {
+								const binaryPropertyName = photo.substring('{{\$binary.'.length, photo.length - 2);
+								const binaryData = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
+								formData[`photos[${idx}]`] = binaryData;
+							} else {
+								formData[`photos[${idx}]`] = photo;
+							}
+						}
+					}
 
-				const requestDetails = (operationConfig.routing as IDataObject).request as IDataObject;
-				const relativeUrl = requestDetails.url as string;
-				const httpMethod = requestDetails.method as IHttpRequestMethods;
+					if (caption) formData.caption = caption;
 
-				if (!relativeUrl || !httpMethod) {
-					throw new NodeOperationError(this.getNode(), `Incomplete routing details (URL or Method missing) for operation: ${operation}`, { itemIndex: i });
-				}
+					// TODO: Handle platform specific parameters for photos
+					break;
+				case 'uploadVideo':
+					endpoint = '/upload';
+					const video = this.getNodeParameter('video', i) as string;
 
-				// Construct the full URL
-				let fullUrl;
-				if (baseApiUrl.endsWith('/') && relativeUrl.startsWith('/')) {
-					fullUrl = baseApiUrl + relativeUrl.substring(1);
-				} else if (!baseApiUrl.endsWith('/') && !relativeUrl.startsWith('/')) {
-					fullUrl = `${baseApiUrl}/${relativeUrl}`;
-				} else {
-					fullUrl = baseApiUrl + relativeUrl;
-				}
+					if (video) {
+						if (video.startsWith('{{\$binary')) {
+							const binaryPropertyName = video.substring('{{\$binary.'.length, video.length - 2);
+							const binaryData = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
+							formData.video = binaryData;
+						} else {
+							formData.video = video;
+						}
+					}
 
-				const requestOptions: IRequestOptions = {
-					method: httpMethod,
-					uri: fullUrl,
-					headers: {
-						'Accept': 'application/json',
-						'Authorization': authorizationHeader,
-					},
-					json: true, // Send body as JSON and parse response as JSON
-					// Body will be automatically assembled by n8n from parameters
-					// that have `routing: { send: { type: 'body', ...}}`
-				};
+					// TODO: Handle platform specific parameters for video
+					break;
+				case 'uploadText':
+					endpoint = '/upload_text';
+					const textCaption = this.getNodeParameter('caption', i) as string | undefined;
 
-				// Set Content-Type for methods that have a body
-				if (httpMethod === 'POST' || httpMethod === 'PUT' || httpMethod === 'PATCH') {
-					requestOptions.headers!['Content-Type'] = 'application/json';
-				}
-				
-				this.logger.debug(`[UploadPost Node] Executing direct request: ${httpMethod} ${fullUrl} with API Key auth.`);
+					if (textCaption) formData.caption = textCaption;
 
-				const responseData = await this.helpers.request.call(this, requestOptions);
-
-				returnData.push({ json: responseData, pairedItem: i });
-			} catch (error) {
-				if (this.continueOnFail()) {
-					returnData.push({ json: { error: error.message }, pairedItem: i });
-					continue;
-				}
-				if (error.context) {
-					// If it's already a NodeApiError or NodeOperationError with context
-					error.context.itemIndex = i;
-					throw error;
-				}
-				// For other errors, wrap them in NodeOperationError
-				throw new NodeOperationError(this.getNode(), error, { itemIndex: i });
+					// TODO: Handle platform specific parameters for text
+					break;
 			}
+
+			// Add platform specific parameters conditionally
+			if (platforms.includes('linkedin')) {
+				const linkedinVisibility = this.getNodeParameter('linkedinVisibility', i) as string;
+				const targetLinkedinPageId = this.getNodeParameter('targetLinkedinPageId', i) as string | undefined;
+				const linkedinDescription = this.getNodeParameter('linkedinDescription', i) as string | undefined;
+				
+				formData.visibility = linkedinVisibility;
+				if (targetLinkedinPageId) formData.target_linkedin_page_id = targetLinkedinPageId;
+				if (linkedinDescription) formData.description = linkedinDescription;
+			}
+
+			if (platforms.includes('facebook')) {
+				const facebookPageId = this.getNodeParameter('facebookPageId', i) as string;
+				const facebookVideoDescription = this.getNodeParameter('facebookVideoDescription', i) as string | undefined;
+				const facebookVideoState = this.getNodeParameter('facebookVideoState', i) as string | undefined;
+				
+				formData.facebook_page_id = facebookPageId;
+				if (facebookVideoDescription) formData.description = facebookVideoDescription;
+				if (facebookVideoState) formData.video_state = facebookVideoState;
+			}
+
+			if (platforms.includes('tiktok')) {
+				if (operation === 'uploadPhotos') {
+					const tiktokAutoAddMusic = this.getNodeParameter('tiktokAutoAddMusic', i) as boolean | undefined;
+					const tiktokDisableComment = this.getNodeParameter('tiktokDisableComment', i) as boolean | undefined;
+					const tiktokBrandedContentPhoto = this.getNodeParameter('tiktokBrandedContentPhoto', i) as boolean | undefined;
+					const tiktokDiscloseCommercialPhoto = this.getNodeParameter('tiktokDiscloseCommercialPhoto', i) as boolean | undefined;
+					const tiktokPhotoCoverIndex = this.getNodeParameter('tiktokPhotoCoverIndex', i) as number | undefined;
+					const tiktokPhotoDescription = this.getNodeParameter('tiktokPhotoDescription', i) as string | undefined;
+
+					if (tiktokAutoAddMusic !== undefined) formData.auto_add_music = tiktokAutoAddMusic;
+					if (tiktokDisableComment !== undefined) formData.disable_comment = tiktokDisableComment;
+					if (tiktokBrandedContentPhoto !== undefined) formData.branded_content = tiktokBrandedContentPhoto;
+					if (tiktokDiscloseCommercialPhoto !== undefined) formData.disclose_commercial = tiktokDiscloseCommercialPhoto;
+					if (tiktokPhotoCoverIndex !== undefined) formData.photo_cover_index = tiktokPhotoCoverIndex;
+					if (tiktokPhotoDescription) formData.description = tiktokPhotoDescription;
+
+				} else if (operation === 'uploadVideo') {
+					const tiktokDisableComment = this.getNodeParameter('tiktokDisableComment', i) as boolean | undefined;
+					const tiktokPrivacyLevel = this.getNodeParameter('tiktokPrivacyLevel', i) as string | undefined;
+					const tiktokDisableDuet = this.getNodeParameter('tiktokDisableDuet', i) as boolean | undefined;
+					const tiktokDisableStitch = this.getNodeParameter('tiktokDisableStitch', i) as boolean | undefined;
+					const tiktokCoverTimestamp = this.getNodeParameter('tiktokCoverTimestamp', i) as number | undefined;
+					const tiktokBrandContentToggle = this.getNodeParameter('tiktokBrandContentToggle', i) as boolean | undefined;
+					const tiktokBrandOrganic = this.getNodeParameter('tiktokBrandOrganic', i) as boolean | undefined;
+					const tiktokBrandedContentVideo = this.getNodeParameter('tiktokBrandedContentVideo', i) as boolean | undefined;
+					const tiktokBrandOrganicToggle = this.getNodeParameter('tiktokBrandOrganicToggle', i) as boolean | undefined;
+					const tiktokIsAigc = this.getNodeParameter('tiktokIsAigc', i) as boolean | undefined;
+
+					if (tiktokDisableComment !== undefined) formData.disable_comment = tiktokDisableComment;
+					if (tiktokPrivacyLevel) formData.privacy_level = tiktokPrivacyLevel;
+					if (tiktokDisableDuet !== undefined) formData.disable_duet = tiktokDisableDuet;
+					if (tiktokDisableStitch !== undefined) formData.disable_stitch = tiktokDisableStitch;
+					if (tiktokCoverTimestamp !== undefined) formData.cover_timestamp = tiktokCoverTimestamp;
+					if (tiktokBrandContentToggle !== undefined) formData.brand_content_toggle = tiktokBrandContentToggle;
+					if (tiktokBrandOrganic !== undefined) formData.brand_organic = tiktokBrandOrganic;
+					if (tiktokBrandedContentVideo !== undefined) formData.branded_content = tiktokBrandedContentVideo;
+					if (tiktokBrandOrganicToggle !== undefined) formData.brand_organic_toggle = tiktokBrandOrganicToggle;
+					if (tiktokIsAigc !== undefined) formData.is_aigc = tiktokIsAigc;
+				}
+			}
+
+			if (platforms.includes('instagram')) {
+				if (operation === 'uploadPhotos') {
+					const instagramPhotoMediaType = this.getNodeParameter('instagramPhotoMediaType', i) as string | undefined;
+
+					if (instagramPhotoMediaType) formData.media_type = instagramPhotoMediaType;
+
+				} else if (operation === 'uploadVideo') {
+					const instagramVideoMediaType = this.getNodeParameter('instagramVideoMediaType', i) as string | undefined;
+					const instagramShareToFeed = this.getNodeParameter('instagramShareToFeed', i) as boolean | undefined;
+					const instagramCollaborators = this.getNodeParameter('instagramCollaborators', i) as string | undefined;
+					const instagramCoverUrl = this.getNodeParameter('instagramCoverUrl', i) as string | undefined;
+					const instagramAudioName = this.getNodeParameter('instagramAudioName', i) as string | undefined;
+					const instagramUserTags = this.getNodeParameter('instagramUserTags', i) as string | undefined;
+					const instagramLocationId = this.getNodeParameter('instagramLocationId', i) as string | undefined;
+					const instagramThumbOffset = this.getNodeParameter('instagramThumbOffset', i) as string | undefined;
+
+					if (instagramVideoMediaType) formData.media_type = instagramVideoMediaType;
+					if (instagramShareToFeed !== undefined) formData.share_to_feed = instagramShareToFeed;
+					if (instagramCollaborators) formData.collaborators = instagramCollaborators.split(',').map(user => user.trim());
+					if (instagramCoverUrl) formData.cover_url = instagramCoverUrl;
+					if (instagramAudioName) formData.audio_name = instagramAudioName;
+					if (instagramUserTags) formData.user_tags = instagramUserTags.split(',').map(tag => tag.trim());
+					if (instagramLocationId) formData.location_id = instagramLocationId;
+					if (instagramThumbOffset) formData.thumb_offset = instagramThumbOffset;
+				}
+			}
+
+			if (platforms.includes('youtube') && operation === 'uploadVideo') {
+				const youtubeDescription = this.getNodeParameter('youtubeDescription', i) as string | undefined;
+				const youtubeTags = this.getNodeParameter('youtubeTags', i) as string | undefined;
+				const youtubeCategoryId = this.getNodeParameter('youtubeCategoryId', i) as string | undefined;
+				const youtubePrivacyStatus = this.getNodeParameter('youtubePrivacyStatus', i) as string | undefined;
+				const youtubeEmbeddable = this.getNodeParameter('youtubeEmbeddable', i) as boolean | undefined;
+				const youtubeLicense = this.getNodeParameter('youtubeLicense', i) as string | undefined;
+				const youtubePublicStatsViewable = this.getNodeParameter('youtubePublicStatsViewable', i) as boolean | undefined;
+				const youtubeMadeForKids = this.getNodeParameter('youtubeMadeForKids', i) as boolean | undefined;
+
+				if (youtubeDescription) formData.description = youtubeDescription;
+				if (youtubeTags) formData.tags = youtubeTags.split(',').map(tag => tag.trim());
+				if (youtubeCategoryId) formData.categoryId = youtubeCategoryId;
+				if (youtubePrivacyStatus) formData.privacyStatus = youtubePrivacyStatus;
+				if (youtubeEmbeddable !== undefined) formData.embeddable = youtubeEmbeddable;
+				if (youtubeLicense) formData.license = youtubeLicense;
+				if (youtubePublicStatsViewable !== undefined) formData.publicStatsViewable = youtubePublicStatsViewable;
+				if (youtubeMadeForKids !== undefined) formData.madeForKids = youtubeMadeForKids;
+			}
+
+			if (platforms.includes('threads') && (operation === 'uploadVideo' || operation === 'uploadText')) {
+				const threadsDescription = this.getNodeParameter('threadsDescription', i) as string | undefined;
+
+				if (threadsDescription) formData.description = threadsDescription;
+			}
+
+			if (platforms.includes('x') && (operation === 'uploadVideo' || operation === 'uploadText')) {
+				const xTaggedUserIds = this.getNodeParameter('xTaggedUserIds', i) as string | undefined;
+				const xReplySettings = this.getNodeParameter('xReplySettings', i) as string | undefined;
+
+				if (xTaggedUserIds) formData.tagged_user_ids = xTaggedUserIds.split(',').map(id => id.trim());
+				if (xReplySettings) formData.reply_settings = xReplySettings;
+
+				if (operation === 'uploadVideo') {
+					const xNullcastVideo = this.getNodeParameter('xNullcastVideo', i) as boolean | undefined;
+					const xPlaceIdVideo = this.getNodeParameter('xPlaceIdVideo', i) as string | undefined;
+					const xPollDurationVideo = this.getNodeParameter('xPollDurationVideo', i) as number | undefined;
+					const xPollOptionsVideo = this.getNodeParameter('xPollOptionsVideo', i) as string | undefined;
+					const xPollReplySettingsVideo = this.getNodeParameter('xPollReplySettingsVideo', i) as string | undefined;
+
+					if (xNullcastVideo !== undefined) formData.nullcast = xNullcastVideo;
+					if (xPlaceIdVideo) formData.place_id = xPlaceIdVideo;
+					if (xPollDurationVideo !== undefined) formData.poll_duration = xPollDurationVideo;
+					if (xPollOptionsVideo) formData.poll_options = xPollOptionsVideo.split(',').map(opt => opt.trim());
+					if (xPollReplySettingsVideo) formData.poll_reply_settings = xPollReplySettingsVideo;
+
+				} else if (operation === 'uploadText') {
+					const xPostUrlText = this.getNodeParameter('xPostUrlText', i) as string | undefined;
+
+					if (xPostUrlText) formData.post_url = xPostUrlText;
+				}
+			}
+
+			const credentials = await this.getCredentials('uploadPostApi');
+			const apiKey = credentials.apiKey as string;
+
+			const options: IRequestOptions = {
+				uri: `https://api.upload-post.com/api${endpoint}`,
+				method: 'POST',
+				headers: {
+					'Authorization': `Apikey ${apiKey}`,
+				},
+				formData,
+			};
+
+			this.logger.info(`[UploadPost] Request: ${options.method} ${options.uri}`);
+			this.logger.info(`[UploadPost] Request Headers: ${JSON.stringify(options.headers)}`);
+			this.logger.info(`[UploadPost] Request FormData: ${JSON.stringify(formData)}`);
+
+			const responseData = await this.helpers.request(options);
+
+			returnData.push({
+				json: responseData,
+				pairedItem: {
+					item: i,
+				},
+			});
 		}
+
 		return [returnData];
 	}
 }
+
