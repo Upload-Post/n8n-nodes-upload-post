@@ -900,10 +900,10 @@ export class UploadPost implements INodeType {
 					const tiktokPhotoCoverIndex = this.getNodeParameter('tiktokPhotoCoverIndex', i) as number | undefined;
 					const tiktokPhotoDescription = this.getNodeParameter('tiktokPhotoDescription', i) as string | undefined;
 
-					if (tiktokAutoAddMusic !== undefined) formData.auto_add_music = tiktokAutoAddMusic;
-					if (tiktokDisableComment !== undefined) formData.disable_comment = tiktokDisableComment;
-					if (tiktokBrandedContentPhoto !== undefined) formData.branded_content = tiktokBrandedContentPhoto;
-					if (tiktokDiscloseCommercialPhoto !== undefined) formData.disclose_commercial = tiktokDiscloseCommercialPhoto;
+					if (tiktokAutoAddMusic !== undefined) formData.auto_add_music = String(tiktokAutoAddMusic);
+					if (tiktokDisableComment !== undefined) formData.disable_comment = String(tiktokDisableComment);
+					if (tiktokBrandedContentPhoto !== undefined) formData.branded_content = String(tiktokBrandedContentPhoto);
+					if (tiktokDiscloseCommercialPhoto !== undefined) formData.disclose_commercial = String(tiktokDiscloseCommercialPhoto);
 					if (tiktokPhotoCoverIndex !== undefined) formData.photo_cover_index = tiktokPhotoCoverIndex;
 					if (tiktokPhotoDescription) formData.description = tiktokPhotoDescription;
 					
@@ -920,15 +920,15 @@ export class UploadPost implements INodeType {
 					const tiktokIsAigc = this.getNodeParameter('tiktokIsAigc', i) as boolean | undefined;
 
 					if (tiktokPrivacyLevel) formData.privacy_level = tiktokPrivacyLevel;
-					if (tiktokDisableDuet !== undefined) formData.disable_duet = tiktokDisableDuet;
-					if (tiktokDisableComment !== undefined) formData.disable_comment = tiktokDisableComment;
-					if (tiktokDisableStitch !== undefined) formData.disable_stitch = tiktokDisableStitch;
+					if (tiktokDisableDuet !== undefined) formData.disable_duet = String(tiktokDisableDuet);
+					if (tiktokDisableComment !== undefined) formData.disable_comment = String(tiktokDisableComment);
+					if (tiktokDisableStitch !== undefined) formData.disable_stitch = String(tiktokDisableStitch);
 					if (tiktokCoverTimestamp !== undefined) formData.cover_timestamp = tiktokCoverTimestamp;
-					if (tiktokBrandContentToggle !== undefined) formData.brand_content_toggle = tiktokBrandContentToggle;
-					if (tiktokBrandOrganic !== undefined) formData.brand_organic = tiktokBrandOrganic;
-					if (tiktokBrandedContentVideo !== undefined) formData.branded_content = tiktokBrandedContentVideo;
-					if (tiktokBrandOrganicToggle !== undefined) formData.brand_organic_toggle = tiktokBrandOrganicToggle;
-					if (tiktokIsAigc !== undefined) formData.is_aigc = tiktokIsAigc;
+					if (tiktokBrandContentToggle !== undefined) formData.brand_content_toggle = String(tiktokBrandContentToggle);
+					if (tiktokBrandOrganic !== undefined) formData.brand_organic = String(tiktokBrandOrganic);
+					if (tiktokBrandedContentVideo !== undefined) formData.branded_content = String(tiktokBrandedContentVideo);
+					if (tiktokBrandOrganicToggle !== undefined) formData.brand_organic_toggle = String(tiktokBrandOrganicToggle);
+					if (tiktokIsAigc !== undefined) formData.is_aigc = String(tiktokIsAigc);
 				}
 			}
 
@@ -956,7 +956,7 @@ export class UploadPost implements INodeType {
 					const instagramLocationId = this.getNodeParameter('instagramLocationId', i) as string | undefined;
 					const instagramThumbOffset = this.getNodeParameter('instagramThumbOffset', i) as string | undefined;
 
-					if (instagramShareToFeed !== undefined) formData.share_to_feed = instagramShareToFeed;
+					if (instagramShareToFeed !== undefined) formData.share_to_feed = String(instagramShareToFeed);
 					if (instagramCollaborators) formData.collaborators = instagramCollaborators;
 					if (instagramCoverUrl) formData.cover_url = instagramCoverUrl;
 					if (instagramAudioName) formData.audio_name = instagramAudioName;
@@ -980,10 +980,10 @@ export class UploadPost implements INodeType {
 				if (youtubeTagsRaw) formData.tags = youtubeTagsRaw.split(',').map(tag => tag.trim());
 				if (youtubeCategoryId) formData.categoryId = youtubeCategoryId;
 				if (youtubePrivacyStatus) formData.privacyStatus = youtubePrivacyStatus;
-				if (youtubeEmbeddable !== undefined) formData.embeddable = youtubeEmbeddable;
+				if (youtubeEmbeddable !== undefined) formData.embeddable = String(youtubeEmbeddable);
 				if (youtubeLicense) formData.license = youtubeLicense;
-				if (youtubePublicStatsViewable !== undefined) formData.publicStatsViewable = youtubePublicStatsViewable;
-				if (youtubeMadeForKids !== undefined) formData.madeForKids = youtubeMadeForKids;
+				if (youtubePublicStatsViewable !== undefined) formData.publicStatsViewable = String(youtubePublicStatsViewable);
+				if (youtubeMadeForKids !== undefined) formData.madeForKids = String(youtubeMadeForKids);
 			}
 
 			if (platforms.includes('threads')) {
@@ -1019,7 +1019,7 @@ export class UploadPost implements INodeType {
 
 					if (xTaggedUserIds) formData.tagged_user_ids = xTaggedUserIds.split(',').map(id => id.trim());
 					if (xReplySettings) formData.reply_settings = xReplySettings;
-					if (xNullcastVideo !== undefined) formData.nullcast = xNullcastVideo;
+					if (xNullcastVideo !== undefined) formData.nullcast = String(xNullcastVideo);
 					if (xPlaceIdVideo) formData.place_id = xPlaceIdVideo;
 					if (xPollDurationVideo !== undefined) formData.poll_duration = xPollDurationVideo;
 					if (xPollOptionsVideoRaw) formData.poll_options = xPollOptionsVideoRaw.split(',').map(opt => opt.trim());
