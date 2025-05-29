@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import {
 	IDataObject,
 	IExecuteFunctions,
@@ -814,23 +815,40 @@ export class UploadPost implements INodeType {
 			switch (operation) {
 				case 'uploadPhotos':
 					endpoint = '/upload_photos';
-					const photos = this.getNodeParameter('photos', i, []) as string[];
 					const photoCaption = this.getNodeParameter('caption', i) as string | undefined;
+
+					// Handle 'photos' parameter which can be string or string[]
+					let photosInput = this.getNodeParameter('photos', i, []) as string | string[];
+					let photosToProcess: string[];
+
+					if (typeof photosInput === 'string') {
+						// If it's a non-empty string, treat as a single photo. Empty string becomes an empty array.
+						photosToProcess = photosInput ? [photosInput] : [];
+					} else {
+						// It's already string[] (or [] if empty from default)
+						photosToProcess = photosInput;
+					}
 
 					const allowedPhotoPlatforms = ['tiktok', 'instagram', 'linkedin', 'facebook', 'x', 'threads'];
 					platforms = platforms.filter(p => allowedPhotoPlatforms.includes(p));
 					formData['platform[]'] = platforms;
 
-					if (photos && photos.length > 0) {
-						for (let idx = 0; idx < photos.length; idx++) {
-							const photo = photos[idx];
-							if (photo.startsWith('{{$binary')) {
-								const binaryPropertyName = photo.substring('{{$binary.'.length, photo.length - 2);
+					if (photosToProcess.length > 0) {
+						const photoArray: Array<Buffer | string> = [];
+						for (const photoItem of photosToProcess) {
+							// Ensure photoItem is a string before processing
+							if (typeof photoItem === 'string' && photoItem.startsWith('{{$binary')) {
+								const binaryPropertyName = photoItem.substring('{{$binary.'.length, photoItem.length - 2);
 								const binaryData = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
-								formData[`photos[${idx}]`] = binaryData;
-							} else {
-								formData[`photos[${idx}]`] = photo;
+								photoArray.push(binaryData);
+							} else if (typeof photoItem === 'string' && photoItem) {
+								// It's a URL, push if non-empty
+								photoArray.push(photoItem);
 							}
+						}
+						// Only add 'photos[]' to formData if there are items in photoArray
+						if (photoArray.length > 0) {
+							formData['photos[]'] = photoArray;
 						}
 					}
 					if (photoCaption) formData.caption = photoCaption;
