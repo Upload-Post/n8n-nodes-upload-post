@@ -51,7 +51,7 @@ export class UploadPost implements INodeType {
 						name: 'Upload Text',
 						value: 'uploadText',
 						action: 'Upload a text post',
-						description: 'Upload a text-based post',
+						description: 'Upload a text-based post (Supports: X, LinkedIn, Facebook, Threads)',
 					},
 				],
 				default: 'uploadPhotos',
@@ -71,32 +71,33 @@ export class UploadPost implements INodeType {
 				name: 'platform',
 				type: 'multiOptions',
 				required: true,
-				options: [ // Supported values from docs
+				options: [
 					{ name: 'Facebook', value: 'facebook' },
 					{ name: 'Instagram', value: 'instagram' },
 					{ name: 'LinkedIn', value: 'linkedin' },
 					{ name: 'Threads', value: 'threads' },
 					{ name: 'TikTok', value: 'tiktok' },
-					{ name: 'X (Twitter)', value: 'x' },					
+					{ name: 'X (Twitter)', value: 'x' },
 					{ name: 'YouTube', value: 'youtube' }, // Only for video
 				],
 				default: [],
 				description: 'Platform(s) to upload to',
+				// TODO: Dynamically filter platform options based on selected operation in the UI if possible
 			},
 			{
-				displayName: 'Title',
+				displayName: 'Title / Text Content',
 				name: 'title',
 				type: 'string',
 				required: true,
 				default: '',
-				description: 'Title of the post/video/text',
+				description: 'Title of the post/video. For Upload Text, this is the main text content.',
 			},
 
 		// Fields for Upload Photo(s)
 			{
 				displayName: 'Photos (Files or URLs)',
 				name: 'photos',
-				type: 'string', // Can be URLs or binary file references
+				type: 'string',
 				required: true,
 				default: '',
 				description: 'Array of photo files or photo URLs. For files, use binary property names like {{$binary.dataPropertyName}}. For URLs, provide direct HTTPS URLs as strings. Multiple items can be added via "Add Field".',
@@ -106,7 +107,7 @@ export class UploadPost implements INodeType {
 					},
 				},
 				typeOptions: {
-					multiple: true, // Allows adding multiple photo fields
+					multiple: true,
 					multipleValueButtonText: 'Add Photo',
 				},
 			},
@@ -115,10 +116,10 @@ export class UploadPost implements INodeType {
 				name: 'caption',
 				type: 'string',
 				default: '',
-				description: 'Caption/description for the post (post commentary)',
+				description: 'Caption/description for the post (post commentary). Not used for Upload Text operation.',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos', 'uploadText'],
+						operation: ['uploadPhotos', 'uploadVideo'], // Removed 'uploadText'
 					},
 				},
 			},
@@ -127,7 +128,7 @@ export class UploadPost implements INodeType {
 			{
 				displayName: 'Video (File or URL)',
 				name: 'video',
-				type: 'string', // Can be a URL or binary file reference
+				type: 'string',
 				required: true,
 				default: '',
 				description: 'The video file to upload or a video URL. For files, use binary property name like {{$binary.dataPropertyName}}.',
@@ -137,26 +138,23 @@ export class UploadPost implements INodeType {
 					},
 				},
 			},
-		// Note: Text upload uses the common 'title' field as its main content based on API docs.
-		// Platform specific parameters will be added as separate optional fields
 
-		// ----- LinkedIn Specific Parameters (Photo & Video & Text) -----
+		// ----- LinkedIn Specific Parameters ----- 
 			{
 				displayName: 'LinkedIn Visibility',
 				name: 'linkedinVisibility',
 				type: 'options',
 				options: [
 					{ name: 'Public', value: 'PUBLIC' },
-					// Video specific options (from docs)
 					{ name: 'Connections', value: 'CONNECTIONS', displayOptions: { show: { operation: ['uploadVideo']}}},
 					{ name: 'Logged In', value: 'LOGGED_IN', displayOptions: { show: { operation: ['uploadVideo']}}},
 					{ name: 'Container', value: 'CONTAINER', displayOptions: { show: { operation: ['uploadVideo']}}},
 				],
 				default: 'PUBLIC',
-				description: 'Visibility setting for the LinkedIn post',
+				description: 'Visibility setting for the LinkedIn post. Not used for Upload Text.',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
+						operation: ['uploadPhotos', 'uploadVideo'], // Removed 'uploadText'
 						platform: ['linkedin']
 					},
 				},
@@ -166,7 +164,7 @@ export class UploadPost implements INodeType {
 				name: 'targetLinkedinPageId',
 				type: 'string',
 				default: '',
-				description: 'LinkedIn page ID to upload to an organization (optional)',
+				description: 'LinkedIn page ID to upload to an organization (optional). Used for all operations.',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
@@ -179,23 +177,23 @@ export class UploadPost implements INodeType {
 				name: 'linkedinDescription',
 				type: 'string',
 				default: '',
-				description: 'The user generated commentary for the post (LinkedIn Video/Text). If not provided, title is used for video.',
+				description: 'The user generated commentary for the post (LinkedIn Photo/Video). If not provided, title is used for video. Not used for Upload Text.',
 				displayOptions: {
 					show: {
-						operation: ['uploadVideo', 'uploadText'],
+						operation: ['uploadPhotos','uploadVideo'], // Removed 'uploadText'
 						platform: ['linkedin']
 					},
 				},
 			},
 
-		// ----- Facebook Specific Parameters (Photo & Video & Text) -----
+		// ----- Facebook Specific Parameters ----- 
 			{
 				displayName: 'Facebook Page ID',
 				name: 'facebookPageId',
 				type: 'string',
-				required: true, // Required for Facebook uploads
+				required: true,
 				default: '',
-				description: 'Facebook Page ID where the content will be posted',
+				description: 'Facebook Page ID where the content will be posted. Used for all operations.',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
@@ -208,7 +206,7 @@ export class UploadPost implements INodeType {
 				name: 'facebookVideoDescription',
 				type: 'string',
 				default: '',
-				description: 'Description of the video for Facebook. If not provided, title is used.',
+				description: 'Description of the video for Facebook. If not provided, title is used. Not used for Upload Text/Photos.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -226,7 +224,7 @@ export class UploadPost implements INodeType {
 					{ name: 'Scheduled', value: 'SCHEDULED' },
 				],
 				default: 'PUBLISHED',
-				description: 'Desired state of the video on Facebook',
+				description: 'Desired state of the video on Facebook. Not used for Upload Text/Photos.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -235,7 +233,7 @@ export class UploadPost implements INodeType {
 				},
 			},
 
-		// ----- TikTok Specific Parameters (Photo & Video) -----
+		// ----- TikTok Specific Parameters (Photo & Video - Not for Text) -----
 			{
 				displayName: 'TikTok Auto Add Music',
 				name: 'tiktokAutoAddMusic',
@@ -439,7 +437,7 @@ export class UploadPost implements INodeType {
 				},
 			},
 
-		// ----- Instagram Specific Parameters (Photo & Video) -----
+		// ----- Instagram Specific Parameters (Photo & Video - Not for Text) -----
 			{
 				displayName: 'Instagram Photo Media Type',
 				name: 'instagramPhotoMediaType',
@@ -566,7 +564,7 @@ export class UploadPost implements INodeType {
 				},
 			},
 
-		// ----- YouTube Specific Parameters (Video) -----
+		// ----- YouTube Specific Parameters (Video - Not for Text) -----
 			{
 				displayName: 'YouTube Description',
 				name: 'youtubeDescription',
@@ -681,13 +679,13 @@ export class UploadPost implements INodeType {
 				},
 			},
 
-		// ----- Threads Specific Parameters (Video & Text) -----
+		// ----- Threads Specific Parameters (Not for Photo) -----
 			{
 				displayName: 'Threads Description',
 				name: 'threadsDescription',
 				type: 'string',
 				default: '',
-				description: 'The user generated commentary for the post on Threads. If not provided, title is used.',
+				description: 'The user generated commentary for the post on Threads. If not provided, title is used. Not used for Upload Photos.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo', 'uploadText'],
@@ -696,13 +694,13 @@ export class UploadPost implements INodeType {
 				},
 			},
 
-		// ----- X (Twitter) Specific Parameters (Video & Text) -----
+		// ----- X (Twitter) Specific Parameters (Video & Text - Not for Photo) -----
 			{
 				displayName: 'X Tagged User IDs',
 				name: 'xTaggedUserIds',
 				type: 'string',
 				default: '',
-				description: 'Comma-separated list of user IDs to tag for X (Twitter) video/text. These will be sent as an array.',
+				description: 'Comma-separated list of user IDs to tag. Not used for Upload Photos.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo', 'uploadText'],
@@ -720,13 +718,12 @@ export class UploadPost implements INodeType {
 					{ name: 'Everyone', value: 'everyone' },
 				],
 				default: 'following',
-				description: 'Who can reply to the X (Twitter) video/text post',
+				description: 'Who can reply to the post. Not used for Upload Photos.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo', 'uploadText'],
 						platform: ['x']
 					},
-					
 				},
 			},
 			{
@@ -734,7 +731,7 @@ export class UploadPost implements INodeType {
 				name: 'xNullcastVideo',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to publish X (Twitter) video without broadcasting',
+				description: 'Whether to publish X (Twitter) video without broadcasting. Not for Text/Photos.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -747,7 +744,7 @@ export class UploadPost implements INodeType {
 				name: 'xPlaceIdVideo',
 				type: 'string',
 				default: '',
-				description: 'Location place ID for X (Twitter) video',
+				description: 'Location place ID for X (Twitter) video. Not for Text/Photos.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -760,7 +757,7 @@ export class UploadPost implements INodeType {
 				name: 'xPollDurationVideo',
 				type: 'number',
 				default: 1440,
-				description: 'Poll duration in minutes for X (Twitter) video post. Requires Poll Options.',
+				description: 'Poll duration in minutes for X (Twitter) video post. Requires Poll Options. Not for Text/Photos.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -773,7 +770,7 @@ export class UploadPost implements INodeType {
 				name: 'xPollOptionsVideo',
 				type: 'string',
 				default: '',
-				description: 'Comma-separated list of poll options for X (Twitter) video post. These will be sent as an array.',
+				description: 'Comma-separated list of poll options for X (Twitter) video post. Not for Text/Photos.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -791,7 +788,7 @@ export class UploadPost implements INodeType {
 					{ name: 'Everyone', value: 'everyone' },
 				],
 				default: 'following',
-				description: 'Who can reply to the poll in X (Twitter) video post',
+				description: 'Who can reply to the poll in X (Twitter) video post. Not for Text/Photos.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -804,7 +801,7 @@ export class UploadPost implements INodeType {
 				name: 'xPostUrlText',
 				type: 'string',
 				default: '',
-				description: 'URL to attach to the X (Twitter) text post',
+				description: 'URL to attach to the X (Twitter) text post. Only for Upload Text.',
 				displayOptions: {
 					show: {
 						operation: ['uploadText'],
@@ -822,14 +819,13 @@ export class UploadPost implements INodeType {
 		for (let i = 0; i < items.length; i++) {
 			const operation = this.getNodeParameter('operation', i) as string;
 			const user = this.getNodeParameter('user', i) as string;
-			const platforms = this.getNodeParameter('platform', i) as string[];
-			const title = this.getNodeParameter('title', i) as string;
+			let platforms = this.getNodeParameter('platform', i) as string[];
+			const title = this.getNodeParameter('title', i) as string; // This is the main content for uploadText
 
 			let endpoint = '';
 			const formData: IDataObject = {};
 
 			formData.user = user;
-			formData['platform[]'] = platforms;
 			formData.title = title;
 
 			switch (operation) {
@@ -839,8 +835,6 @@ export class UploadPost implements INodeType {
 					const caption = this.getNodeParameter('caption', i) as string | undefined;
 
 					if (photos && photos.length > 0) {
-						// If multiple photos, add as array or as multiple fields
-						// We'll use 'photos[]' as field name for each photo
 						for (let idx = 0; idx < photos.length; idx++) {
 							const photo = photos[idx];
 							if (photo.startsWith('{{\$binary')) {
@@ -852,14 +846,12 @@ export class UploadPost implements INodeType {
 							}
 						}
 					}
-
 					if (caption) formData.caption = caption;
-
-					// TODO: Handle platform specific parameters for photos
 					break;
 				case 'uploadVideo':
 					endpoint = '/upload';
 					const video = this.getNodeParameter('video', i) as string;
+					const videoCaption = this.getNodeParameter('caption', i) as string | undefined;
 
 					if (video) {
 						if (video.startsWith('{{\$binary')) {
@@ -870,41 +862,45 @@ export class UploadPost implements INodeType {
 							formData.video = video;
 						}
 					}
-
-					// TODO: Handle platform specific parameters for video
+					if (videoCaption) formData.caption = videoCaption;
 					break;
 				case 'uploadText':
 					endpoint = '/upload_text';
-					const textCaption = this.getNodeParameter('caption', i) as string | undefined;
-
-					if (textCaption) formData.caption = textCaption;
-
-					// TODO: Handle platform specific parameters for text
+					// Filter platforms for uploadText
+					const allowedTextPlatforms = ['x', 'linkedin', 'facebook', 'threads'];
+					platforms = platforms.filter(p => allowedTextPlatforms.includes(p));
+					// No caption for uploadText according to the new docs, title is used for content.
 					break;
 			}
 
+			formData['platform[]'] = platforms; // Set platforms after potential filtering
+
 			// Add platform specific parameters conditionally
 			if (platforms.includes('linkedin')) {
-				const linkedinVisibility = this.getNodeParameter('linkedinVisibility', i) as string;
 				const targetLinkedinPageId = this.getNodeParameter('targetLinkedinPageId', i) as string | undefined;
-				const linkedinDescription = this.getNodeParameter('linkedinDescription', i) as string | undefined;
-				
-				formData.visibility = linkedinVisibility;
 				if (targetLinkedinPageId) formData.target_linkedin_page_id = targetLinkedinPageId;
-				if (linkedinDescription) formData.description = linkedinDescription;
+
+				if (operation !== 'uploadText') {
+					const linkedinVisibility = this.getNodeParameter('linkedinVisibility', i) as string;
+					const linkedinDescription = this.getNodeParameter('linkedinDescription', i) as string | undefined;
+					formData.visibility = linkedinVisibility;
+					if (linkedinDescription) formData.description = linkedinDescription;
+				}
 			}
 
 			if (platforms.includes('facebook')) {
 				const facebookPageId = this.getNodeParameter('facebookPageId', i) as string;
-				const facebookVideoDescription = this.getNodeParameter('facebookVideoDescription', i) as string | undefined;
-				const facebookVideoState = this.getNodeParameter('facebookVideoState', i) as string | undefined;
-				
 				formData.facebook_page_id = facebookPageId;
-				if (facebookVideoDescription) formData.description = facebookVideoDescription;
-				if (facebookVideoState) formData.video_state = facebookVideoState;
+
+				if (operation === 'uploadVideo') {
+					const facebookVideoDescription = this.getNodeParameter('facebookVideoDescription', i) as string | undefined;
+					const facebookVideoState = this.getNodeParameter('facebookVideoState', i) as string | undefined;
+					if (facebookVideoDescription) formData.description = facebookVideoDescription;
+					if (facebookVideoState) formData.video_state = facebookVideoState;
+				}
 			}
 
-			if (platforms.includes('tiktok')) {
+			if (platforms.includes('tiktok') && operation !== 'uploadText') {
 				if (operation === 'uploadPhotos') {
 					const tiktokAutoAddMusic = this.getNodeParameter('tiktokAutoAddMusic', i) as boolean | undefined;
 					const tiktokDisableComment = this.getNodeParameter('tiktokDisableComment', i) as boolean | undefined;
@@ -945,12 +941,10 @@ export class UploadPost implements INodeType {
 				}
 			}
 
-			if (platforms.includes('instagram')) {
+			if (platforms.includes('instagram') && operation !== 'uploadText') {
 				if (operation === 'uploadPhotos') {
 					const instagramPhotoMediaType = this.getNodeParameter('instagramPhotoMediaType', i) as string | undefined;
-
 					if (instagramPhotoMediaType) formData.media_type = instagramPhotoMediaType;
-
 				} else if (operation === 'uploadVideo') {
 					const instagramVideoMediaType = this.getNodeParameter('instagramVideoMediaType', i) as string | undefined;
 					const instagramShareToFeed = this.getNodeParameter('instagramShareToFeed', i) as boolean | undefined;
@@ -972,7 +966,7 @@ export class UploadPost implements INodeType {
 				}
 			}
 
-			if (platforms.includes('youtube') && operation === 'uploadVideo') {
+			if (platforms.includes('youtube') && operation === 'uploadVideo') { // YouTube only for video
 				const youtubeDescription = this.getNodeParameter('youtubeDescription', i) as string | undefined;
 				const youtubeTags = this.getNodeParameter('youtubeTags', i) as string | undefined;
 				const youtubeCategoryId = this.getNodeParameter('youtubeCategoryId', i) as string | undefined;
@@ -992,36 +986,47 @@ export class UploadPost implements INodeType {
 				if (youtubeMadeForKids !== undefined) formData.madeForKids = youtubeMadeForKids;
 			}
 
-			if (platforms.includes('threads') && (operation === 'uploadVideo' || operation === 'uploadText')) {
-				const threadsDescription = this.getNodeParameter('threadsDescription', i) as string | undefined;
-
-				if (threadsDescription) formData.description = threadsDescription;
+			if (platforms.includes('threads')) {
+				if (operation === 'uploadVideo' || operation === 'uploadText') {
+					// According to docs, for Threads text upload, only 'title' is used.
+					// For video, 'threadsDescription' can be used.
+					if (operation === 'uploadVideo'){
+						const threadsDescription = this.getNodeParameter('threadsDescription', i) as string | undefined;
+						if (threadsDescription) formData.description = threadsDescription;
+					}
+				} 
 			}
 
-			if (platforms.includes('x') && (operation === 'uploadVideo' || operation === 'uploadText')) {
-				const xTaggedUserIds = this.getNodeParameter('xTaggedUserIds', i) as string | undefined;
-				const xReplySettings = this.getNodeParameter('xReplySettings', i) as string | undefined;
-
-				if (xTaggedUserIds) formData.tagged_user_ids = xTaggedUserIds.split(',').map(id => id.trim());
-				if (xReplySettings) formData.reply_settings = xReplySettings;
-
-				if (operation === 'uploadVideo') {
+			if (platforms.includes('x')) {
+				if (operation === 'uploadText') {
+					// For X (Twitter) text upload, only 'title' is used (main content)
+					// and optionally 'xPostUrlText'
+					const xPostUrlText = this.getNodeParameter('xPostUrlText', i) as string | undefined;
+					if (xPostUrlText) formData.post_url = xPostUrlText; 
+					// Remove other X-specific params for text upload if they were added generally
+					delete formData.tagged_user_ids;
+					delete formData.reply_settings;
+					delete formData.nullcast;
+					delete formData.place_id;
+					delete formData.poll_duration;
+					delete formData.poll_options;
+					delete formData.poll_reply_settings;
+				} else if (operation === 'uploadVideo') {
+					const xTaggedUserIds = this.getNodeParameter('xTaggedUserIds', i) as string | undefined;
+					const xReplySettings = this.getNodeParameter('xReplySettings', i) as string | undefined;
 					const xNullcastVideo = this.getNodeParameter('xNullcastVideo', i) as boolean | undefined;
 					const xPlaceIdVideo = this.getNodeParameter('xPlaceIdVideo', i) as string | undefined;
 					const xPollDurationVideo = this.getNodeParameter('xPollDurationVideo', i) as number | undefined;
 					const xPollOptionsVideo = this.getNodeParameter('xPollOptionsVideo', i) as string | undefined;
 					const xPollReplySettingsVideo = this.getNodeParameter('xPollReplySettingsVideo', i) as string | undefined;
 
+					if (xTaggedUserIds) formData.tagged_user_ids = xTaggedUserIds.split(',').map(id => id.trim());
+					if (xReplySettings) formData.reply_settings = xReplySettings;
 					if (xNullcastVideo !== undefined) formData.nullcast = xNullcastVideo;
 					if (xPlaceIdVideo) formData.place_id = xPlaceIdVideo;
 					if (xPollDurationVideo !== undefined) formData.poll_duration = xPollDurationVideo;
 					if (xPollOptionsVideo) formData.poll_options = xPollOptionsVideo.split(',').map(opt => opt.trim());
 					if (xPollReplySettingsVideo) formData.poll_reply_settings = xPollReplySettingsVideo;
-
-				} else if (operation === 'uploadText') {
-					const xPostUrlText = this.getNodeParameter('xPostUrlText', i) as string | undefined;
-
-					if (xPostUrlText) formData.post_url = xPostUrlText;
 				}
 			}
 
