@@ -1035,6 +1035,7 @@ export class UploadPost implements INodeType {
 					'Authorization': `Apikey ${apiKey}`,
 				},
 				formData,
+				json: true,
 			};
 
 			this.logger.info(`[UploadPost] Request: ${options.method} ${options.uri}`);
