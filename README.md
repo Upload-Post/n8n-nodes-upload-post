@@ -43,13 +43,13 @@ The node provides the following operations:
     *   Common parameters: User Identifier, Platform(s), Title (used as content for most platforms).
     *   Platform-specific parameters are available for LinkedIn, Facebook, Threads, and X (Twitter).
 
-Refer to the [Upload Post API Documentation](https://docs.upload-post.com/api) for detailed information on parameters and platform requirements.
+Refer to the [Upload Post API Documentation](https://docs.upload-post.com) for detailed information on parameters and platform requirements.
 
 ## Resources
 
 *   [n8n community nodes documentation](https://docs.n8n.io/integrations/community-nodes/)
 *   [Upload Post Website](https://www.upload-post.com/)
-*   [Upload Post API Documentation](https://docs.upload-post.com/api)
+*   [Upload Post API Documentation](https://docs.upload-post.com)
 
 ## Compatibility
 

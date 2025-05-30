@@ -9,7 +9,7 @@ export class UploadPostApi implements ICredentialType {
 	name = 'uploadPostApi';
 	displayName = 'Upload Post API';
 
-	documentationUrl = 'https://docs.upload-post.com/api';
+	documentationUrl = 'https://docs.upload-post.com';
 
 	properties: INodeProperties[] = [
 		{
