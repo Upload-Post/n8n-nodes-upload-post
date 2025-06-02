@@ -8,6 +8,7 @@ import {
 export class UploadPostApi implements ICredentialType {
 	name = 'uploadPostApi';
 	displayName = 'Upload Post API';
+	readonly icon = 'file:UploadPost.svg';
 
 	documentationUrl = 'https://docs.upload-post.com';
 
@@ -21,6 +22,7 @@ export class UploadPostApi implements ICredentialType {
 			},
 			default: '',
 			placeholder: 'Enter your Upload-Post API Key',
+			description: 'You can find your API key here: https://app.upload-post.com/api-keys',
 		},
 	];
 

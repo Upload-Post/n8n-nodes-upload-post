@@ -65,7 +65,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				required: true,
 				default: '',
-				description: 'User identifier for Upload-Post',
+				description: 'The Profile Name you created in your upload-post.com account. You can find it in the \'Manage Users\' section (e.g., app.upload-post.com/manage-users).',
 			},
 			{
 				displayName: 'Platform(s)',
@@ -100,15 +100,11 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				required: true,
 				default: '',
-				description: 'Array of photo files or photo URLs. For files, use binary property names like {{$binary.dataPropertyName}}. For URLs, provide direct HTTPS URLs as strings. Multiple items can be added via "Add Field".',
+				description: 'Provide photo files or URLs as a comma-separated list (e.g., data,https://example.com/image.jpg,otherImage). For files, enter the binary property name (e.g., data, myImage). For URLs, provide direct HTTP/HTTPS URLs.',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos'],
 					},
-				},
-				typeOptions: {
-					multiple: true,
-					multipleValueButtonText: 'Add Photo',
 				},
 			},
 			{
@@ -131,7 +127,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				required: true,
 				default: '',
-				description: 'The video file to upload or a video URL. For files, use binary property name like {{$binary.dataPropertyName}}.',
+				description: 'The video file to upload or a video URL. For files, enter the binary property name (e.g., data).',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -822,11 +818,14 @@ export class UploadPost implements INodeType {
 					let photosToProcess: string[];
 
 					if (typeof photosInput === 'string') {
-						// If it's a non-empty string, treat as a single photo. Empty string becomes an empty array.
-						photosToProcess = photosInput ? [photosInput] : [];
+						// If it's a string, split by comma for multiple items, trim, and filter empty.
+						// This handles cases like "url1,url2" or "{{$binary.data1}},{{$binary.data2}}"
+						// or a single item like "url1" or "{{$binary.data1}}".
+						photosToProcess = photosInput.split(',').map(item => item.trim()).filter(item => item !== '');
 					} else {
-						// It's already string[] (or [] if empty from default)
-						photosToProcess = photosInput;
+						// It's already string[] (from "Add Field" or if the parameter somehow became an array),
+						// filter out any non-string or empty string items.
+						photosToProcess = photosInput.filter(item => typeof item === 'string' && item.trim() !== '');
 					}
 
 					const allowedPhotoPlatforms = ['tiktok', 'instagram', 'linkedin', 'facebook', 'x', 'threads'];
@@ -834,16 +833,33 @@ export class UploadPost implements INodeType {
 					formData['platform[]'] = platforms;
 
 					if (photosToProcess.length > 0) {
-						const photoArray: Array<Buffer | string> = [];
+						const photoArray: Array<string | { value: Buffer; options: { filename: string; contentType?: string } }> = [];
 						for (const photoItem of photosToProcess) {
-							// Ensure photoItem is a string before processing
-							if (typeof photoItem === 'string' && photoItem.startsWith('{{$binary')) {
-								const binaryPropertyName = photoItem.substring('{{$binary.'.length, photoItem.length - 2);
-								const binaryData = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
-								photoArray.push(binaryData);
-							} else if (typeof photoItem === 'string' && photoItem) {
-								// It's a URL, push if non-empty
-								photoArray.push(photoItem);
+							// Ensure photoItem is a non-empty string before processing
+							if (typeof photoItem === 'string' && photoItem) {
+								if (photoItem.toLowerCase().startsWith('http://') || photoItem.toLowerCase().startsWith('https://')) {
+									// It's a URL
+									photoArray.push(photoItem);
+								} else {
+									// Assume it's a binary property name
+									const binaryPropertyName = photoItem;
+									try {
+										const binaryBuffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
+										const binaryFileDetails = items[i].binary![binaryPropertyName];
+										photoArray.push({
+											value: binaryBuffer,
+											options: {
+												filename: binaryFileDetails.fileName ?? binaryPropertyName,
+												contentType: binaryFileDetails.mimeType,
+											},
+										});
+									} catch (error) {
+										// Log a warning if binary data for the given property name is not found
+										this.logger.warn(`[UploadPost Node] Could not find binary data for property '${binaryPropertyName}' in item ${i}. Error: ${error.message}`);
+										// Optionally, you could decide to throw an error or add the photoItem as a string if that's desired fallback behavior.
+										// For now, we'll just skip this item if the binary data isn't found to prevent sending a non-URL string.
+									}
+								}
 							}
 						}
 						// Only add 'photos[]' to formData if there are items in photoArray
@@ -855,19 +871,35 @@ export class UploadPost implements INodeType {
 					break;
 				case 'uploadVideo':
 					endpoint = '/upload';
-					const video = this.getNodeParameter('video', i) as string;
+					const videoInput = this.getNodeParameter('video', i) as string;
 					
 					const allowedVideoPlatforms = ['tiktok', 'instagram', 'linkedin', 'youtube', 'facebook', 'x', 'threads'];
 					platforms = platforms.filter(p => allowedVideoPlatforms.includes(p));
 					formData['platform[]'] = platforms;
 
-					if (video) {
-						if (video.startsWith('{{$binary')) {
-							const binaryPropertyName = video.substring('{{$binary.'.length, video.length - 2);
-							const binaryData = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
-							formData.video = binaryData;
+					if (videoInput) {
+						if (videoInput.toLowerCase().startsWith('http://') || videoInput.toLowerCase().startsWith('https://')) {
+							// It's a URL
+							formData.video = videoInput;
 						} else {
-							formData.video = video;
+							// Assume it's a binary property name
+							const binaryPropertyName = videoInput;
+							try {
+								const binaryBuffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
+								const binaryFileDetails = items[i].binary![binaryPropertyName];
+								formData.video = {
+									value: binaryBuffer,
+									options: {
+										filename: binaryFileDetails.fileName ?? binaryPropertyName,
+										contentType: binaryFileDetails.mimeType,
+									},
+								};
+							} catch (error) {
+								this.logger.warn(`[UploadPost Node] Could not find binary data for video property '${binaryPropertyName}' in item ${i}. Error: ${error.message}`);
+								// If the video field is mandatory for the API, not adding it here might cause an API error.
+								// You might want to throw an error if binaryData is essential:
+								// throw new NodeApiError(this.getNode(), items[i].json, { message: `Binary data for video property '${binaryPropertyName}' not found.` });
+							}
 						}
 					}
 					break;
@@ -1057,11 +1089,6 @@ export class UploadPost implements INodeType {
 				formData,
 				json: true,
 			};
-
-			this.logger.info(`[UploadPost] Request: ${options.method} ${options.uri}`);
-			this.logger.info(`[UploadPost] Request Headers: ${JSON.stringify(options.headers)}`);
-			this.logger.info(`[UploadPost] Request FormData: ${JSON.stringify(formData)}`);
-
 			const responseData = await this.helpers.request(options);
 
 			returnData.push({
