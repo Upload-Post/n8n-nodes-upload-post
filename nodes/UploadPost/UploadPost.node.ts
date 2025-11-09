@@ -2413,7 +2413,7 @@ export class UploadPost implements INodeType {
 
 			// Log form data for debugging
 			this.logger.info(`Operation: ${operation}, Is Upload Operation: ${isUploadOperation}`);
-			this.logger.info('Complete Form Data being sent (JSON): ' + JSON.stringify(formData, null, 2));
+			//this.logger.info('Complete Form Data being sent (JSON): ' + JSON.stringify(formData, null, 2));
 
 			const responseData = await this.helpers.request(options);
 
