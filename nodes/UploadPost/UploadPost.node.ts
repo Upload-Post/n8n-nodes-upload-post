@@ -1,13 +1,14 @@
 import { Buffer } from 'buffer';
+import FormData from 'form-data';
 import {
 	IDataObject,
 	IExecuteFunctions,
+	IHttpRequestOptions,
 	ILoadOptionsFunctions,
 	INodeExecutionData,
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
-	IRequestOptions,
 	NodeConnectionType,
 	NodeOperationError,
 	sleep
@@ -1594,19 +1595,16 @@ export class UploadPost implements INodeType {
 			},
 			async getFacebookPages(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				try {
-					const credentials = await this.getCredentials('uploadPostApi');
-					const apiKey = credentials.apiKey as string;
 					const profile = (this.getCurrentNodeParameter('user') as string | undefined) || '';
 					const qs: IDataObject = {};
 					if (profile) qs.profile = profile;
-					const options: IRequestOptions = {
-						uri: 'https://api.upload-post.com/api/uploadposts/facebook/pages',
+					const options: IHttpRequestOptions = {
+						url: 'https://api.upload-post.com/api/uploadposts/facebook/pages',
 						method: 'GET',
-						headers: { Authorization: `ApiKey ${apiKey}` },
 						qs,
 						json: true,
 					};
-					const resp = await this.helpers.request(options);
+					const resp = await this.helpers.httpRequestWithAuthentication.call(this, 'uploadPostApi', options);
 					const pages = (resp && (resp.pages || resp.data || [])) as Array<{ id: string; name?: string }>;
 					const pageOptions = (pages || []).map(p => ({ name: p.name ? `${p.name} (${p.id})` : p.id, value: p.id }));
 					return [
@@ -1622,19 +1620,16 @@ export class UploadPost implements INodeType {
 			},
 			async getLinkedinPages(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				try {
-					const credentials = await this.getCredentials('uploadPostApi');
-					const apiKey = credentials.apiKey as string;
 					const profile = (this.getCurrentNodeParameter('user') as string | undefined) || '';
 					const qs: IDataObject = {};
 					if (profile) qs.profile = profile;
-					const options: IRequestOptions = {
-						uri: 'https://api.upload-post.com/api/uploadposts/linkedin/pages',
+					const options: IHttpRequestOptions = {
+						url: 'https://api.upload-post.com/api/uploadposts/linkedin/pages',
 						method: 'GET',
-						headers: { Authorization: `ApiKey ${apiKey}` },
 						qs,
 						json: true,
 					};
-					const resp = await this.helpers.request(options);
+					const resp = await this.helpers.httpRequestWithAuthentication.call(this, 'uploadPostApi', options);
 					const pages = (resp && (resp.pages || resp.data || [])) as Array<{ id: string; name?: string }>;
 					const pageOptions = (pages || []).map(p => ({ name: p.name ? `${p.name} (${p.id})` : p.id, value: p.id }));
 
@@ -1653,19 +1648,16 @@ export class UploadPost implements INodeType {
 			},
 			async getPinterestBoards(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				try {
-					const credentials = await this.getCredentials('uploadPostApi');
-					const apiKey = credentials.apiKey as string;
 					const profile = (this.getCurrentNodeParameter('user') as string | undefined) || '';
 					const qs: IDataObject = {};
 					if (profile) qs.profile = profile;
-					const options: IRequestOptions = {
-						uri: 'https://api.upload-post.com/api/uploadposts/pinterest/boards',
+					const options: IHttpRequestOptions = {
+						url: 'https://api.upload-post.com/api/uploadposts/pinterest/boards',
 						method: 'GET',
-						headers: { Authorization: `ApiKey ${apiKey}` },
 						qs,
 						json: true,
 					};
-					const resp = await this.helpers.request(options);
+					const resp = await this.helpers.httpRequestWithAuthentication.call(this, 'uploadPostApi', options);
 					const boards = (resp && (resp.boards || resp.data || [])) as Array<{ id: string; name?: string }>;
 					const boardOptions = (boards || []).map(b => ({ name: b.name ? `${b.name} (${b.id})` : b.id, value: b.id }));
 					return [
@@ -1681,15 +1673,12 @@ export class UploadPost implements INodeType {
 			},
 			async getUserProfiles(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				try {
-					const credentials = await this.getCredentials('uploadPostApi');
-					const apiKey = credentials.apiKey as string;
-					const options: IRequestOptions = {
-						uri: 'https://api.upload-post.com/api/uploadposts/users',
+					const options: IHttpRequestOptions = {
+						url: 'https://api.upload-post.com/api/uploadposts/users',
 						method: 'GET',
-						headers: { Authorization: `ApiKey ${apiKey}` },
 						json: true,
 					};
-					const resp = await this.helpers.request(options);
+					const resp = await this.helpers.httpRequestWithAuthentication.call(this, 'uploadPostApi', options);
 					const profiles = (resp && resp.profiles) as Array<{
 						username: string;
 						social_accounts: Record<string, any>;
@@ -1902,10 +1891,11 @@ export class UploadPost implements INodeType {
 											},
 										});
 									} catch (error) {
-										// Log a warning if binary data for the given property name is not found
-										this.logger.warn(`[UploadPost Node] Could not find binary data for property '${binaryPropertyName}' in item ${i}. Error: ${error.message}`);
-										// Optionally, you could decide to throw an error or add the photoItem as a string if that's desired fallback behavior.
-										// For now, we'll just skip this item if the binary data isn't found to prevent sending a non-URL string.
+										const errorMessage = error instanceof Error ? error.message : '';
+										const details = errorMessage ? ` (${errorMessage})` : '';
+										throw new NodeOperationError(this.getNode(), `Binary data for property '${binaryPropertyName}' was not found in item ${i}.${details}`, {
+											itemIndex: i,
+										});
 									}
 								}
 							}
@@ -1946,10 +1936,11 @@ export class UploadPost implements INodeType {
 									},
 								};
 							} catch (error) {
-								this.logger.warn(`[UploadPost Node] Could not find binary data for video property '${binaryPropertyName}' in item ${i}. Error: ${error.message}`);
-								// If the video field is mandatory for the API, not adding it here might cause an API error.
-								// You might want to throw an error if binaryData is essential:
-								// throw new NodeApiError(this.getNode(), items[i].json, { message: `Binary data for video property '${binaryPropertyName}' not found.` });
+								const errorMessage = error instanceof Error ? error.message : '';
+								const details = errorMessage ? ` (${errorMessage})` : '';
+								throw new NodeOperationError(this.getNode(), `Binary data for video property '${binaryPropertyName}' was not found in item ${i}.${details}`, {
+									itemIndex: i,
+								});
 							}
 						}
 					}
@@ -2230,7 +2221,11 @@ export class UploadPost implements INodeType {
 								},
 							};
 						} catch (error) {
-							this.logger.warn(`[UploadPost Node] Could not find binary data for YouTube thumbnail property '${binaryPropertyName}' in item ${i}. Error: ${error.message}`);
+							const errorMessage = error instanceof Error ? error.message : '';
+							const details = errorMessage ? ` (${errorMessage})` : '';
+							throw new NodeOperationError(this.getNode(), `Binary data for YouTube thumbnail property '${binaryPropertyName}' was not found in item ${i}.${details}`, {
+								itemIndex: i,
+							});
 						}
 					}
 				}
@@ -2376,31 +2371,58 @@ export class UploadPost implements INodeType {
 				}
 			}
 
-			const credentials = await this.getCredentials('uploadPostApi');
-			const apiKey = credentials.apiKey as string;
-
-			const options: IRequestOptions = {
-				uri: `https://api.upload-post.com/api${endpoint}`,
+			const options: IHttpRequestOptions = {
+				url: `https://api.upload-post.com/api${endpoint}`,
 				method,
-				headers: {},
 				json: true,
 			};
 
 			// Set auth header according to endpoint
 			if (operation === 'validateJwt') {
 				const jwt = this.getNodeParameter('jwtToken', i) as string;
-				(options.headers as any)['Authorization'] = `Bearer ${jwt}`;
-			} else {
-				(options.headers as any)['Authorization'] = `ApiKey ${apiKey}`;
+				options.headers = { Authorization: `Bearer ${jwt}` };
 			}
 
 			// Decide payload container
 			if (method === 'POST') {
 				// Upload endpoints use multipart form-data, others JSON body
 				if (operation === 'uploadPhotos' || operation === 'uploadVideo' || operation === 'uploadText') {
-					(options as any).formData = formData;
+					// Create FormData from the formData object
+					const formDataObj = new FormData();
+					for (const [key, value] of Object.entries(formData)) {
+						if (value !== undefined && value !== null) {
+							if (Array.isArray(value)) {
+								// Handle array values (like photos[], platform[])
+								for (const item of value) {
+									if (item !== undefined && item !== null) {
+										if (typeof item === 'string') {
+											// Handle URL strings
+											formDataObj.append(key, item);
+										} else if (item && typeof item === 'object' && 'value' in item && 'options' in item) {
+											// Handle binary data objects
+											const binaryValue = item as { value: Buffer; options: { filename: string; contentType?: string } };
+											formDataObj.append(key, binaryValue.value, binaryValue.options);
+										} else {
+											// Handle other values
+											formDataObj.append(key, String(item));
+										}
+									}
+								}
+							} else if (value && typeof value === 'object' && 'value' in value && 'options' in value) {
+								// Handle single binary data
+								const binaryValue = value as { value: Buffer | string; options: { filename?: string; contentType?: string } };
+								formDataObj.append(key, binaryValue.value, binaryValue.options);
+							} else {
+								formDataObj.append(key, String(value));
+							}
+						}
+					}
+					options.body = formDataObj;
+					// Set Content-Type header to be set automatically by FormData
+					if (!options.headers) options.headers = {};
+					// FormData will set the Content-Type with boundary
 				} else {
-					(options as any).body = body;
+					options.body = body;
 				}
 			} else if (method === 'GET' || method === 'DELETE') {
 				// Some DELETE endpoints accept JSON in body (delete user), but stick to body for deleteUser
@@ -2415,7 +2437,7 @@ export class UploadPost implements INodeType {
 			this.logger.info(`Operation: ${operation}, Is Upload Operation: ${isUploadOperation}`);
 			//this.logger.info('Complete Form Data being sent (JSON): ' + JSON.stringify(formData, null, 2));
 
-			const responseData = await this.helpers.request(options);
+			const responseData = await this.helpers.httpRequestWithAuthentication.call(this, 'uploadPostApi', options);
 
 			// Handle optional polling after upload
 			const shouldConsiderPolling = operation === 'uploadPhotos' || operation === 'uploadVideo' || operation === 'uploadText';
@@ -2434,14 +2456,13 @@ export class UploadPost implements INodeType {
 							finalData = { success: false, message: 'Polling timed out', request_id: requestId };
 							break;
 						}
-						const statusOptions: IRequestOptions = {
-							uri: `https://api.upload-post.com/api/uploadposts/status`,
+						const statusOptions: IHttpRequestOptions = {
+							url: `https://api.upload-post.com/api/uploadposts/status`,
 							method: 'GET',
-							headers: { 'Authorization': `ApiKey ${apiKey}` },
 							qs: { request_id: requestId },
 							json: true,
 						};
-						const statusData = await this.helpers.request(statusOptions);
+						const statusData = await this.helpers.httpRequestWithAuthentication.call(this, 'uploadPostApi', statusOptions);
 						finalData = statusData;
 						const statusValue = (statusData && (statusData as any).status) as string | undefined;
 						if ((statusData as any).success === true || (statusValue && ['success','completed','failed','error'].includes(statusValue.toLowerCase()))) {
