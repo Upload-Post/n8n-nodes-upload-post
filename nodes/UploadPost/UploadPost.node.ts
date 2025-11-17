@@ -73,6 +73,861 @@ const parseJsonIfNeeded = (data: any): any => {
 	return data;
 };
 
+const API_BASE_URL = 'https://api.upload-post.com/api';
+
+type UploadOperation = 'uploadPhotos' | 'uploadVideo' | 'uploadText';
+
+type RequestMethod = 'GET' | 'POST' | 'DELETE';
+
+type RequestConfig = {
+	endpoint: string;
+	method: RequestMethod;
+	formData?: IDataObject;
+	body?: IDataObject;
+	qs?: IDataObject;
+	headers?: IDataObject;
+	isUploadOperation: boolean;
+	waitForCompletion: boolean;
+	pollInterval?: number;
+	pollTimeout?: number;
+};
+
+type ExecutionContext = {
+	node: IExecuteFunctions;
+	items: INodeExecutionData[];
+	itemIndex: number;
+	operation: string;
+};
+
+type UploadPreparation = {
+	formData: IDataObject;
+	platforms: string[];
+	waitForCompletion: boolean;
+	pollInterval: number;
+	pollTimeout: number;
+};
+
+const normalizeDateInput = (value: string | undefined): string | undefined => {
+	if (!value) return undefined;
+	const hasTimezone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(value);
+	return hasTimezone ? value : `${value}Z`;
+};
+
+const ensureArrayFromCommaSeparated = (value: string): string[] => {
+	return value
+		.split(',')
+		.map(item => item.trim())
+		.filter(item => item.length > 0);
+};
+
+const getBinaryFieldFromItem = async (
+	ctx: ExecutionContext,
+	propertyName: string,
+	errorLabel: string,
+): Promise<BinaryFormField> => {
+	const { node, itemIndex, items } = ctx;
+	try {
+		const binaryBuffer = await node.helpers.getBinaryDataBuffer(itemIndex, propertyName);
+		const binaryDetails = items[itemIndex].binary?.[propertyName];
+		return {
+			value: binaryBuffer,
+			options: {
+				filename: binaryDetails?.fileName ?? propertyName,
+				contentType: binaryDetails?.mimeType,
+			},
+		};
+	} catch (error) {
+		const message = error instanceof Error ? error.message : '';
+		const details = message ? ` (${message})` : '';
+		throw new NodeOperationError(node.getNode(), `${errorLabel} '${propertyName}' was not found in item ${itemIndex}.${details}`, {
+			itemIndex,
+		});
+	}
+};
+
+const PLATFORM_SUPPORT: Record<UploadOperation, string[]> = {
+	uploadPhotos: ['facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x'],
+	uploadVideo: ['facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
+	uploadText: ['facebook', 'linkedin', 'reddit', 'threads', 'x'],
+};
+
+const DESCRIPTION_ENABLED_PLATFORMS = new Set(['linkedin', 'facebook', 'youtube', 'pinterest', 'tiktok']);
+
+const TITLE_OVERRIDES: Array<{
+	platform: string;
+	param: string;
+	field: string;
+	operations?: UploadOperation[];
+}> = [
+	{ platform: 'instagram', param: 'instagramTitle', field: 'instagram_title' },
+	{ platform: 'facebook', param: 'facebookTitle', field: 'facebook_title' },
+	{ platform: 'tiktok', param: 'tiktokTitle', field: 'tiktok_title' },
+	{ platform: 'linkedin', param: 'linkedinTitle', field: 'linkedin_title' },
+	{ platform: 'x', param: 'xTitle', field: 'x_title' },
+	{ platform: 'youtube', param: 'youtubeTitle', field: 'youtube_title', operations: ['uploadVideo'] },
+	{ platform: 'pinterest', param: 'pinterestTitle', field: 'pinterest_title' },
+	{ platform: 'threads', param: 'threadsTitle', field: 'threads_title', operations: ['uploadText'] },
+];
+
+const DESCRIPTION_OVERRIDES: Array<{
+	platform: string;
+	param: string;
+	field: string;
+	operations?: UploadOperation[];
+}> = [
+	{ platform: 'linkedin', param: 'linkedinDescription', field: 'linkedin_description', operations: ['uploadPhotos', 'uploadVideo'] },
+	{ platform: 'youtube', param: 'youtubeDescription', field: 'youtube_description', operations: ['uploadVideo'] },
+	{ platform: 'facebook', param: 'facebookDescription', field: 'facebook_description', operations: ['uploadPhotos', 'uploadVideo'] },
+	{ platform: 'tiktok', param: 'tiktokDescription', field: 'tiktok_description', operations: ['uploadPhotos'] },
+	{ platform: 'pinterest', param: 'pinterestDescription', field: 'pinterest_description', operations: ['uploadPhotos', 'uploadVideo'] },
+];
+
+const getFilteredPlatforms = (operation: UploadOperation, platforms: string[]): string[] => {
+	const allowed = PLATFORM_SUPPORT[operation] ?? [];
+	return platforms.filter(platform => allowed.includes(platform));
+};
+
+const applyTitleOverrides = (ctx: ExecutionContext, operation: UploadOperation, platforms: string[], formData: IDataObject) => {
+	for (const override of TITLE_OVERRIDES) {
+		if (!platforms.includes(override.platform)) continue;
+		if (override.operations && !override.operations.includes(operation)) continue;
+		const value = ctx.node.getNodeParameter(override.param, ctx.itemIndex, '') as string;
+		if (value) {
+			formData[override.field] = value;
+		}
+	}
+};
+
+const applyDescriptionOverrides = (ctx: ExecutionContext, operation: UploadOperation, platforms: string[], formData: IDataObject) => {
+	const genericDescription = ctx.node.getNodeParameter('description', ctx.itemIndex, '') as string;
+	if (
+		genericDescription &&
+		(operation === 'uploadPhotos' || operation === 'uploadVideo') &&
+		platforms.some(platform => DESCRIPTION_ENABLED_PLATFORMS.has(platform))
+	) {
+		formData.description = genericDescription;
+	}
+
+	for (const override of DESCRIPTION_OVERRIDES) {
+		if (!platforms.includes(override.platform)) continue;
+		if (override.operations && !override.operations.includes(operation)) continue;
+		const value = ctx.node.getNodeParameter(override.param, ctx.itemIndex, '') as string;
+		if (value) {
+			formData[override.field] = value;
+		}
+	}
+};
+
+const getUserForOperation = (ctx: ExecutionContext, needsUser: boolean): string => {
+	if (!needsUser) {
+		return '';
+	}
+	const selection = ctx.node.getNodeParameter('user', ctx.itemIndex) as string;
+	if (selection === MANUAL_USER_VALUE) {
+		return ctx.node.getNodeParameter('userManual', ctx.itemIndex) as string;
+	}
+	return selection;
+};
+
+const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): UploadPreparation => {
+	const formData: IDataObject = {};
+	const user = getUserForOperation(ctx, true);
+	const title = ctx.node.getNodeParameter('title', ctx.itemIndex) as string;
+	formData.user = user;
+	formData.title = title;
+
+	const scheduledDate = normalizeDateInput(ctx.node.getNodeParameter('scheduledDate', ctx.itemIndex, '') as string);
+	if (scheduledDate) {
+		formData.scheduled_date = scheduledDate;
+	}
+
+	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean | undefined;
+	if (uploadAsync !== undefined) {
+		formData.async_upload = String(uploadAsync);
+	}
+
+	const rawPlatforms = ctx.node.getNodeParameter('platform', ctx.itemIndex) as string[];
+	const platforms = getFilteredPlatforms(operation, Array.isArray(rawPlatforms) ? rawPlatforms : []);
+	formData['platform[]'] = platforms;
+
+	applyTitleOverrides(ctx, operation, platforms, formData);
+	applyDescriptionOverrides(ctx, operation, platforms, formData);
+
+	const waitForCompletion = ctx.node.getNodeParameter('waitForCompletion', ctx.itemIndex, false) as boolean;
+	const pollInterval = ctx.node.getNodeParameter('pollInterval', ctx.itemIndex, 10) as number;
+	const pollTimeout = ctx.node.getNodeParameter('pollTimeout', ctx.itemIndex, 600) as number;
+
+	return {
+		formData,
+		platforms,
+		waitForCompletion,
+		pollInterval,
+		pollTimeout,
+	};
+};
+
+const applyPinterestOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
+	const selection = ctx.node.getNodeParameter('pinterestBoardId', ctx.itemIndex, '') as string;
+	const pinterestBoardId =
+		selection === MANUAL_PINTEREST_VALUE
+			? (ctx.node.getNodeParameter('pinterestBoardIdManual', ctx.itemIndex) as string)
+			: selection;
+	if (pinterestBoardId) {
+		formData.pinterest_board_id = pinterestBoardId;
+	}
+	const pinterestLink = ctx.node.getNodeParameter('pinterestLink', ctx.itemIndex, '') as string;
+	if (pinterestLink) {
+		formData.pinterest_link = pinterestLink;
+	}
+	if (operation === 'uploadVideo') {
+		const pinterestCoverImageUrl = ctx.node.getNodeParameter('pinterestCoverImageUrl', ctx.itemIndex, '') as string;
+		const pinterestCoverImageContentType = ctx.node.getNodeParameter('pinterestCoverImageContentType', ctx.itemIndex, '') as string;
+		const pinterestCoverImageData = ctx.node.getNodeParameter('pinterestCoverImageData', ctx.itemIndex, '') as string;
+		const pinterestCoverImageKeyFrameTime = ctx.node.getNodeParameter('pinterestCoverImageKeyFrameTime', ctx.itemIndex, 0) as number;
+		if (pinterestCoverImageUrl) {
+			formData.pinterest_cover_image_url = pinterestCoverImageUrl;
+		} else if (pinterestCoverImageContentType && pinterestCoverImageData) {
+			formData.pinterest_cover_image_content_type = pinterestCoverImageContentType;
+			formData.pinterest_cover_image_data = pinterestCoverImageData;
+		} else if (pinterestCoverImageKeyFrameTime !== undefined) {
+			formData.pinterest_cover_image_key_frame_time = pinterestCoverImageKeyFrameTime;
+		}
+		if (pinterestLink) {
+			formData.pinterest_link = pinterestLink;
+		}
+	}
+};
+
+const applyLinkedinOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
+	const selection = ctx.node.getNodeParameter('targetLinkedinPageId', ctx.itemIndex, '') as string;
+	const resolvedValue =
+		selection === MANUAL_LINKEDIN_VALUE
+			? (ctx.node.getNodeParameter('targetLinkedinPageIdManual', ctx.itemIndex) as string)
+			: selection;
+	if (resolvedValue && resolvedValue !== 'me') {
+		const match = resolvedValue.match(/(\d+)$/);
+		formData.target_linkedin_page_id = match ? match[1] : resolvedValue;
+	}
+	if (operation === 'uploadPhotos') {
+		const linkedinVisibility = ctx.node.getNodeParameter('linkedinVisibility', ctx.itemIndex, 'PUBLIC') as string;
+		if (linkedinVisibility === 'PUBLIC') {
+			formData.visibility = 'PUBLIC';
+		}
+	} else if (operation === 'uploadVideo') {
+		const linkedinVisibility = ctx.node.getNodeParameter('linkedinVisibility', ctx.itemIndex, 'PUBLIC') as string;
+		formData.visibility = linkedinVisibility;
+	}
+};
+
+const applyFacebookOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
+	const selection = ctx.node.getNodeParameter('facebookPageId', ctx.itemIndex) as string;
+	const resolvedValue =
+		selection === MANUAL_FACEBOOK_VALUE
+			? (ctx.node.getNodeParameter('facebookPageIdManual', ctx.itemIndex) as string)
+			: selection;
+	formData.facebook_page_id = resolvedValue;
+
+	if (operation === 'uploadVideo') {
+		const facebookVideoState = ctx.node.getNodeParameter('facebookVideoState', ctx.itemIndex, '') as string;
+		const facebookMediaType = ctx.node.getNodeParameter('facebookMediaType', ctx.itemIndex, '') as string;
+		if (facebookVideoState) {
+			formData.video_state = facebookVideoState;
+		}
+		if (facebookMediaType) {
+			formData.facebook_media_type = facebookMediaType;
+		}
+	} else if (operation === 'uploadText') {
+		const facebookLink = ctx.node.getNodeParameter('facebookLink', ctx.itemIndex, '') as string;
+		if (facebookLink) {
+			formData.facebook_link_url = facebookLink;
+		}
+	}
+};
+
+const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
+	if (operation === 'uploadPhotos') {
+		const autoAddMusic = ctx.node.getNodeParameter('tiktokAutoAddMusic', ctx.itemIndex, false) as boolean;
+		const disableComment = ctx.node.getNodeParameter('tiktokDisableComment', ctx.itemIndex, false) as boolean;
+		const brandContentToggle = ctx.node.getNodeParameter('brand_content_toggle', ctx.itemIndex, false) as boolean;
+		const brandOrganicToggle = ctx.node.getNodeParameter('brand_organic_toggle', ctx.itemIndex, false) as boolean;
+		const photoCoverIndex = ctx.node.getNodeParameter('tiktokPhotoCoverIndex', ctx.itemIndex, 0) as number;
+		const photoDescription = ctx.node.getNodeParameter('tiktokPhotoDescription', ctx.itemIndex, '') as string;
+
+		formData.auto_add_music = String(autoAddMusic);
+		formData.disable_comment = String(disableComment);
+		formData.brand_content_toggle = String(brandContentToggle);
+		formData.brand_organic_toggle = String(brandOrganicToggle);
+		formData.photo_cover_index = photoCoverIndex;
+		if (photoDescription && formData.description === undefined) {
+			formData.description = photoDescription;
+		}
+	} else if (operation === 'uploadVideo') {
+		const privacyLevel = ctx.node.getNodeParameter('tiktokPrivacyLevel', ctx.itemIndex, '') as string;
+		const disableDuet = ctx.node.getNodeParameter('tiktokDisableDuet', ctx.itemIndex, false) as boolean;
+		const disableComment = ctx.node.getNodeParameter('tiktokDisableComment', ctx.itemIndex, false) as boolean;
+		const disableStitch = ctx.node.getNodeParameter('tiktokDisableStitch', ctx.itemIndex, false) as boolean;
+		const coverTimestamp = ctx.node.getNodeParameter('tiktokCoverTimestamp', ctx.itemIndex, 1000) as number;
+		const brandContentToggle = ctx.node.getNodeParameter('brand_content_toggle', ctx.itemIndex, false) as boolean;
+		const brandOrganicToggle = ctx.node.getNodeParameter('brand_organic_toggle', ctx.itemIndex, false) as boolean;
+		const isAigc = ctx.node.getNodeParameter('tiktokIsAigc', ctx.itemIndex, false) as boolean;
+		const postMode = ctx.node.getNodeParameter('tiktokPostMode', ctx.itemIndex, '') as string;
+
+		if (privacyLevel) formData.privacy_level = privacyLevel;
+		formData.disable_duet = String(disableDuet);
+		formData.disable_comment = String(disableComment);
+		formData.disable_stitch = String(disableStitch);
+		formData.cover_timestamp = coverTimestamp;
+		formData.brand_content_toggle = String(brandContentToggle);
+		formData.brand_organic_toggle = String(brandOrganicToggle);
+		formData.is_aigc = String(isAigc);
+		if (postMode) formData.post_mode = postMode;
+	}
+};
+
+const applyInstagramOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
+	const providedMediaType = ctx.node.getNodeParameter('instagramMediaType', ctx.itemIndex, '') as string;
+	let finalMediaType = providedMediaType;
+	if (operation === 'uploadPhotos') {
+		if (!['IMAGE', 'STORIES'].includes(providedMediaType)) {
+			finalMediaType = 'IMAGE';
+		}
+	} else if (operation === 'uploadVideo') {
+		if (!['REELS', 'STORIES'].includes(providedMediaType)) {
+			finalMediaType = 'REELS';
+		}
+	}
+	if (finalMediaType) {
+		formData.media_type = finalMediaType;
+	}
+
+	if (operation === 'uploadVideo') {
+		const shareToFeed = ctx.node.getNodeParameter('instagramShareToFeed', ctx.itemIndex, true) as boolean;
+		const collaborators = ctx.node.getNodeParameter('instagramCollaborators', ctx.itemIndex, '') as string;
+		const coverUrl = ctx.node.getNodeParameter('instagramCoverUrl', ctx.itemIndex, '') as string;
+		const audioName = ctx.node.getNodeParameter('instagramAudioName', ctx.itemIndex, '') as string;
+		const userTags = ctx.node.getNodeParameter('instagramUserTags', ctx.itemIndex, '') as string;
+		const locationId = ctx.node.getNodeParameter('instagramLocationId', ctx.itemIndex, '') as string;
+		const thumbOffset = ctx.node.getNodeParameter('instagramThumbOffset', ctx.itemIndex, '') as string;
+
+		formData.share_to_feed = String(shareToFeed);
+		if (collaborators) formData.collaborators = collaborators;
+		if (coverUrl) formData.cover_url = coverUrl;
+		if (audioName) formData.audio_name = audioName;
+		if (userTags) formData.user_tags = userTags;
+		if (locationId) formData.location_id = locationId;
+		if (thumbOffset) formData.thumb_offset = thumbOffset;
+	}
+};
+
+const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject) => {
+	const tagsRaw = ctx.node.getNodeParameter('youtubeTags', ctx.itemIndex, '') as string;
+	const categoryId = ctx.node.getNodeParameter('youtubeCategoryId', ctx.itemIndex, '') as string;
+	const privacyStatus = ctx.node.getNodeParameter('youtubePrivacyStatus', ctx.itemIndex, '') as string;
+	const embeddable = ctx.node.getNodeParameter('youtubeEmbeddable', ctx.itemIndex, true) as boolean;
+	const license = ctx.node.getNodeParameter('youtubeLicense', ctx.itemIndex, '') as string;
+	const publicStatsViewable = ctx.node.getNodeParameter('youtubePublicStatsViewable', ctx.itemIndex, true) as boolean;
+	const madeForKids = ctx.node.getNodeParameter('youtubeMadeForKids', ctx.itemIndex, false) as boolean;
+	const thumbnailInput = ctx.node.getNodeParameter('youtubeThumbnail', ctx.itemIndex, '') as string;
+
+	if (tagsRaw) formData['tags[]'] = ensureArrayFromCommaSeparated(tagsRaw);
+	if (categoryId) formData.categoryId = categoryId;
+	if (privacyStatus) formData.privacyStatus = privacyStatus;
+	formData.embeddable = String(embeddable);
+	if (license) formData.license = license;
+	formData.publicStatsViewable = String(publicStatsViewable);
+	formData.madeForKids = String(madeForKids);
+
+	if (thumbnailInput) {
+		if (thumbnailInput.toLowerCase().startsWith('http://') || thumbnailInput.toLowerCase().startsWith('https://')) {
+			formData.thumbnail_url = thumbnailInput;
+		} else {
+			const thumbnailBinary = await getBinaryFieldFromItem(ctx, thumbnailInput, 'Binary data for YouTube thumbnail property');
+			formData.thumbnail = thumbnailBinary;
+		}
+	}
+
+	const selfDeclaredMadeForKids = ctx.node.getNodeParameter('youtubeSelfDeclaredMadeForKids', ctx.itemIndex, false) as boolean;
+	const containsSyntheticMedia = ctx.node.getNodeParameter('youtubeContainsSyntheticMedia', ctx.itemIndex, false) as boolean;
+	const defaultLanguage = ctx.node.getNodeParameter('youtubeDefaultLanguage', ctx.itemIndex, '') as string;
+	const defaultAudioLanguage = ctx.node.getNodeParameter('youtubeDefaultAudioLanguage', ctx.itemIndex, '') as string;
+	const allowedCountries = ctx.node.getNodeParameter('youtubeAllowedCountries', ctx.itemIndex, '') as string;
+	const blockedCountries = ctx.node.getNodeParameter('youtubeBlockedCountries', ctx.itemIndex, '') as string;
+	const hasPaidProductPlacement = ctx.node.getNodeParameter('youtubeHasPaidProductPlacement', ctx.itemIndex, false) as boolean;
+	const recordingDate = ctx.node.getNodeParameter('youtubeRecordingDate', ctx.itemIndex, '') as string;
+
+	formData.selfDeclaredMadeForKids = String(selfDeclaredMadeForKids);
+	formData.containsSyntheticMedia = String(containsSyntheticMedia);
+	if (defaultLanguage) formData.defaultLanguage = defaultLanguage;
+	if (defaultAudioLanguage) formData.defaultAudioLanguage = defaultAudioLanguage;
+	if (allowedCountries) formData.allowedCountries = allowedCountries;
+	if (blockedCountries) formData.blockedCountries = blockedCountries;
+	formData.hasPaidProductPlacement = String(hasPaidProductPlacement);
+	if (recordingDate) formData.recordingDate = recordingDate;
+};
+
+const validateXPollConfiguration = (
+	ctx: ExecutionContext,
+	operation: UploadOperation,
+	formData: IDataObject,
+): void => {
+	if (operation !== 'uploadText') {
+		return;
+	}
+	const pollOptionsRaw = ctx.node.getNodeParameter('xPollOptions', ctx.itemIndex, '') as string;
+	const hasPollOptions = pollOptionsRaw.trim().length > 0;
+	if (!hasPollOptions) {
+		return;
+	}
+
+	const conflictingFields: string[] = [];
+	const cardUri = ctx.node.getNodeParameter('xCardUri', ctx.itemIndex, '') as string;
+	const quoteTweetId = ctx.node.getNodeParameter('xQuoteTweetId', ctx.itemIndex, '') as string;
+	const directMessageDeepLink = ctx.node.getNodeParameter('xDirectMessageDeepLink', ctx.itemIndex, '') as string;
+
+	if (cardUri.trim().length > 0) conflictingFields.push('X Card URI');
+	if (quoteTweetId.trim().length > 0) conflictingFields.push('X Quote Tweet ID');
+	if (directMessageDeepLink.trim().length > 0) conflictingFields.push('X Direct Message Deep Link');
+
+	if (conflictingFields.length > 0) {
+		throw new NodeOperationError(
+			ctx.node.getNode(),
+			`X Poll Options cannot be used with: ${conflictingFields.join(', ')}. These fields are mutually exclusive.`,
+		);
+	}
+
+	const pollOptions = ensureArrayFromCommaSeparated(pollOptionsRaw);
+	if (pollOptions.length < 2 || pollOptions.length > 4) {
+		throw new NodeOperationError(
+			ctx.node.getNode(),
+			`X Poll Options must contain between 2 and 4 non-empty options. Found: ${pollOptions.length}`,
+		);
+	}
+
+	const invalidOptions = pollOptions.filter(option => option.length > 25);
+	if (invalidOptions.length > 0) {
+		throw new NodeOperationError(
+			ctx.node.getNode(),
+			`X Poll Options cannot exceed 25 characters each. Invalid options: ${invalidOptions.join(', ')}`,
+		);
+	}
+
+	const pollDuration = ctx.node.getNodeParameter('xPollDuration', ctx.itemIndex, 1440) as number;
+	if (pollDuration < 5 || pollDuration > 10080) {
+		throw new NodeOperationError(
+			ctx.node.getNode(),
+			`X Poll Duration must be between 5 and 10080 minutes (5 minutes to 7 days). Provided: ${pollDuration}`,
+		);
+	}
+
+	formData['poll_options[]'] = pollOptions;
+	formData.poll_duration = pollDuration;
+	const pollReplySettings = ctx.node.getNodeParameter('xPollReplySettings', ctx.itemIndex, 'following') as string;
+	formData.poll_reply_settings = pollReplySettings;
+};
+
+const applyXOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
+	const quoteTweetId = ctx.node.getNodeParameter('xQuoteTweetId', ctx.itemIndex, '') as string;
+	const geoPlaceId = ctx.node.getNodeParameter('xGeoPlaceId', ctx.itemIndex, '') as string;
+	const forSuperFollowersOnly = ctx.node.getNodeParameter('xForSuperFollowersOnly', ctx.itemIndex, false) as boolean;
+	const communityId = ctx.node.getNodeParameter('xCommunityId', ctx.itemIndex, '') as string;
+	const shareWithFollowers = ctx.node.getNodeParameter('xShareWithFollowers', ctx.itemIndex, false) as boolean;
+	const directMessageDeepLink = ctx.node.getNodeParameter('xDirectMessageDeepLink', ctx.itemIndex, '') as string;
+	const cardUri = ctx.node.getNodeParameter('xCardUri', ctx.itemIndex, '') as string;
+
+	if (quoteTweetId) formData.quote_tweet_id = quoteTweetId;
+	if (geoPlaceId) formData.geo_place_id = geoPlaceId;
+	if (forSuperFollowersOnly) formData.for_super_followers_only = String(forSuperFollowersOnly);
+	if (communityId) formData.community_id = communityId;
+	if (shareWithFollowers) formData.share_with_followers = String(shareWithFollowers);
+	if (directMessageDeepLink) formData.direct_message_deep_link = directMessageDeepLink;
+	if (cardUri) formData.card_uri = cardUri;
+
+	if (operation === 'uploadText') {
+		const postUrl = ctx.node.getNodeParameter('xPostUrlText', ctx.itemIndex, '') as string;
+		const replySettings = ctx.node.getNodeParameter('xReplySettings', ctx.itemIndex, 'everyone') as string;
+		if (postUrl) formData.post_url = postUrl;
+		if (replySettings && replySettings !== 'everyone') formData.reply_settings = replySettings;
+
+		validateXPollConfiguration(ctx, operation, formData);
+
+		const xLongTextAsPost = ctx.node.getNodeParameter('xLongTextAsPost', ctx.itemIndex, false) as boolean;
+		if (xLongTextAsPost) {
+			formData.x_long_text_as_post = String(xLongTextAsPost);
+		}
+
+		delete formData.nullcast;
+		delete formData.place_id;
+	} else {
+		const taggedUserIds = ctx.node.getNodeParameter('xTaggedUserIds', ctx.itemIndex, '') as string;
+		const replySettings = ctx.node.getNodeParameter('xReplySettings', ctx.itemIndex, 'everyone') as string;
+		const nullcast = ctx.node.getNodeParameter('xNullcastVideo', ctx.itemIndex, false) as boolean;
+
+		if (taggedUserIds) {
+			formData['tagged_user_ids[]'] = ensureArrayFromCommaSeparated(taggedUserIds);
+		}
+		if (replySettings && replySettings !== 'everyone') formData.reply_settings = replySettings;
+		formData.nullcast = String(nullcast);
+
+		if (operation === 'uploadVideo') {
+			const xLongTextAsPost = ctx.node.getNodeParameter('xLongTextAsPost', ctx.itemIndex, false) as boolean;
+			if (xLongTextAsPost) {
+				formData.x_long_text_as_post = String(xLongTextAsPost);
+			}
+		}
+
+		const xPlaceIdVideo = ctx.node.getNodeParameter('xPlaceIdVideo', ctx.itemIndex, '') as string;
+		if (operation === 'uploadVideo' && xPlaceIdVideo) {
+			formData.place_id = xPlaceIdVideo;
+		}
+	}
+};
+
+const applyThreadsOptions = (ctx: ExecutionContext, formData: IDataObject) => {
+	const threadsLongTextAsPost = ctx.node.getNodeParameter('threadsLongTextAsPost', ctx.itemIndex, false) as boolean;
+	if (threadsLongTextAsPost) {
+		formData.threads_long_text_as_post = String(threadsLongTextAsPost);
+	}
+};
+
+const applyRedditOptions = (ctx: ExecutionContext, formData: IDataObject) => {
+	const subreddit = ctx.node.getNodeParameter('redditSubreddit', ctx.itemIndex) as string;
+	const flairId = ctx.node.getNodeParameter('redditFlairId', ctx.itemIndex, '') as string;
+	formData.subreddit = subreddit;
+	if (flairId) {
+		formData.flair_id = flairId;
+	}
+};
+
+const applyUploadPlatformOptions = async (
+	ctx: ExecutionContext,
+	operation: UploadOperation,
+	prep: UploadPreparation,
+) => {
+	const { formData, platforms } = prep;
+
+	if (platforms.includes('pinterest')) {
+		applyPinterestOptions(ctx, operation, formData);
+	}
+
+	if (platforms.includes('linkedin')) {
+		applyLinkedinOptions(ctx, operation, formData);
+	}
+
+	if (platforms.includes('facebook')) {
+		applyFacebookOptions(ctx, operation, formData);
+	}
+
+	if (platforms.includes('tiktok')) {
+		applyTiktokOptions(ctx, operation, formData);
+	}
+
+	if (platforms.includes('instagram')) {
+		applyInstagramOptions(ctx, operation, formData);
+	}
+
+	if (platforms.includes('youtube') && operation === 'uploadVideo') {
+		await applyYoutubeOptions(ctx, formData);
+	}
+
+	if (platforms.includes('x')) {
+		applyXOptions(ctx, operation, formData);
+	}
+
+	if (operation === 'uploadText' && platforms.includes('threads')) {
+		applyThreadsOptions(ctx, formData);
+	}
+
+	if (operation === 'uploadText' && platforms.includes('reddit')) {
+		applyRedditOptions(ctx, formData);
+	}
+};
+
+const buildUploadPhotosRequest = async (
+	ctx: ExecutionContext,
+): Promise<RequestConfig> => {
+	const prep = prepareUploadBase(ctx, 'uploadPhotos');
+	const photosInput = ctx.node.getNodeParameter('photos', ctx.itemIndex, '') as string | string[];
+
+	let photosToProcess: string[] = [];
+	if (Array.isArray(photosInput)) {
+		photosToProcess = photosInput.filter(item => typeof item === 'string' && item.trim().length > 0).map(item => item.trim());
+	} else if (typeof photosInput === 'string') {
+		photosToProcess = ensureArrayFromCommaSeparated(photosInput);
+	}
+
+	const photoArray: Array<string | BinaryFormField> = [];
+	for (const photoItem of photosToProcess) {
+		if (photoItem.toLowerCase().startsWith('http://') || photoItem.toLowerCase().startsWith('https://')) {
+			photoArray.push(photoItem);
+			continue;
+		}
+		const binaryField = await getBinaryFieldFromItem(ctx, photoItem, 'Binary data for property');
+		photoArray.push(binaryField);
+	}
+
+	if (photoArray.length > 0) {
+		prep.formData['photos[]'] = photoArray;
+	}
+
+	await applyUploadPlatformOptions(ctx, 'uploadPhotos', prep);
+
+	return {
+		endpoint: '/upload_photos',
+		method: 'POST',
+		formData: prep.formData,
+		isUploadOperation: true,
+		waitForCompletion: prep.waitForCompletion,
+		pollInterval: prep.pollInterval,
+		pollTimeout: prep.pollTimeout,
+	};
+};
+
+const buildUploadVideoRequest = async (
+	ctx: ExecutionContext,
+): Promise<RequestConfig> => {
+	const prep = prepareUploadBase(ctx, 'uploadVideo');
+	const videoInput = ctx.node.getNodeParameter('video', ctx.itemIndex, '') as string;
+
+	if (videoInput) {
+		if (videoInput.toLowerCase().startsWith('http://') || videoInput.toLowerCase().startsWith('https://')) {
+			prep.formData.video = videoInput;
+		} else {
+			const binaryField = await getBinaryFieldFromItem(ctx, videoInput, 'Binary data for video property');
+			prep.formData.video = binaryField;
+		}
+	}
+
+	await applyUploadPlatformOptions(ctx, 'uploadVideo', prep);
+
+	return {
+		endpoint: '/upload',
+		method: 'POST',
+		formData: prep.formData,
+		isUploadOperation: true,
+		waitForCompletion: prep.waitForCompletion,
+		pollInterval: prep.pollInterval,
+		pollTimeout: prep.pollTimeout,
+	};
+};
+
+const buildUploadTextRequest = async (
+	ctx: ExecutionContext,
+): Promise<RequestConfig> => {
+	const prep = prepareUploadBase(ctx, 'uploadText');
+
+	await applyUploadPlatformOptions(ctx, 'uploadText', prep);
+
+	return {
+		endpoint: '/upload_text',
+		method: 'POST',
+		formData: prep.formData,
+		isUploadOperation: true,
+		waitForCompletion: prep.waitForCompletion,
+		pollInterval: prep.pollInterval,
+		pollTimeout: prep.pollTimeout,
+	};
+};
+
+const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
+	switch (ctx.operation) {
+		case 'getStatus': {
+			const requestId = ctx.node.getNodeParameter('requestId', ctx.itemIndex) as string;
+			return {
+				endpoint: '/uploadposts/status',
+				method: 'GET',
+				qs: { request_id: requestId },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getHistory': {
+			const page = ctx.node.getNodeParameter('historyPage', ctx.itemIndex, 1) as number;
+			const limit = ctx.node.getNodeParameter('historyLimit', ctx.itemIndex, 20) as number;
+			return {
+				endpoint: '/uploadposts/history',
+				method: 'GET',
+				qs: { page, limit },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getAnalytics': {
+			const profileUsername = ctx.node.getNodeParameter('analyticsProfileUsername', ctx.itemIndex) as string;
+			const analyticsPlatforms = ctx.node.getNodeParameter('analyticsPlatforms', ctx.itemIndex, []) as string[];
+			const qs: IDataObject = {};
+			if (Array.isArray(analyticsPlatforms) && analyticsPlatforms.length > 0) {
+				qs.platforms = analyticsPlatforms.join(',');
+			}
+			return {
+				endpoint: `/analytics/${encodeURIComponent(profileUsername)}`,
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'listScheduled': {
+			return {
+				endpoint: '/uploadposts/schedule',
+				method: 'GET',
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'cancelScheduled': {
+			const jobId = ctx.node.getNodeParameter('scheduleJobId', ctx.itemIndex) as string;
+			return {
+				endpoint: `/uploadposts/schedule/${jobId}`,
+				method: 'DELETE',
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'editScheduled': {
+			const jobId = ctx.node.getNodeParameter('scheduleJobId', ctx.itemIndex) as string;
+			const newScheduledDateRaw = ctx.node.getNodeParameter('newScheduledDate', ctx.itemIndex, '') as string;
+			const normalizedDate = normalizeDateInput(newScheduledDateRaw);
+			const body: IDataObject = {};
+			if (normalizedDate) {
+				body.scheduled_date = normalizedDate;
+			}
+			return {
+				endpoint: `/uploadposts/schedule/${jobId}`,
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		default:
+			throw new NodeOperationError(ctx.node.getNode(), `Unsupported monitoring operation: ${ctx.operation}`, {
+				itemIndex: ctx.itemIndex,
+			});
+	}
+};
+
+const buildUserRequest = (ctx: ExecutionContext): RequestConfig => {
+	switch (ctx.operation) {
+		case 'listUsers':
+			return {
+				endpoint: '/uploadposts/users',
+				method: 'GET',
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		case 'createUser': {
+			const username = ctx.node.getNodeParameter('newUser', ctx.itemIndex) as string;
+			return {
+				endpoint: '/uploadposts/users',
+				method: 'POST',
+				body: { username },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'deleteUser': {
+			const username = ctx.node.getNodeParameter('deleteUserId', ctx.itemIndex) as string;
+			return {
+				endpoint: '/uploadposts/users',
+				method: 'DELETE',
+				body: { username },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'generateJwt': {
+			const username = getUserForOperation(ctx, true);
+			const redirectUrl = ctx.node.getNodeParameter('redirectUrl', ctx.itemIndex, '') as string;
+			const logoImage = ctx.node.getNodeParameter('logoImage', ctx.itemIndex, '') as string;
+			const redirectButtonText = ctx.node.getNodeParameter('redirectButtonText', ctx.itemIndex, '') as string;
+			const platforms = ctx.node.getNodeParameter('jwtPlatforms', ctx.itemIndex, []) as string[];
+			const body: IDataObject = { username };
+			if (redirectUrl) body.redirect_url = redirectUrl;
+			if (logoImage) body.logo_image = logoImage;
+			if (redirectButtonText) body.redirect_button_text = redirectButtonText;
+			if (Array.isArray(platforms) && platforms.length > 0) body.platforms = platforms;
+			return {
+				endpoint: '/uploadposts/users/generate-jwt',
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'validateJwt': {
+			const jwt = ctx.node.getNodeParameter('jwtToken', ctx.itemIndex) as string;
+			return {
+				endpoint: '/uploadposts/users/validate-jwt',
+				method: 'POST',
+				body: { jwt },
+				headers: { Authorization: `Bearer ${jwt}` },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		default:
+			throw new NodeOperationError(ctx.node.getNode(), `Unsupported user operation: ${ctx.operation}`, {
+				itemIndex: ctx.itemIndex,
+			});
+	}
+};
+
+const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig> => {
+	if (ctx.operation === 'uploadPhotos') {
+		return buildUploadPhotosRequest(ctx);
+	}
+	if (ctx.operation === 'uploadVideo') {
+		return buildUploadVideoRequest(ctx);
+	}
+	if (ctx.operation === 'uploadText') {
+		return buildUploadTextRequest(ctx);
+	}
+
+	const resource = ctx.node.getNodeParameter('resource', ctx.itemIndex) as string;
+	if (resource === 'monitoring') {
+		return buildMonitoringRequest(ctx);
+	}
+	if (resource === 'users') {
+		return buildUserRequest(ctx);
+	}
+
+	throw new NodeOperationError(ctx.node.getNode(), `Unsupported operation: ${ctx.operation}`, {
+		itemIndex: ctx.itemIndex,
+	});
+};
+
+const pollUploadStatus = async (
+	node: IExecuteFunctions,
+	requestId: string,
+	pollInterval: number,
+	pollTimeout: number,
+): Promise<any> => {
+	const start = Date.now();
+	let finalData: any = { success: false, message: 'Polling timed out', request_id: requestId };
+	while (true) {
+		await sleep(Math.max(1, pollInterval) * 1000);
+		if (Date.now() - start > Math.max(5, pollTimeout) * 1000) {
+			break;
+		}
+		const statusOptions: IHttpRequestOptions = {
+			url: `${API_BASE_URL}/uploadposts/status`,
+			method: 'GET',
+			qs: { request_id: requestId },
+			json: true,
+		};
+		const statusData = await node.helpers.httpRequestWithAuthentication.call(node, 'uploadPostApi', statusOptions);
+		finalData = statusData;
+		const statusValue = (statusData && (statusData as any).status) as string | undefined;
+		if (
+			(statusData && (statusData as any).success === true) ||
+			(statusValue && ['success', 'completed', 'failed', 'error'].includes(statusValue.toLowerCase()))
+		) {
+			break;
+		}
+	}
+	return finalData;
+};
+
 export class UploadPost implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Upload Post',
@@ -1767,737 +2622,74 @@ export class UploadPost implements INodeType {
 		},
 	};
 
+
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
 
-		for (let i = 0; i < items.length; i++) {
-			const operation = this.getNodeParameter('operation', i) as string;
-			const isUploadOperation = ['uploadPhotos', 'uploadVideo', 'uploadText'].includes(operation);
-			const needsUser = isUploadOperation || operation === 'generateJwt';
-			const userSelection = needsUser ? (this.getNodeParameter('user', i) as string) : '';
-			const userManualValue = needsUser && userSelection === MANUAL_USER_VALUE
-				? (this.getNodeParameter('userManual', i) as string)
-				: '';
-			const user = needsUser
-				? (userSelection === MANUAL_USER_VALUE ? userManualValue : userSelection)
-				: '';
-			let platforms = isUploadOperation ? (this.getNodeParameter('platform', i) as string[]) : [];
-			const title = isUploadOperation ? (this.getNodeParameter('title', i) as string) : '';
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+			const operation = this.getNodeParameter('operation', itemIndex) as string;
+			const ctx: ExecutionContext = {
+				node: this,
+				items,
+				itemIndex,
+				operation,
+			};
 
-			let endpoint = '';
-			let method: 'GET' | 'POST' | 'DELETE' = 'POST';
-			const formData: IDataObject = {};
-			const qs: IDataObject = {};
-			const body: IDataObject = {};
-
-			if (isUploadOperation) {
-				formData.user = user;
-				formData.title = title;
-
-				// Optional scheduling
-				const scheduledDate = this.getNodeParameter('scheduledDate', i) as string | undefined;
-				if (scheduledDate) {
-					let normalizedDate = scheduledDate;
-					// If the date string has no timezone info (no trailing Z and no +/- offset), append Z (UTC)
-					const hasTimezone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(normalizedDate);
-					if (!hasTimezone) {
-						normalizedDate = `${normalizedDate}Z`;
-					}
-					formData.scheduled_date = normalizedDate;
-				}
-
-				// Async processing toggle
-				const uploadAsync = this.getNodeParameter('uploadAsync', i) as boolean | undefined;
-				if (uploadAsync !== undefined) {
-					formData.async_upload = String(uploadAsync);
-				}
-			}
-
-			// Apply platform-specific title overrides when provided
-			if (isUploadOperation) {
-				try {
-					if (platforms.includes('instagram')) {
-						const instagramTitle = this.getNodeParameter('instagramTitle', i, '') as string;
-						if (instagramTitle) (formData as any).instagram_title = instagramTitle;
-					}
-				} catch {}
-				try {
-					if (platforms.includes('facebook')) {
-						const facebookTitle = this.getNodeParameter('facebookTitle', i, '') as string;
-						if (facebookTitle) (formData as any).facebook_title = facebookTitle;
-					}
-				} catch {}
-				try {
-					if (platforms.includes('tiktok')) {
-						const tiktokTitle = this.getNodeParameter('tiktokTitle', i, '') as string;
-						if (tiktokTitle) (formData as any).tiktok_title = tiktokTitle;
-					}
-				} catch {}
-				try {
-					if (platforms.includes('linkedin')) {
-						const linkedinTitle = this.getNodeParameter('linkedinTitle', i, '') as string;
-						if (linkedinTitle) (formData as any).linkedin_title = linkedinTitle;
-					}
-				} catch {}
-				try {
-					if (platforms.includes('x')) {
-						const xTitle = this.getNodeParameter('xTitle', i, '') as string;
-						if (xTitle) (formData as any).x_title = xTitle;
-					}
-				} catch {}
-				try {
-					if (platforms.includes('youtube')) {
-						const youtubeTitle = this.getNodeParameter('youtubeTitle', i, '') as string;
-						if (youtubeTitle) (formData as any).youtube_title = youtubeTitle;
-					}
-				} catch {}
-				try {
-					if (platforms.includes('pinterest')) {
-						const pinterestTitle = this.getNodeParameter('pinterestTitle', i, '') as string;
-						if (pinterestTitle) (formData as any).pinterest_title = pinterestTitle;
-					}
-				} catch {}
-			}
-
-		// Apply generic description and platform-specific description overrides
-			if (isUploadOperation) {
-				const genericDescription = this.getNodeParameter('description', i, '') as string;
-				const descriptionPlatforms = new Set(['linkedin', 'facebook', 'youtube', 'pinterest', 'tiktok']);
-				if (genericDescription && platforms.some(p => descriptionPlatforms.has(p))) {
-					(formData as any).description = genericDescription;
-				}
-				try {
-					if (platforms.includes('linkedin')) {
-						const linkedinDescription = this.getNodeParameter('linkedinDescription', i, '') as string;
-						if (linkedinDescription) (formData as any).linkedin_description = linkedinDescription;
-					}
-				} catch {}
-				try {
-					if (platforms.includes('youtube')) {
-						const youtubeDescription = this.getNodeParameter('youtubeDescription', i, '') as string;
-						if (youtubeDescription) (formData as any).youtube_description = youtubeDescription;
-					}
-				} catch {}
-				try {
-					if (platforms.includes('facebook')) {
-						const facebookDescription = this.getNodeParameter('facebookDescription', i, '') as string;
-						if (facebookDescription) (formData as any).facebook_description = facebookDescription;
-					}
-				} catch {}
-				try {
-					if (platforms.includes('tiktok')) {
-						const tiktokDescription = this.getNodeParameter('tiktokDescription', i, '') as string;
-						if (tiktokDescription) (formData as any).tiktok_description = tiktokDescription;
-					}
-				} catch {}
-				try {
-					if (platforms.includes('pinterest')) {
-						const pinterestDescription = this.getNodeParameter('pinterestDescription', i, '') as string;
-						if (pinterestDescription) (formData as any).pinterest_description = pinterestDescription;
-					}
-				} catch {}
-			}
-
-			switch (operation) {
-				case 'uploadPhotos':
-					endpoint = '/upload_photos';
-					// caption removed in favor of description
-
-					// Handle 'photos' parameter which can be string or string[]
-					let photosInput = this.getNodeParameter('photos', i, []) as string | string[];
-					let photosToProcess: string[];
-
-					if (typeof photosInput === 'string') {
-						// If it's a string, split by comma for multiple items, trim, and filter empty.
-						// This handles cases like "url1,url2" or "{{$binary.data1}},{{$binary.data2}}"
-						// or a single item like "url1" or "{{$binary.data1}}".
-						photosToProcess = photosInput.split(',').map(item => item.trim()).filter(item => item !== '');
-					} else {
-						// It's already string[] (from "Add Field" or if the parameter somehow became an array),
-						// filter out any non-string or empty string items.
-						photosToProcess = photosInput.filter(item => typeof item === 'string' && item.trim() !== '');
-					}
-
-					const allowedPhotoPlatforms = ['tiktok', 'instagram', 'linkedin', 'facebook', 'x', 'threads', 'pinterest'];
-					platforms = platforms.filter(p => allowedPhotoPlatforms.includes(p));
-					formData['platform[]'] = platforms;
-
-					if (photosToProcess.length > 0) {
-						const photoArray: Array<string | { value: Buffer; options: { filename: string; contentType?: string } }> = [];
-						for (const photoItem of photosToProcess) {
-							// Ensure photoItem is a non-empty string before processing
-							if (typeof photoItem === 'string' && photoItem) {
-								if (photoItem.toLowerCase().startsWith('http://') || photoItem.toLowerCase().startsWith('https://')) {
-									// It's a URL
-									photoArray.push(photoItem);
-								} else {
-									// Assume it's a binary property name
-									const binaryPropertyName = photoItem;
-									try {
-										const binaryBuffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
-										const binaryFileDetails = items[i].binary![binaryPropertyName];
-										photoArray.push({
-											value: binaryBuffer,
-											options: {
-												filename: binaryFileDetails.fileName ?? binaryPropertyName,
-												contentType: binaryFileDetails.mimeType,
-											},
-										});
-									} catch (error) {
-										const errorMessage = error instanceof Error ? error.message : '';
-										const details = errorMessage ? ` (${errorMessage})` : '';
-										throw new NodeOperationError(this.getNode(), `Binary data for property '${binaryPropertyName}' was not found in item ${i}.${details}`, {
-											itemIndex: i,
-										});
-									}
-								}
-							}
-						}
-						// Only add 'photos[]' to formData if there are items in photoArray
-						if (photoArray.length > 0) {
-							formData['photos[]'] = photoArray;
-						}
-					}
-					// description handled above; no caption
-					break;
-				case 'uploadVideo':
-					endpoint = '/upload';
-					const videoInput = this.getNodeParameter('video', i) as string;
-					// caption removed in favor of description
-					
-					const allowedVideoPlatforms = ['tiktok', 'instagram', 'linkedin', 'youtube', 'facebook', 'x', 'threads', 'pinterest'];
-					platforms = platforms.filter(p => allowedVideoPlatforms.includes(p));
-					formData['platform[]'] = platforms;
-
-					// description handled above; no caption
-
-					if (videoInput) {
-						if (videoInput.toLowerCase().startsWith('http://') || videoInput.toLowerCase().startsWith('https://')) {
-							// It's a URL
-							formData.video = videoInput;
-						} else {
-							// Assume it's a binary property name
-							const binaryPropertyName = videoInput;
-							try {
-								const binaryBuffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
-								const binaryFileDetails = items[i].binary![binaryPropertyName];
-								formData.video = {
-									value: binaryBuffer,
-									options: {
-										filename: binaryFileDetails.fileName ?? binaryPropertyName,
-										contentType: binaryFileDetails.mimeType,
-									},
-								};
-							} catch (error) {
-								const errorMessage = error instanceof Error ? error.message : '';
-								const details = errorMessage ? ` (${errorMessage})` : '';
-								throw new NodeOperationError(this.getNode(), `Binary data for video property '${binaryPropertyName}' was not found in item ${i}.${details}`, {
-									itemIndex: i,
-								});
-							}
-						}
-					}
-					break;
-				case 'uploadText':
-					endpoint = '/upload_text';
-					const allowedTextPlatforms = ['x', 'linkedin', 'facebook', 'threads', 'reddit'];
-					platforms = platforms.filter(p => allowedTextPlatforms.includes(p));
-					formData['platform[]'] = platforms;
-					break;
-				case 'getStatus':
-					method = 'GET';
-					endpoint = '/uploadposts/status';
-					qs.request_id = this.getNodeParameter('requestId', i) as string;
-					break;
-				case 'getHistory':
-					method = 'GET';
-					endpoint = '/uploadposts/history';
-					const historyPage = this.getNodeParameter('historyPage', i) as number | undefined;
-					qs.page = historyPage ?? 1;
-					const historyLimit = this.getNodeParameter('historyLimit', i) as number | undefined;
-					qs.limit = historyLimit ?? 20;
-					break;
-				case 'getAnalytics':
-					method = 'GET';
-					{
-						const analyticsPlatforms = this.getNodeParameter('analyticsPlatforms', i, []) as string[];
-						const profileUsername = this.getNodeParameter('analyticsProfileUsername', i) as string;
-						endpoint = `/analytics/${encodeURIComponent(profileUsername)}`;
-						if (Array.isArray(analyticsPlatforms) && analyticsPlatforms.length > 0) {
-							(qs as any).platforms = analyticsPlatforms.join(',');
-						}
-					}
-					break;
-				case 'listScheduled':
-					method = 'GET';
-					endpoint = '/uploadposts/schedule';
-					break;
-				case 'cancelScheduled':
-					method = 'DELETE';
-					{
-						const jobId = this.getNodeParameter('scheduleJobId', i) as string;
-						endpoint = `/uploadposts/schedule/${jobId}`;
-					}
-					break;
-				case 'editScheduled':
-					method = 'POST';
-					{
-						const jobId = this.getNodeParameter('scheduleJobId', i) as string;
-						endpoint = `/uploadposts/schedule/${jobId}`;
-						const newScheduledDate = this.getNodeParameter('newScheduledDate', i, '') as string;
-						if (newScheduledDate) {
-							let normalizedDate = newScheduledDate;
-							const hasTimezone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(normalizedDate);
-							if (!hasTimezone) normalizedDate = `${normalizedDate}Z`;
-							(body as any).scheduled_date = normalizedDate;
-						}
-					}
-					break;
-
-				case 'listUsers':
-					method = 'GET';
-					endpoint = '/uploadposts/users';
-					break;
-				case 'createUser':
-					method = 'POST';
-					endpoint = '/uploadposts/users';
-					body.username = this.getNodeParameter('newUser', i) as string;
-					break;
-				case 'deleteUser':
-					method = 'DELETE';
-					endpoint = '/uploadposts/users';
-					body.username = this.getNodeParameter('deleteUserId', i) as string;
-					break;
-				case 'generateJwt':
-					method = 'POST';
-					endpoint = '/uploadposts/users/generate-jwt';
-					body.username = user;
-					const redirectUrl = this.getNodeParameter('redirectUrl', i, '') as string;
-					const logoImage = this.getNodeParameter('logoImage', i, '') as string;
-					const redirectButtonText = this.getNodeParameter('redirectButtonText', i, '') as string;
-					const jwtPlatforms = this.getNodeParameter('jwtPlatforms', i, []) as string[];
-					if (redirectUrl) body.redirect_url = redirectUrl;
-					if (logoImage) body.logo_image = logoImage;
-					if (redirectButtonText) body.redirect_button_text = redirectButtonText;
-					if (Array.isArray(jwtPlatforms) && jwtPlatforms.length > 0) body.platforms = jwtPlatforms;
-					break;
-				case 'validateJwt':
-					method = 'POST';
-					endpoint = '/uploadposts/users/validate-jwt';
-					body.jwt = this.getNodeParameter('jwtToken', i) as string;
-					break;
-			}
-			// Pinterest specific (only when uploading)
-			if (isUploadOperation && platforms.includes('pinterest')) {
-				const pinterestSelection = this.getNodeParameter('pinterestBoardId', i) as string | undefined;
-				const pinterestManual = pinterestSelection === MANUAL_PINTEREST_VALUE
-					? (this.getNodeParameter('pinterestBoardIdManual', i) as string)
-					: '';
-				const pinterestBoardId = pinterestSelection === MANUAL_PINTEREST_VALUE ? pinterestManual : pinterestSelection;
-				if (pinterestBoardId) formData.pinterest_board_id = pinterestBoardId;
-					const pinterestLink = this.getNodeParameter('pinterestLink', i) as string | undefined;
-					if (pinterestLink) formData.pinterest_link = pinterestLink;
-					if (operation === 'uploadVideo') {
-						const pinterestCoverImageUrl = this.getNodeParameter('pinterestCoverImageUrl', i) as string | undefined;
-						const pinterestCoverImageContentType = this.getNodeParameter('pinterestCoverImageContentType', i) as string | undefined;
-						const pinterestCoverImageData = this.getNodeParameter('pinterestCoverImageData', i) as string | undefined;
-						const pinterestCoverImageKeyFrameTime = this.getNodeParameter('pinterestCoverImageKeyFrameTime', i) as number | undefined;
-						const pinterestLink = this.getNodeParameter('pinterestLink', i) as string | undefined;
-
-						if (pinterestCoverImageUrl) {
-							formData.pinterest_cover_image_url = pinterestCoverImageUrl;
-						} else {
-							if (pinterestCoverImageContentType && pinterestCoverImageData) {
-								formData.pinterest_cover_image_content_type = pinterestCoverImageContentType;
-								formData.pinterest_cover_image_data = pinterestCoverImageData;
-							} else if (pinterestCoverImageKeyFrameTime !== undefined) {
-								formData.pinterest_cover_image_key_frame_time = pinterestCoverImageKeyFrameTime;
-							}
-						}
-						if (pinterestLink) formData.pinterest_link = pinterestLink;
-					}
-			}
-
-			// Add platform specifics only for uploads
-			if (isUploadOperation && platforms.includes('linkedin')) {
-				const targetLinkedinSelection = this.getNodeParameter('targetLinkedinPageId', i) as string | undefined;
-				const targetLinkedinManual = targetLinkedinSelection === MANUAL_LINKEDIN_VALUE
-					? (this.getNodeParameter('targetLinkedinPageIdManual', i) as string)
-					: '';
-				const targetLinkedinPageId = targetLinkedinSelection === MANUAL_LINKEDIN_VALUE ? targetLinkedinManual : targetLinkedinSelection;
-				if (targetLinkedinPageId && targetLinkedinPageId !== 'me') {
-					// Extract only the numeric ID from a URN like "urn:li:organization:108870530"
-					const match = targetLinkedinPageId.match(/(\d+)$/);
-					if (match) {
-						formData.target_linkedin_page_id = match[1];
-					} else {
-						formData.target_linkedin_page_id = targetLinkedinPageId; // fallback, in case it's already just the ID
-					}
-				}
-				if (operation === 'uploadPhotos') {
-					const linkedinVisibility = this.getNodeParameter('linkedinVisibility', i) as string;
-					if (linkedinVisibility === 'PUBLIC') {
-						formData.visibility = 'PUBLIC';
-					}
-				} else if (operation === 'uploadVideo') {
-					const linkedinVisibility = this.getNodeParameter('linkedinVisibility', i) as string;
-					formData.visibility = linkedinVisibility;
-					// description handled by generic/override block above
-				}
-			}
-
-			if (isUploadOperation && platforms.includes('facebook')) {
-				const facebookPageSelection = this.getNodeParameter('facebookPageId', i) as string;
-				const facebookPageManual = facebookPageSelection === MANUAL_FACEBOOK_VALUE
-					? (this.getNodeParameter('facebookPageIdManual', i) as string)
-					: '';
-				const facebookPageId = facebookPageSelection === MANUAL_FACEBOOK_VALUE ? facebookPageManual : facebookPageSelection;
-				formData.facebook_page_id = facebookPageId;
-				if (operation === 'uploadVideo') {
-					const facebookVideoState = this.getNodeParameter('facebookVideoState', i) as string | undefined;
-					if (facebookVideoState) formData.video_state = facebookVideoState;
-						// Facebook media type (REELS or STORIES)
-						try {
-							const facebookMediaType = this.getNodeParameter('facebookMediaType', i) as string | undefined;
-							if (facebookMediaType) formData.facebook_media_type = facebookMediaType;
-						} catch {}
-				} else if (operation === 'uploadText') {
-					const facebookLink = this.getNodeParameter('facebookLink', i) as string | undefined;
-					if (facebookLink) formData.facebook_link_url = facebookLink;
-				}
-			}
-
-			if (isUploadOperation && platforms.includes('tiktok')) {
-				if (operation === 'uploadPhotos') {
-					const tiktokAutoAddMusic = this.getNodeParameter('tiktokAutoAddMusic', i) as boolean | undefined;
-					const tiktokDisableComment = this.getNodeParameter('tiktokDisableComment', i) as boolean | undefined;
-					const brandContentToggle = this.getNodeParameter('brand_content_toggle', i) as boolean | undefined;
-					const brandOrganicToggle = this.getNodeParameter('brand_organic_toggle', i) as boolean | undefined;
-					const tiktokPhotoCoverIndex = this.getNodeParameter('tiktokPhotoCoverIndex', i) as number | undefined;
-					const tiktokPhotoDescription = this.getNodeParameter('tiktokPhotoDescription', i) as string | undefined;
-
-					if (tiktokAutoAddMusic !== undefined) formData.auto_add_music = String(tiktokAutoAddMusic);
-					if (tiktokDisableComment !== undefined) formData.disable_comment = String(tiktokDisableComment);
-					if (brandContentToggle !== undefined) formData.brand_content_toggle = String(brandContentToggle);
-					if (brandOrganicToggle !== undefined) formData.brand_organic_toggle = String(brandOrganicToggle);
-					if (tiktokPhotoCoverIndex !== undefined) formData.photo_cover_index = tiktokPhotoCoverIndex;
-						if (tiktokPhotoDescription && (formData as any).description === undefined) (formData as any).description = tiktokPhotoDescription;
-					
-				} else if (operation === 'uploadVideo') {
-					const tiktokPrivacyLevel = this.getNodeParameter('tiktokPrivacyLevel', i) as string | undefined;
-					const tiktokDisableDuet = this.getNodeParameter('tiktokDisableDuet', i) as boolean | undefined;
-					const tiktokDisableComment = this.getNodeParameter('tiktokDisableComment', i) as boolean | undefined;
-					const tiktokDisableStitch = this.getNodeParameter('tiktokDisableStitch', i) as boolean | undefined;
-					const tiktokCoverTimestamp = this.getNodeParameter('tiktokCoverTimestamp', i) as number | undefined;
-					const brandContentToggle = this.getNodeParameter('brand_content_toggle', i) as boolean | undefined;
-					const brandOrganicToggle = this.getNodeParameter('brand_organic_toggle', i) as boolean | undefined;
-					const tiktokIsAigc = this.getNodeParameter('tiktokIsAigc', i) as boolean | undefined;
-					const tiktokPostMode = this.getNodeParameter('tiktokPostMode', i) as string | undefined;
-
-					if (tiktokPrivacyLevel) formData.privacy_level = tiktokPrivacyLevel;
-					if (tiktokDisableDuet !== undefined) formData.disable_duet = String(tiktokDisableDuet);
-					if (tiktokDisableComment !== undefined) formData.disable_comment = String(tiktokDisableComment);
-					if (tiktokDisableStitch !== undefined) formData.disable_stitch = String(tiktokDisableStitch);
-					if (tiktokCoverTimestamp !== undefined) formData.cover_timestamp = tiktokCoverTimestamp;
-					if (brandContentToggle !== undefined) formData.brand_content_toggle = String(brandContentToggle);
-					if (brandOrganicToggle !== undefined) formData.brand_organic_toggle = String(brandOrganicToggle);
-					if (tiktokIsAigc !== undefined) formData.is_aigc = String(tiktokIsAigc);
-					if (tiktokPostMode) formData.post_mode = tiktokPostMode;
-				}
-			}
-
-			if (isUploadOperation && platforms.includes('instagram')) {
-				const instagramMediaTypeInput = this.getNodeParameter('instagramMediaType', i) as string | undefined;
-				let finalInstagramMediaType = instagramMediaTypeInput;
-
-				if (operation === 'uploadPhotos') {
-					if (!instagramMediaTypeInput || !['IMAGE', 'STORIES'].includes(instagramMediaTypeInput) ) {
-						finalInstagramMediaType = 'IMAGE';
-					}
-				} else if (operation === 'uploadVideo') {
-					if (!instagramMediaTypeInput || !['REELS', 'STORIES'].includes(instagramMediaTypeInput)) {
-						finalInstagramMediaType = 'REELS';
-					}
-				}
-				if (finalInstagramMediaType) formData.media_type = finalInstagramMediaType;
-				
-				if (operation === 'uploadVideo') {
-					const instagramShareToFeed = this.getNodeParameter('instagramShareToFeed', i) as boolean | undefined;
-					const instagramCollaborators = this.getNodeParameter('instagramCollaborators', i) as string | undefined;
-					const instagramCoverUrl = this.getNodeParameter('instagramCoverUrl', i) as string | undefined;
-					const instagramAudioName = this.getNodeParameter('instagramAudioName', i) as string | undefined;
-					const instagramUserTags = this.getNodeParameter('instagramUserTags', i) as string | undefined;
-					const instagramLocationId = this.getNodeParameter('instagramLocationId', i) as string | undefined;
-					const instagramThumbOffset = this.getNodeParameter('instagramThumbOffset', i) as string | undefined;
-
-					if (instagramShareToFeed !== undefined) formData.share_to_feed = String(instagramShareToFeed);
-					if (instagramCollaborators) formData.collaborators = instagramCollaborators;
-					if (instagramCoverUrl) formData.cover_url = instagramCoverUrl;
-					if (instagramAudioName) formData.audio_name = instagramAudioName;
-					if (instagramUserTags) formData.user_tags = instagramUserTags;
-					if (instagramLocationId) formData.location_id = instagramLocationId;
-					if (instagramThumbOffset) formData.thumb_offset = instagramThumbOffset;
-				}
-			}
-
-			if (isUploadOperation && platforms.includes('youtube') && operation === 'uploadVideo') {
-				const youtubeTagsRaw = this.getNodeParameter('youtubeTags', i) as string | undefined;
-				const youtubeCategoryId = this.getNodeParameter('youtubeCategoryId', i) as string | undefined;
-				const youtubePrivacyStatus = this.getNodeParameter('youtubePrivacyStatus', i) as string | undefined;
-				const youtubeEmbeddable = this.getNodeParameter('youtubeEmbeddable', i) as boolean | undefined;
-				const youtubeLicense = this.getNodeParameter('youtubeLicense', i) as string | undefined;
-				const youtubePublicStatsViewable = this.getNodeParameter('youtubePublicStatsViewable', i) as boolean | undefined;
-				const youtubeMadeForKids = this.getNodeParameter('youtubeMadeForKids', i) as boolean | undefined;
-				const youtubeThumbnail = this.getNodeParameter('youtubeThumbnail', i) as string | undefined;
-
-				if (youtubeTagsRaw) formData['tags[]'] = youtubeTagsRaw.split(',').map(tag => tag.trim());
-				if (youtubeCategoryId) formData.categoryId = youtubeCategoryId;
-				if (youtubePrivacyStatus) formData.privacyStatus = youtubePrivacyStatus;
-				if (youtubeEmbeddable !== undefined) formData.embeddable = String(youtubeEmbeddable);
-				if (youtubeLicense) formData.license = youtubeLicense;
-				if (youtubePublicStatsViewable !== undefined) formData.publicStatsViewable = String(youtubePublicStatsViewable);
-				if (youtubeMadeForKids !== undefined) formData.madeForKids = String(youtubeMadeForKids);
-
-				if (youtubeThumbnail) {
-					if (youtubeThumbnail.toLowerCase().startsWith('http://') || youtubeThumbnail.toLowerCase().startsWith('https://')) {
-						formData.thumbnail_url = youtubeThumbnail;
-					} else {
-						const binaryPropertyName = youtubeThumbnail;
-						try {
-							const binaryBuffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
-							const binaryFileDetails = items[i].binary![binaryPropertyName];
-							formData.thumbnail = {
-								value: binaryBuffer,
-								options: {
-									filename: binaryFileDetails.fileName ?? binaryPropertyName,
-									contentType: binaryFileDetails.mimeType,
-								},
-							};
-						} catch (error) {
-							const errorMessage = error instanceof Error ? error.message : '';
-							const details = errorMessage ? ` (${errorMessage})` : '';
-							throw new NodeOperationError(this.getNode(), `Binary data for YouTube thumbnail property '${binaryPropertyName}' was not found in item ${i}.${details}`, {
-								itemIndex: i,
-							});
-						}
-					}
-				}
-
-				const youtubeSelfDeclaredMadeForKids = this.getNodeParameter('youtubeSelfDeclaredMadeForKids', i) as boolean | undefined;
-				const youtubeContainsSyntheticMedia = this.getNodeParameter('youtubeContainsSyntheticMedia', i) as boolean | undefined;
-				const youtubeDefaultLanguage = this.getNodeParameter('youtubeDefaultLanguage', i) as string | undefined;
-				const youtubeDefaultAudioLanguage = this.getNodeParameter('youtubeDefaultAudioLanguage', i) as string | undefined;
-				const youtubeAllowedCountries = this.getNodeParameter('youtubeAllowedCountries', i) as string | undefined;
-				const youtubeBlockedCountries = this.getNodeParameter('youtubeBlockedCountries', i) as string | undefined;
-				const youtubeHasPaidProductPlacement = this.getNodeParameter('youtubeHasPaidProductPlacement', i) as boolean | undefined;
-				const youtubeRecordingDate = this.getNodeParameter('youtubeRecordingDate', i) as string | undefined;
-
-				if (youtubeSelfDeclaredMadeForKids !== undefined) formData.selfDeclaredMadeForKids = String(youtubeSelfDeclaredMadeForKids);
-				if (youtubeContainsSyntheticMedia !== undefined) formData.containsSyntheticMedia = String(youtubeContainsSyntheticMedia);
-				if (youtubeDefaultLanguage) formData.defaultLanguage = youtubeDefaultLanguage;
-				if (youtubeDefaultAudioLanguage) formData.defaultAudioLanguage = youtubeDefaultAudioLanguage;
-				if (youtubeAllowedCountries) formData.allowedCountries = youtubeAllowedCountries;
-				if (youtubeBlockedCountries) formData.blockedCountries = youtubeBlockedCountries;
-				if (youtubeHasPaidProductPlacement !== undefined) formData.hasPaidProductPlacement = String(youtubeHasPaidProductPlacement);
-				if (youtubeRecordingDate) formData.recordingDate = youtubeRecordingDate;
-			}
-
-				// Threads description handled via override block
-
-			if (isUploadOperation && platforms.includes('x')) {
-				// Common X parameters for all operations
-				const xQuoteTweetId = this.getNodeParameter('xQuoteTweetId', i, '') as string;
-				const xGeoPlaceId = this.getNodeParameter('xGeoPlaceId', i, '') as string;
-				const xForSuperFollowersOnly = this.getNodeParameter('xForSuperFollowersOnly', i, false) as boolean;
-				const xCommunityId = this.getNodeParameter('xCommunityId', i, '') as string;
-				const xShareWithFollowers = this.getNodeParameter('xShareWithFollowers', i, false) as boolean;
-				const xDirectMessageDeepLink = this.getNodeParameter('xDirectMessageDeepLink', i, '') as string;
-				const xCardUri = this.getNodeParameter('xCardUri', i, '') as string;
-
-				if (xQuoteTweetId) formData.quote_tweet_id = xQuoteTweetId;
-				if (xGeoPlaceId) formData.geo_place_id = xGeoPlaceId;
-				if (xForSuperFollowersOnly) formData.for_super_followers_only = String(xForSuperFollowersOnly);
-				if (xCommunityId) formData.community_id = xCommunityId;
-				if (xShareWithFollowers) formData.share_with_followers = String(xShareWithFollowers);
-				if (xDirectMessageDeepLink) formData.direct_message_deep_link = xDirectMessageDeepLink;
-				if (xCardUri) formData.card_uri = xCardUri;
-
-				if (operation === 'uploadText') {
-					const xPostUrlText = this.getNodeParameter('xPostUrlText', i) as string | undefined;
-					if (xPostUrlText) formData.post_url = xPostUrlText;
-
-					const xReplySettingsText = this.getNodeParameter('xReplySettings', i) as string | undefined;
-					if (xReplySettingsText && xReplySettingsText !== 'everyone') formData.reply_settings = xReplySettingsText;
-
-					// Poll parameters (only for text)
-					const xPollDuration = this.getNodeParameter('xPollDuration', i, 1440) as number;
-					const xPollOptionsRaw = this.getNodeParameter('xPollOptions', i, '') as string;
-					const xPollReplySettings = this.getNodeParameter('xPollReplySettings', i, 'following') as string;
-
-					// Check for mutually exclusive fields
-					const xCardUri = this.getNodeParameter('xCardUri', i, '') as string;
-					const xQuoteTweetId = this.getNodeParameter('xQuoteTweetId', i, '') as string;
-					const xDirectMessageDeepLink = this.getNodeParameter('xDirectMessageDeepLink', i, '') as string;
-
-					const hasPollOptions = xPollOptionsRaw && xPollOptionsRaw.trim();
-					const hasCardUri = xCardUri && xCardUri.trim();
-					const hasQuoteTweetId = xQuoteTweetId && xQuoteTweetId.trim();
-					const hasDirectMessageDeepLink = xDirectMessageDeepLink && xDirectMessageDeepLink.trim();
-
-					// Validate mutually exclusive fields
-					if (hasPollOptions && (hasCardUri || hasQuoteTweetId || hasDirectMessageDeepLink)) {
-						const conflictingFields = [];
-						if (hasCardUri) conflictingFields.push('X Card URI');
-						if (hasQuoteTweetId) conflictingFields.push('X Quote Tweet ID');
-						if (hasDirectMessageDeepLink) conflictingFields.push('X Direct Message Deep Link');
-						throw new NodeOperationError(this.getNode(), `X Poll Options cannot be used with: ${conflictingFields.join(', ')}. These fields are mutually exclusive.`);
-					}
-
-					// Process poll options if provided
-					if (hasPollOptions) {
-						const pollOptions = xPollOptionsRaw.split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
-
-						// Validate poll options according to Upload-Post API requirements
-						if (pollOptions.length < 2 || pollOptions.length > 4) {
-							throw new NodeOperationError(this.getNode(), `X Poll Options must contain between 2 and 4 non-empty options. Found: ${pollOptions.length}`);
-						}
-
-						// Validate each option is max 25 characters
-						const invalidOptions = pollOptions.filter(opt => opt.length > 25);
-						if (invalidOptions.length > 0) {
-							throw new NodeOperationError(this.getNode(), `X Poll Options cannot exceed 25 characters each. Invalid options: ${invalidOptions.join(', ')}`);
-						}
-
-						// Validate poll duration (5 minutes to 7 days = 10080 minutes)
-						if (xPollDuration < 5 || xPollDuration > 10080) {
-							throw new NodeOperationError(this.getNode(), `X Poll Duration must be between 5 and 10080 minutes (5 minutes to 7 days). Provided: ${xPollDuration}`);
-						}
-
-						// Set poll parameters according to Upload-Post API
-						formData['poll_options[]'] = pollOptions;
-						formData.poll_duration = xPollDuration;
-						formData.poll_reply_settings = xPollReplySettings;
-					}
-
-					try {
-						const xLongTextAsPostText = this.getNodeParameter('xLongTextAsPost', i, false) as boolean;
-						if (xLongTextAsPostText) formData.x_long_text_as_post = String(xLongTextAsPostText);
-					} catch {}
-
-					delete formData.nullcast;
-					delete formData.place_id;
-				} else if (operation === 'uploadVideo' || operation === 'uploadPhotos') {
-					const xTaggedUserIds = this.getNodeParameter('xTaggedUserIds', i) as string | undefined;
-					const xReplySettings = this.getNodeParameter('xReplySettings', i) as string | undefined;
-					const xNullcastVideo = this.getNodeParameter('xNullcastVideo', i) as boolean | undefined;
-
-					if (xTaggedUserIds) formData['tagged_user_ids[]'] = xTaggedUserIds.split(',').map(id => id.trim());
-					if (xReplySettings && xReplySettings !== 'everyone') formData.reply_settings = xReplySettings;
-					if (xNullcastVideo !== undefined) formData.nullcast = String(xNullcastVideo);
-
-					if (operation === 'uploadVideo') {
-						try {
-							const xLongTextAsPost = this.getNodeParameter('xLongTextAsPost', i, false) as boolean;
-							if (xLongTextAsPost) formData.x_long_text_as_post = String(xLongTextAsPost);
-						} catch {}
-					}
-				}
-			}
-
-			if (isUploadOperation && platforms.includes('threads')) {
-				if (operation === 'uploadText') {
-					const threadsTitle = this.getNodeParameter('threadsTitle', i, '') as string;
-					if (threadsTitle) formData.threads_title = threadsTitle;
-
-					const threadsLongTextAsPost = this.getNodeParameter('threadsLongTextAsPost', i, false) as boolean;
-					if (threadsLongTextAsPost) formData.threads_long_text_as_post = String(threadsLongTextAsPost);
-				}
-			}
-
-			if (isUploadOperation && platforms.includes('reddit')) {
-				if (operation === 'uploadText') {
-					const redditSubreddit = this.getNodeParameter('redditSubreddit', i) as string;
-					formData.subreddit = redditSubreddit;
-
-					const redditFlairId = this.getNodeParameter('redditFlairId', i, '') as string;
-					if (redditFlairId) formData.flair_id = redditFlairId;
-				}
-			}
+			const config = await buildRequestConfig(ctx);
 
 			const requestOptions: IRequestOptions = {
-				url: `https://api.upload-post.com/api${endpoint}`,
-				method,
+				url: `${API_BASE_URL}${config.endpoint}`,
+				method: config.method,
 				json: true,
 			};
 
-			if (operation === 'validateJwt') {
-				const jwt = this.getNodeParameter('jwtToken', i) as string;
-				requestOptions.headers = { Authorization: `Bearer ${jwt}` };
+			if (config.headers) {
+				requestOptions.headers = config.headers;
 			}
 
-			if (method === 'POST') {
-				if (operation === 'uploadPhotos' || operation === 'uploadVideo' || operation === 'uploadText') {
-					requestOptions.formData = buildMultipartPayload(formData);
+			if (config.method === 'POST') {
+				if (config.formData) {
+					requestOptions.formData = buildMultipartPayload(config.formData);
 					delete requestOptions.json;
-				} else {
-					requestOptions.body = body;
+				} else if (config.body) {
+					requestOptions.body = config.body;
 					requestOptions.json = true;
 				}
-			} else if (method === 'GET' || method === 'DELETE') {
-				if (operation === 'deleteUser') {
-					requestOptions.body = body;
-					requestOptions.json = true;
+				if (config.qs) {
+					requestOptions.qs = config.qs;
+				}
 				} else {
-					requestOptions.qs = qs;
+				if (config.qs) {
+					requestOptions.qs = config.qs;
+				}
+				if (config.body && Object.keys(config.body).length > 0) {
+					requestOptions.body = config.body;
+					requestOptions.json = true;
 				}
 			}
-
-			// Log form data for debugging
-			this.logger.info(`Operation: ${operation}, Is Upload Operation: ${isUploadOperation}`);
-			//this.logger.info('Complete Form Data being sent (JSON): ' + JSON.stringify(formData, null, 2));
 
 			const rawResponse = await this.helpers.requestWithAuthentication.call(this, 'uploadPostApi', requestOptions);
 			const responseData = parseJsonIfNeeded(rawResponse);
 
-			// Handle optional polling after upload
-			const shouldConsiderPolling = operation === 'uploadPhotos' || operation === 'uploadVideo' || operation === 'uploadText';
-			const waitForCompletion = shouldConsiderPolling ? (this.getNodeParameter('waitForCompletion', i, false) as boolean) : false;
 			let finalData: any = responseData;
-			if (shouldConsiderPolling && waitForCompletion) {
-				const maybeRequestId = (responseData && (responseData as any).request_id) ? (responseData as any).request_id as string : undefined;
-				if (maybeRequestId) {
-					const requestId = maybeRequestId;
-					const pollIntervalSec = this.getNodeParameter('pollInterval', i, 10) as number;
-					const pollTimeoutSec = this.getNodeParameter('pollTimeout', i, 600) as number;
-					const start = Date.now();
-					while (true) {
-						await sleep(Math.max(1, pollIntervalSec) * 1000);
-						if (Date.now() - start > Math.max(5, pollTimeoutSec) * 1000) {
-							finalData = { success: false, message: 'Polling timed out', request_id: requestId };
-							break;
-						}
-						const statusOptions: IHttpRequestOptions = {
-							url: `https://api.upload-post.com/api/uploadposts/status`,
-							method: 'GET',
-							qs: { request_id: requestId },
-							json: true,
-						};
-						const statusData = await this.helpers.httpRequestWithAuthentication.call(this, 'uploadPostApi', statusOptions);
-						finalData = statusData;
-						const statusValue = (statusData && (statusData as any).status) as string | undefined;
-						if ((statusData as any).success === true || (statusValue && ['success','completed','failed','error'].includes(statusValue.toLowerCase()))) {
-							break;
-						}
-					}
+			if (config.isUploadOperation && config.waitForCompletion) {
+				const requestId = responseData && (responseData as any).request_id
+					? ((responseData as any).request_id as string)
+					: undefined;
+				if (requestId) {
+					finalData = await pollUploadStatus(
+						this,
+						requestId,
+						config.pollInterval ?? 10,
+						config.pollTimeout ?? 600,
+					);
 				}
 			}
 
 			returnData.push({
 				json: finalData,
-				pairedItem: {
-					item: i,
-				},
+				pairedItem: { item: itemIndex },
 			});
 		}
 
