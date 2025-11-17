@@ -8,7 +8,6 @@ import {
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
-	IRequestOptions,
 	NodeConnectionType,
 	NodeOperationError,
 	sleep
@@ -2640,45 +2639,37 @@ export class UploadPost implements INodeType {
 			};
 
 			const config = await buildRequestConfig(ctx);
-			let rawResponse: any;
+
+			const requestOptions: IHttpRequestOptions = {
+				url: `${API_BASE_URL}${config.endpoint}`,
+				method: config.method,
+			};
+
+			if (config.headers) {
+				requestOptions.headers = config.headers;
+			}
+			if (config.qs) {
+				requestOptions.qs = config.qs;
+			}
 
 			if (config.formData) {
-				// Use requestWithAuthentication for multipart/form-data uploads
-				const requestOptions: IRequestOptions = {
-					url: `${API_BASE_URL}${config.endpoint}`,
-					method: config.method,
-					formData: buildMultipartPayload(config.formData),
-					json: true,
-				};
-
-				if (config.headers) {
-					requestOptions.headers = config.headers;
-				}
-				if (config.qs) {
-					requestOptions.qs = config.qs;
-				}
-
-				rawResponse = await this.helpers.requestWithAuthentication.call(this, 'uploadPostApi', requestOptions);
+				// For multipart uploads: pass the payload as body
+				// n8n will automatically serialize objects with Buffers as multipart/form-data
+				requestOptions.body = buildMultipartPayload(config.formData) as any;
+			} else if (config.body) {
+				// For JSON requests
+				requestOptions.body = config.body;
+				requestOptions.json = true;
 			} else {
-				// Use httpRequestWithAuthentication for non-multipart requests
-				const requestOptions: IHttpRequestOptions = {
-					url: `${API_BASE_URL}${config.endpoint}`,
-					method: config.method,
-					json: true,
-				};
-
-				if (config.headers) {
-					requestOptions.headers = config.headers;
-				}
-				if (config.qs) {
-					requestOptions.qs = config.qs;
-				}
-				if (config.body && Object.keys(config.body).length > 0) {
-					requestOptions.body = config.body;
-				}
-
-				rawResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'uploadPostApi', requestOptions);
+				// For requests without body (GET, etc)
+				requestOptions.json = true;
 			}
+
+			const rawResponse = await this.helpers.httpRequestWithAuthentication.call(
+				this,
+				'uploadPostApi',
+				requestOptions,
+			);
 
 			const responseData = parseJsonIfNeeded(rawResponse);
 
