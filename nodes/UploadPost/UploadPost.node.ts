@@ -25,7 +25,9 @@ type BinaryFormField = {
 		contentType?: string;
 	};
 };
-
+type NativeFormData = {
+	append(name: string, value: any, options?: { filename?: string; contentType?: string }): void;
+};
 const isBinaryFormField = (value: unknown): value is BinaryFormField => {
 	return typeof value === 'object' && value !== null && 'value' in (value as Record<string, unknown>);
 };
@@ -896,6 +898,30 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 	throw new NodeOperationError(ctx.node.getNode(), `Unsupported operation: ${ctx.operation}`, {
 		itemIndex: ctx.itemIndex,
 	});
+};
+
+const buildNativeFormData = (payload: MultipartPayload, node: IExecuteFunctions): NativeFormData => {
+	const FormDataCtor = (globalThis as typeof globalThis & { FormData?: new () => NativeFormData }).FormData;
+	if (!FormDataCtor) {
+		throw new NodeOperationError(node.getNode(), 'FormData is not supported in this runtime environment');
+	}
+	const form = new FormDataCtor();
+	for (const [key, value] of Object.entries(payload)) {
+		if (Array.isArray(value)) {
+			value.forEach(item => appendValue(form, key, item));
+		} else {
+			appendValue(form, key, value);
+		}
+	}
+	return form;
+};
+
+const appendValue = (form: NativeFormData, key: string, value: MultipartValue) => {
+	if (isBinaryFormField(value)) {
+		form.append(key, value.value, value.options);
+	} else {
+		form.append(key, value);
+	}
 };
 
 const pollUploadStatus = async (
@@ -2653,9 +2679,10 @@ export class UploadPost implements INodeType {
 			}
 
 			if (config.formData) {
-				// For multipart uploads: pass the payload as body
-				// n8n will automatically serialize objects with Buffers as multipart/form-data
-				requestOptions.body = buildMultipartPayload(config.formData) as any;
+				const multipartPayload = buildMultipartPayload(config.formData);
+				const nativeFormData = buildNativeFormData(multipartPayload, this);
+				requestOptions.body = nativeFormData as unknown as IDataObject;
+				requestOptions.json = false;
 			} else if (config.body) {
 				// For JSON requests
 				requestOptions.body = config.body;
