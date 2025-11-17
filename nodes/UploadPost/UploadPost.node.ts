@@ -1,5 +1,4 @@
 import { Buffer } from 'buffer';
-import FormData from 'form-data';
 import {
 	IDataObject,
 	IExecuteFunctions,
@@ -9,6 +8,7 @@ import {
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
+	IRequestOptions,
 	NodeConnectionType,
 	NodeOperationError,
 	sleep
@@ -18,6 +18,60 @@ const MANUAL_USER_VALUE = '__manual_user__';
 const MANUAL_FACEBOOK_VALUE = '__manual_facebook__';
 const MANUAL_LINKEDIN_VALUE = '__manual_linkedin__';
 const MANUAL_PINTEREST_VALUE = '__manual_pinterest__';
+
+type BinaryFormField = {
+	value: Buffer | string;
+	options?: {
+		filename?: string;
+		contentType?: string;
+	};
+};
+
+const isBinaryFormField = (value: unknown): value is BinaryFormField => {
+	return typeof value === 'object' && value !== null && 'value' in (value as Record<string, unknown>);
+};
+
+const normalizeFormField = (value: unknown): string | BinaryFormField | undefined => {
+	if (value === undefined || value === null) {
+		return undefined;
+	}
+	if (isBinaryFormField(value)) {
+		return value;
+	}
+	return String(value);
+};
+
+const buildMultipartPayload = (rawFormData: IDataObject): Record<string, string | BinaryFormField | Array<string | BinaryFormField>> => {
+	const payload: Record<string, string | BinaryFormField | Array<string | BinaryFormField>> = {};
+	for (const [key, rawValue] of Object.entries(rawFormData)) {
+		if (rawValue === undefined || rawValue === null) continue;
+		if (Array.isArray(rawValue)) {
+			const normalizedItems = rawValue
+				.map(item => normalizeFormField(item))
+				.filter((item): item is string | BinaryFormField => item !== undefined);
+			if (normalizedItems.length > 0) {
+				payload[key] = normalizedItems;
+			}
+			continue;
+		}
+		const normalizedValue = normalizeFormField(rawValue);
+		if (normalizedValue !== undefined) {
+			payload[key] = normalizedValue;
+		}
+	}
+	return payload;
+};
+
+const parseJsonIfNeeded = (data: any): any => {
+	if (typeof data === 'string') {
+		try {
+			return JSON.parse(data);
+		} catch {
+			return data;
+		}
+	}
+	return data;
+};
 
 export class UploadPost implements INodeType {
 	description: INodeTypeDescription = {
@@ -2371,65 +2425,31 @@ export class UploadPost implements INodeType {
 				}
 			}
 
-			const options: IHttpRequestOptions = {
+			const requestOptions: IRequestOptions = {
 				url: `https://api.upload-post.com/api${endpoint}`,
 				method,
 				json: true,
 			};
 
-			// Set auth header according to endpoint
 			if (operation === 'validateJwt') {
 				const jwt = this.getNodeParameter('jwtToken', i) as string;
-				options.headers = { Authorization: `Bearer ${jwt}` };
+				requestOptions.headers = { Authorization: `Bearer ${jwt}` };
 			}
 
-			// Decide payload container
 			if (method === 'POST') {
-				// Upload endpoints use multipart form-data, others JSON body
 				if (operation === 'uploadPhotos' || operation === 'uploadVideo' || operation === 'uploadText') {
-					// Create FormData from the formData object
-					const formDataObj = new FormData();
-					for (const [key, value] of Object.entries(formData)) {
-						if (value !== undefined && value !== null) {
-							if (Array.isArray(value)) {
-								// Handle array values (like photos[], platform[])
-								for (const item of value) {
-									if (item !== undefined && item !== null) {
-										if (typeof item === 'string') {
-											// Handle URL strings
-											formDataObj.append(key, item);
-										} else if (item && typeof item === 'object' && 'value' in item && 'options' in item) {
-											// Handle binary data objects
-											const binaryValue = item as { value: Buffer; options: { filename: string; contentType?: string } };
-											formDataObj.append(key, binaryValue.value, binaryValue.options);
-										} else {
-											// Handle other values
-											formDataObj.append(key, String(item));
-										}
-									}
-								}
-							} else if (value && typeof value === 'object' && 'value' in value && 'options' in value) {
-								// Handle single binary data
-								const binaryValue = value as { value: Buffer | string; options: { filename?: string; contentType?: string } };
-								formDataObj.append(key, binaryValue.value, binaryValue.options);
-							} else {
-								formDataObj.append(key, String(value));
-							}
-						}
-					}
-					options.body = formDataObj;
-					// Set Content-Type header to be set automatically by FormData
-					if (!options.headers) options.headers = {};
-					// FormData will set the Content-Type with boundary
+					requestOptions.formData = buildMultipartPayload(formData);
+					delete requestOptions.json;
 				} else {
-					options.body = body;
+					requestOptions.body = body;
+					requestOptions.json = true;
 				}
 			} else if (method === 'GET' || method === 'DELETE') {
-				// Some DELETE endpoints accept JSON in body (delete user), but stick to body for deleteUser
 				if (operation === 'deleteUser') {
-					(options as any).body = body;
+					requestOptions.body = body;
+					requestOptions.json = true;
 				} else {
-					(options as any).qs = qs;
+					requestOptions.qs = qs;
 				}
 			}
 
@@ -2437,7 +2457,8 @@ export class UploadPost implements INodeType {
 			this.logger.info(`Operation: ${operation}, Is Upload Operation: ${isUploadOperation}`);
 			//this.logger.info('Complete Form Data being sent (JSON): ' + JSON.stringify(formData, null, 2));
 
-			const responseData = await this.helpers.httpRequestWithAuthentication.call(this, 'uploadPostApi', options);
+			const rawResponse = await this.helpers.requestWithAuthentication.call(this, 'uploadPostApi', requestOptions);
+			const responseData = parseJsonIfNeeded(rawResponse);
 
 			// Handle optional polling after upload
 			const shouldConsiderPolling = operation === 'uploadPhotos' || operation === 'uploadVideo' || operation === 'uploadText';
