@@ -1,5 +1,4 @@
 import { Buffer } from 'buffer';
-import FormData from 'form-data';
 import {
 	IDataObject,
 	IExecuteFunctions,
@@ -9,6 +8,7 @@ import {
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
+	IRequestOptions,
 	NodeConnectionType,
 	NodeOperationError,
 	sleep
@@ -897,30 +897,6 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 	throw new NodeOperationError(ctx.node.getNode(), `Unsupported operation: ${ctx.operation}`, {
 		itemIndex: ctx.itemIndex,
 	});
-};
-
-const appendFormValue = (form: FormData, key: string, value: MultipartValue) => {
-	if (isBinaryFormField(value)) {
-		if (value.options) {
-			form.append(key, value.value, value.options);
-		} else {
-			form.append(key, value.value);
-		}
-	} else {
-		form.append(key, value);
-	}
-};
-
-const toFormData = (payload: MultipartPayload): FormData => {
-	const form = new FormData();
-	for (const [key, value] of Object.entries(payload)) {
-		if (Array.isArray(value)) {
-			value.forEach(item => appendFormValue(form, key, item));
-		} else {
-			appendFormValue(form, key, value);
-		}
-	}
-	return form;
 };
 
 const pollUploadStatus = async (
@@ -2664,46 +2640,46 @@ export class UploadPost implements INodeType {
 			};
 
 			const config = await buildRequestConfig(ctx);
+			let rawResponse: any;
 
-			const requestOptions: IHttpRequestOptions = {
-				url: `${API_BASE_URL}${config.endpoint}`,
-				method: config.method,
-				json: true,
-			};
+			if (config.formData) {
+				// Use requestWithAuthentication for multipart/form-data uploads
+				const requestOptions: IRequestOptions = {
+					url: `${API_BASE_URL}${config.endpoint}`,
+					method: config.method,
+					formData: buildMultipartPayload(config.formData),
+					json: true,
+				};
 
-			if (config.headers) {
-				requestOptions.headers = config.headers;
-			}
-
-			if (config.method === 'POST') {
-				if (config.formData) {
-					const multipartPayload = buildMultipartPayload(config.formData);
-					const formData = toFormData(multipartPayload);
-					requestOptions.body = formData;
-					const formHeaders = formData.getHeaders();
-					requestOptions.headers = {
-						...(requestOptions.headers ?? {}),
-						...formHeaders,
-					};
-					delete requestOptions.json;
-				} else if (config.body) {
-					requestOptions.body = config.body;
-					requestOptions.json = true;
+				if (config.headers) {
+					requestOptions.headers = config.headers;
 				}
 				if (config.qs) {
 					requestOptions.qs = config.qs;
 				}
-				} else {
+
+				rawResponse = await this.helpers.requestWithAuthentication.call(this, 'uploadPostApi', requestOptions);
+			} else {
+				// Use httpRequestWithAuthentication for non-multipart requests
+				const requestOptions: IHttpRequestOptions = {
+					url: `${API_BASE_URL}${config.endpoint}`,
+					method: config.method,
+					json: true,
+				};
+
+				if (config.headers) {
+					requestOptions.headers = config.headers;
+				}
 				if (config.qs) {
 					requestOptions.qs = config.qs;
 				}
 				if (config.body && Object.keys(config.body).length > 0) {
 					requestOptions.body = config.body;
-					requestOptions.json = true;
 				}
+
+				rawResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'uploadPostApi', requestOptions);
 			}
 
-			const rawResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'uploadPostApi', requestOptions);
 			const responseData = parseJsonIfNeeded(rawResponse);
 
 			let finalData: any = responseData;
