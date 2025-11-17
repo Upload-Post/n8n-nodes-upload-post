@@ -25,6 +25,15 @@ type BinaryFormField = {
 		contentType?: string;
 	};
 };
+
+declare const FormData:
+	| undefined
+	| {
+			new (): {
+				append(name: string, value: any, options?: { filename?: string; contentType?: string }): void;
+			};
+	  };
+
 type NativeFormData = {
 	append(name: string, value: any, options?: { filename?: string; contentType?: string }): void;
 };
@@ -901,11 +910,10 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 };
 
 const buildNativeFormData = (payload: MultipartPayload, node: IExecuteFunctions): NativeFormData => {
-	const FormDataCtor = (globalThis as typeof globalThis & { FormData?: new () => NativeFormData }).FormData;
-	if (!FormDataCtor) {
+	if (typeof FormData === 'undefined') {
 		throw new NodeOperationError(node.getNode(), 'FormData is not supported in this runtime environment');
 	}
-	const form = new FormDataCtor();
+	const form = new FormData();
 	for (const [key, value] of Object.entries(payload)) {
 		if (Array.isArray(value)) {
 			value.forEach(item => appendValue(form, key, item));
