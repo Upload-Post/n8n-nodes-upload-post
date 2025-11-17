@@ -30,12 +30,18 @@ declare const FormData:
 	| undefined
 	| {
 			new (): {
-				append(name: string, value: any, options?: { filename?: string; contentType?: string }): void;
+				append(name: string, value: any, options?: { filename?: string; contentType?: string } | string): void;
 			};
 	  };
 
+declare const Blob:
+	| undefined
+	| {
+			new (blobParts?: any[], options?: { type?: string }): any;
+	  };
+
 type NativeFormData = {
-	append(name: string, value: any, options?: { filename?: string; contentType?: string }): void;
+	append(name: string, value: any, options?: { filename?: string; contentType?: string } | string): void;
 };
 const isBinaryFormField = (value: unknown): value is BinaryFormField => {
 	return typeof value === 'object' && value !== null && 'value' in (value as Record<string, unknown>);
@@ -926,10 +932,29 @@ const buildNativeFormData = (payload: MultipartPayload, node: IExecuteFunctions)
 
 const appendValue = (form: NativeFormData, key: string, value: MultipartValue) => {
 	if (isBinaryFormField(value)) {
-		form.append(key, value.value, value.options);
+		appendBinaryValue(form, key, value);
 	} else {
 		form.append(key, value);
 	}
+};
+
+const appendBinaryValue = (form: NativeFormData, key: string, field: BinaryFormField) => {
+	const { value, options } = field;
+	if (typeof value === 'string') {
+		form.append(key, value);
+		return;
+	}
+
+	const filename = options?.filename ?? 'upload.bin';
+	const contentType = options?.contentType ?? 'application/octet-stream';
+
+	if (typeof Blob !== 'undefined') {
+		const blob = new Blob([value], { type: contentType });
+		form.append(key, blob, filename);
+		return;
+	}
+
+	form.append(key, value, { filename, contentType });
 };
 
 const pollUploadStatus = async (
