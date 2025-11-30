@@ -1028,9 +1028,9 @@ export class UploadPost implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				options: [
-					{ name: 'Upload Photo(s)', value: 'uploadPhotos', action: 'Upload photos', description: 'Upload one or more photos (Supports: TikTok, Instagram, LinkedIn, Facebook, X, Threads)' },
-					{ name: 'Upload Text', value: 'uploadText', action: 'Upload a text post', description: 'Upload a text-based post (Supports: X, LinkedIn, Facebook, Threads)' },
-					{ name: 'Upload Video', value: 'uploadVideo', action: 'Upload a video', description: 'Upload a single video (Supports: TikTok, Instagram, LinkedIn, YouTube, Facebook, X, Threads)' },
+					{ name: 'Upload Photo(s)', value: 'uploadPhotos', action: 'Upload photos', description: 'Upload one or more photos (Supports: TikTok, Instagram, LinkedIn, Facebook, X, Threads, Bluesky)' },
+					{ name: 'Upload Text', value: 'uploadText', action: 'Upload a text post', description: 'Upload a text-based post (Supports: X, LinkedIn, Facebook, Threads, Bluesky)' },
+					{ name: 'Upload Video', value: 'uploadVideo', action: 'Upload a video', description: 'Upload a single video (Supports: TikTok, Instagram, LinkedIn, YouTube, Facebook, X, Threads, Bluesky)' },
 				],
 				default: 'uploadPhotos',
 				displayOptions: { show: { resource: ['uploads'] } },
@@ -1404,7 +1404,8 @@ export class UploadPost implements INodeType {
 					options: [
 						{ name: 'Instagram', value: 'instagram' },
 						{ name: 'LinkedIn', value: 'linkedin' },
-						{ name: 'Facebook', value: 'facebook' },
+						{ name: 'Bluesky', value: 'bluesky' },
+					{ name: 'Facebook', value: 'facebook' },
 						{ name: 'X (Twitter)', value: 'x' },
 					],
 					default: [],
@@ -1469,6 +1470,8 @@ export class UploadPost implements INodeType {
 				name: 'jwtPlatforms',
 				type: 'multiOptions',
 				options: [
+					{ name: 'Bluesky', value: 'bluesky' },
+					{ name: 'Bluesky', value: 'bluesky' },
 					{ name: 'Facebook', value: 'facebook' },
 					{ name: 'Instagram', value: 'instagram' },
 					{ name: 'LinkedIn', value: 'linkedin' },
@@ -2543,6 +2546,7 @@ export class UploadPost implements INodeType {
 			async getPlatforms(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				const operation = this.getCurrentNodeParameter('operation') as string;
 				const allPlatforms = [
+					{ name: 'Bluesky', value: 'bluesky' },
 					{ name: 'Facebook', value: 'facebook' },
 					{ name: 'Instagram', value: 'instagram' },
 					{ name: 'LinkedIn', value: 'linkedin' },
