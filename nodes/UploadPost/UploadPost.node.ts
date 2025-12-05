@@ -165,9 +165,9 @@ const getBinaryFieldFromItem = async (
 };
 
 const PLATFORM_SUPPORT: Record<UploadOperation, string[]> = {
-	uploadPhotos: ['facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x'],
-	uploadVideo: ['facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
-	uploadText: ['facebook', 'linkedin', 'reddit', 'threads', 'x'],
+	uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x'],
+	uploadVideo: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
+	uploadText: ['bluesky', 'facebook', 'linkedin', 'reddit', 'threads', 'x'],
 };
 
 const DESCRIPTION_ENABLED_PLATFORMS = new Set(['linkedin', 'facebook', 'youtube', 'pinterest', 'tiktok']);
@@ -178,6 +178,7 @@ const TITLE_OVERRIDES: Array<{
 	field: string;
 	operations?: UploadOperation[];
 }> = [
+	{ platform: 'bluesky', param: 'blueskyTitle', field: 'bluesky_title' },
 	{ platform: 'instagram', param: 'instagramTitle', field: 'instagram_title' },
 	{ platform: 'facebook', param: 'facebookTitle', field: 'facebook_title' },
 	{ platform: 'tiktok', param: 'tiktokTitle', field: 'tiktok_title' },
@@ -1122,6 +1123,14 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
 			},
 				// Platform-specific Title Overrides (appear when the platform is selected)
+				{
+					displayName: 'Bluesky Title (Override)',
+					name: 'blueskyTitle',
+					type: 'string',
+					default: '',
+					description: 'Optional override for Bluesky title (max 300 characters)',
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky'] } },
+				},
 				{
 					displayName: 'Instagram Title (Override)',
 					name: 'instagramTitle',
@@ -2543,6 +2552,7 @@ export class UploadPost implements INodeType {
 			async getPlatforms(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				const operation = this.getCurrentNodeParameter('operation') as string;
 				const allPlatforms = [
+					{ name: 'Bluesky', value: 'bluesky' },
 					{ name: 'Facebook', value: 'facebook' },
 					{ name: 'Instagram', value: 'instagram' },
 					{ name: 'LinkedIn', value: 'linkedin' },
@@ -2555,9 +2565,9 @@ export class UploadPost implements INodeType {
 				];
 
 				const platformSupport: Record<string, string[]> = {
-					uploadPhotos: ['facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x'],
-					uploadVideo: ['facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
-					uploadText: ['facebook', 'linkedin', 'reddit', 'threads', 'x'],
+					uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x'],
+					uploadVideo: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
+					uploadText: ['bluesky', 'facebook', 'linkedin', 'reddit', 'threads', 'x'],
 				};
 
 				const supportedPlatforms = platformSupport[operation] || [];
