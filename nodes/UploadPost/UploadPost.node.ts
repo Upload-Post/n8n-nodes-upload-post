@@ -1944,7 +1944,6 @@ export class UploadPost implements INodeType {
 				name: 'instagramLocationId',
 				type: 'string',
 				default: '',
-				description: 'Instagram location ID.',
 				displayOptions: { show: { operation: ['uploadVideo', 'uploadPhotos'],
 						platform: ['instagram']
 					},
