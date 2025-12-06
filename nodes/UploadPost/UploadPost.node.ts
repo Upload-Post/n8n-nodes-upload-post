@@ -420,21 +420,25 @@ const applyInstagramOptions = (ctx: ExecutionContext, operation: UploadOperation
 		formData.media_type = finalMediaType;
 	}
 
-	if (operation === 'uploadVideo') {
-		const shareToFeed = ctx.node.getNodeParameter('instagramShareToFeed', ctx.itemIndex, true) as boolean;
+	if (['uploadVideo', 'uploadPhotos'].includes(operation)) {
 		const collaborators = ctx.node.getNodeParameter('instagramCollaborators', ctx.itemIndex, '') as string;
-		const coverUrl = ctx.node.getNodeParameter('instagramCoverUrl', ctx.itemIndex, '') as string;
-		const audioName = ctx.node.getNodeParameter('instagramAudioName', ctx.itemIndex, '') as string;
 		const userTags = ctx.node.getNodeParameter('instagramUserTags', ctx.itemIndex, '') as string;
 		const locationId = ctx.node.getNodeParameter('instagramLocationId', ctx.itemIndex, '') as string;
+
+		if (collaborators) formData.collaborators = collaborators;
+		if (userTags) formData.user_tags = userTags;
+		if (locationId) formData.location_id = locationId;
+	}
+
+	if (operation === 'uploadVideo') {
+		const shareToFeed = ctx.node.getNodeParameter('instagramShareToFeed', ctx.itemIndex, true) as boolean;
+		const coverUrl = ctx.node.getNodeParameter('instagramCoverUrl', ctx.itemIndex, '') as string;
+		const audioName = ctx.node.getNodeParameter('instagramAudioName', ctx.itemIndex, '') as string;
 		const thumbOffset = ctx.node.getNodeParameter('instagramThumbOffset', ctx.itemIndex, '') as string;
 
 		formData.share_to_feed = String(shareToFeed);
-		if (collaborators) formData.collaborators = collaborators;
 		if (coverUrl) formData.cover_url = coverUrl;
 		if (audioName) formData.audio_name = audioName;
-		if (userTags) formData.user_tags = userTags;
-		if (locationId) formData.location_id = locationId;
 		if (thumbOffset) formData.thumb_offset = thumbOffset;
 	}
 };
@@ -1888,14 +1892,12 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'Instagram Collaborators (Video)',
+				displayName: 'Instagram Collaborators',
 				name: 'instagramCollaborators',
 				type: 'string',
 				default: '',
-				description: 'Comma-separated collaborator usernames for Instagram video. Sent as a string. Only for Upload Video.',
-				displayOptions: {
-					show: {
-						operation: ['uploadVideo'],
+				description: 'Comma-separated collaborator usernames for Instagram. Sent as a string.',
+				displayOptions: { show: { operation: ['uploadVideo', 'uploadPhotos'],
 						platform: ['instagram']
 					},
 				},
@@ -1927,27 +1929,23 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'Instagram User Tags (Video)',
+				displayName: 'Instagram User Tags',
 				name: 'instagramUserTags',
 				type: 'string',
 				default: '',
-				description: 'Comma-separated user tags for Instagram video. Sent as a string. Only for Upload Video.',
-				displayOptions: {
-					show: {
-						operation: ['uploadVideo'],
+				description: 'Comma-separated user tags for Instagram. Sent as a string.',
+				displayOptions: { show: { operation: ['uploadVideo', 'uploadPhotos'],
 						platform: ['instagram']
 					},
 				},
 			},
 			{
-				displayName: 'Instagram Location ID (Video)',
+				displayName: 'Instagram Location ID',
 				name: 'instagramLocationId',
 				type: 'string',
 				default: '',
-				description: 'Instagram location ID for the video. Only for Upload Video.',
-				displayOptions: {
-					show: {
-						operation: ['uploadVideo'],
+				description: 'Instagram location ID.',
+				displayOptions: { show: { operation: ['uploadVideo', 'uploadPhotos'],
 						platform: ['instagram']
 					},
 				},
