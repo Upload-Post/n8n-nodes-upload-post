@@ -807,6 +807,22 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 				waitForCompletion: false,
 			};
 		}
+		case 'editPost': {
+			const requestId = ctx.node.getNodeParameter('requestId', ctx.itemIndex) as string;
+			const platform = ctx.node.getNodeParameter('platformSingle', ctx.itemIndex) as string;
+			const title = ctx.node.getNodeParameter('title', ctx.itemIndex, '') as string;
+			const description = ctx.node.getNodeParameter('description', ctx.itemIndex, '') as string;
+			const formData: IDataObject = { request_id: requestId, platform };
+			if (title) formData.title = title;
+			if (description) formData.description = description;
+			return {
+				endpoint: '/uploadposts/edit',
+				method: 'POST',
+				formData,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
 		case 'editScheduled': {
 			const jobId = ctx.node.getNodeParameter('scheduleJobId', ctx.itemIndex) as string;
 			const newScheduledDateRaw = ctx.node.getNodeParameter('newScheduledDate', ctx.itemIndex, '') as string;
@@ -1049,6 +1065,7 @@ export class UploadPost implements INodeType {
 				options: [
 						{ name: 'Cancel Scheduled Post', value: 'cancelScheduled', action: 'Cancel scheduled post', description: 'Cancel a scheduled post by its job ID' },
 						{ name: 'Edit Scheduled Post', value: 'editScheduled', action: 'Edit scheduled post', description: 'Edit schedule details (like date/time) by job ID' },
+						{ name: 'Edit Post', value: 'editPost', action: 'Edit post', description: 'Edit a previously published post (YouTube, Facebook, LinkedIn, Pinterest, Reddit)' },
 						{ name: 'Get Analytics', value: 'getAnalytics', action: 'Get analytics', description: 'Retrieve aggregated analytics for uploads' },
 					{ name: 'Get Upload History', value: 'getHistory', action: 'Get upload history', description: 'List past uploads with optional filters' },
 					{ name: 'Get Upload Status', value: 'getStatus', action: 'Get upload status', description: 'Check the status of an upload using the request_id' },
@@ -1115,16 +1132,30 @@ export class UploadPost implements INodeType {
 				typeOptions: { loadOptionsMethod: 'getPlatforms' },
 				default: [],
 				description: 'Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
-				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+				displayOptions: { show: { resource: ['uploads', 'monitoring'], operation: ['uploadPhotos','uploadVideo','uploadText','editPost'] } },
 			},
 			{
+				displayName: 'Platform',
+				name: 'platformSingle',
+				type: 'options',
+				options: [
+					{ name: 'Facebook', value: 'facebook' },
+					{ name: 'LinkedIn', value: 'linkedin' },
+					{ name: 'Pinterest', value: 'pinterest' },
+					{ name: 'Reddit', value: 'reddit' },
+					{ name: 'YouTube', value: 'youtube' },
+				],
+				default: 'youtube',
+				description: 'The platform to edit the post on',
+				displayOptions: { show: { operation: ['editPost'] } },
+			},
 				displayName: 'Title / Main Content',
 				name: 'title',
 				type: 'string',
 				required: true,
 				default: '',
 				description: 'Title of the post. For Upload Text, this is the main text content. For some video platforms, this acts as a fallback for description if a specific description is not provided.',
-				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+				displayOptions: { show: { resource: ['uploads', 'monitoring'], operation: ['uploadPhotos','uploadVideo','uploadText','editPost'] } },
 			},
 				// Platform-specific Title Overrides (appear when the platform is selected)
 				{
@@ -1133,7 +1164,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for Bluesky title (max 300 characters)',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText','editPost'], platform: ['bluesky'] } },
 				},
 				{
 					displayName: 'Instagram Title (Override)',
@@ -1141,7 +1172,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for Instagram title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['instagram'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText','editPost'], platform: ['instagram'] } },
 				},
 				{
 					displayName: 'Facebook Title (Override)',
@@ -1149,7 +1180,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for Facebook title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['facebook'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText','editPost'], platform: ['facebook'] } },
 				},
 				{
 					displayName: 'TikTok Title (Override)',
@@ -1157,7 +1188,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for TikTok title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['tiktok'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText','editPost'], platform: ['tiktok'] } },
 				},
 				{
 					displayName: 'LinkedIn Title (Override)',
@@ -1165,7 +1196,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for LinkedIn title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['linkedin'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText','editPost'], platform: ['linkedin'] } },
 				},
 				{
 					displayName: 'X Title (Override)',
@@ -1173,7 +1204,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for X title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['x'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText','editPost'], platform: ['x'] } },
 				},
 				{
 					displayName: 'YouTube Title (Override)',
@@ -1181,7 +1212,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for YouTube title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['youtube'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText','editPost'], platform: ['youtube'] } },
 				},
 				{
 					displayName: 'Pinterest Title (Override)',
@@ -1189,7 +1220,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for Pinterest title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['pinterest'] } 				},
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText','editPost'], platform: ['pinterest'] } 				},
 			},
 			{
 				displayName: 'Threads Title (Override)',
@@ -1210,7 +1241,19 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo'],
-						platform: ['linkedin', 'facebook', 'youtube', 'pinterest', 'tiktok']
+				displayOptions: {
+					show: {
+						OR: [
+							{
+								operation: ['uploadPhotos', 'uploadVideo'],
+								platform: ['linkedin', 'facebook', 'youtube', 'pinterest', 'tiktok']
+							},
+							{
+								operation: ['editPost']
+							}
+						]
+					}
+				},
 					}
 				},
 			},
@@ -1291,7 +1334,7 @@ export class UploadPost implements INodeType {
 				type: 'dateTime',
 				default: '',
 				description: 'Optional scheduling date/time. If set, the API will schedule the publication instead of posting immediately.',
-				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+				displayOptions: { show: { resource: ['uploads', 'monitoring'], operation: ['uploadPhotos','uploadVideo','uploadText','editPost'] } },
 			},
 			{
 				displayName: 'Upload Asynchronously',
@@ -1301,7 +1344,7 @@ export class UploadPost implements INodeType {
 				description: 'Whether to process the upload asynchronously and return immediately. If you set to false but the upload takes longer than 59 seconds, it will automatically switch to asynchronous processing to avoid timeouts. In that case, use the request_id with the Upload Status endpoint to check the upload status and result.',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos','uploadVideo','uploadText']
+						operation: ['uploadPhotos','uploadVideo','uploadText','editPost']
 					}
 				},
 			},
@@ -1313,7 +1356,7 @@ export class UploadPost implements INodeType {
 				description: 'Whether to perform best-effort sleeping between status checks within this node. Not guaranteed to finish; for reliable long polling use a separate Wait node plus Get Upload Status.',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos','uploadVideo','uploadText']
+						operation: ['uploadPhotos','uploadVideo','uploadText','editPost']
 					}
 				},
 			},
@@ -1325,7 +1368,7 @@ export class UploadPost implements INodeType {
 				description: 'Sleep interval between status checks when waiting for completion',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos','uploadVideo','uploadText'],
+						operation: ['uploadPhotos','uploadVideo','uploadText','editPost'],
 						waitForCompletion: [true]
 					}
 				},
@@ -1338,7 +1381,7 @@ export class UploadPost implements INodeType {
 				description: 'Maximum time to sleep-and-check before giving up inside this node',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos','uploadVideo','uploadText'],
+						operation: ['uploadPhotos','uploadVideo','uploadText','editPost'],
 						waitForCompletion: [true]
 					}
 				},
@@ -1353,7 +1396,7 @@ export class UploadPost implements INodeType {
 				description: 'The request_id returned by an async upload to query its status',
 				displayOptions: {
 					show: {
-						operation: ['getStatus']
+						operation: ['getStatus', 'editPost']
 					}
 				},
 			},
@@ -2223,7 +2266,7 @@ export class UploadPost implements INodeType {
 				typeOptions: { loadOptionsMethod: 'getPinterestBoards', loadOptionsDependsOn: ['user'] },
 				displayOptions: {
 					show: {
-						resource: ['uploads'],
+						resource: ['uploads', 'monitoring'],
 						operation: ['uploadPhotos', 'uploadVideo'],
 						platform: ['pinterest']
 					},
@@ -2238,7 +2281,7 @@ export class UploadPost implements INodeType {
 				description: 'Provide the Pinterest board identifier when it does not appear in the list',
 				displayOptions: {
 					show: {
-						resource: ['uploads'],
+						resource: ['uploads', 'monitoring'],
 						operation: ['uploadPhotos', 'uploadVideo'],
 						platform: ['pinterest'],
 						pinterestBoardId: [MANUAL_PINTEREST_VALUE]
@@ -2251,12 +2294,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional link to attach to the Pinterest pin',
-				displayOptions: {
-					show: {
-						operation: ['uploadPhotos', 'uploadVideo'],
-						platform: ['pinterest']
-					}
-				},
+				displayOptions: { show: { OR: [ { operation: ['uploadPhotos', 'uploadVideo'], platform: ['pinterest'] }, { operation: ['editPost'], platformSingle: ['pinterest'] } ] } },
 			},
 			{
 				displayName: 'Pinterest Cover Image URL (Video)',
@@ -2264,12 +2302,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional cover image URL for Pinterest video. If provided, overrides other cover options.',
-				displayOptions: {
-					show: {
-						operation: ['uploadVideo'],
-						platform: ['pinterest']
-					}
-				},
+				displayOptions: { show: { OR: [ { operation: ['uploadVideo'], platform: ['pinterest'] }, { operation: ['editPost'], platformSingle: ['pinterest'] } ] } },
 			},
 			{
 				displayName: 'Pinterest Cover Image Content Type (Video)',
@@ -2283,12 +2316,7 @@ export class UploadPost implements INodeType {
 				],
 				default: 'image/jpeg',
 				description: 'MIME type for the cover image when providing raw base64 data',
-				displayOptions: {
-					show: {
-						operation: ['uploadVideo'],
-						platform: ['pinterest']
-					}
-				},
+				displayOptions: { show: { OR: [ { operation: ['uploadVideo'], platform: ['pinterest'] }, { operation: ['editPost'], platformSingle: ['pinterest'] } ] } },
 			},
 			{
 				displayName: 'Pinterest Cover Image Data (Base64, Video)',
@@ -2296,12 +2324,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Base64-encoded image bytes for the cover image. Used if URL is not provided.',
-				displayOptions: {
-					show: {
-						operation: ['uploadVideo'],
-						platform: ['pinterest']
-					}
-				},
+				displayOptions: { show: { OR: [ { operation: ['uploadVideo'], platform: ['pinterest'] }, { operation: ['editPost'], platformSingle: ['pinterest'] } ] } },
 			},
 			{
 				displayName: 'Pinterest Cover Image Key Frame Time (MS, Video)',
@@ -2309,12 +2332,7 @@ export class UploadPost implements INodeType {
 				type: 'number',
 				default: 0,
 				description: 'Key frame time to use as the cover image if no image is provided',
-				displayOptions: {
-					show: {
-						operation: ['uploadVideo'],
-						platform: ['pinterest']
-					}
-				},
+				displayOptions: { show: { OR: [ { operation: ['uploadVideo'], platform: ['pinterest'] }, { operation: ['editPost'], platformSingle: ['pinterest'] } ] } },
 			},
 
 		// ----- X (Twitter) Specific Parameters -----
@@ -2383,12 +2401,7 @@ export class UploadPost implements INodeType {
 				type: 'number',
 				default: 1440,
 				description: 'Poll duration in minutes for X (Twitter) post (requires Poll Options)',
-				displayOptions: {
-					show: {
-						operation: ['uploadText'],
-						platform: ['x']
-					}
-				},
+				displayOptions: { show: { OR: [ { operation: ['uploadText'], platform: ['x'] }, { operation: ['editPost'], platformSingle: ['x'] } ] } },
 			},
 			{
 				displayName: 'X Poll Options',
@@ -2396,12 +2409,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Comma-separated list of poll options for X (Twitter) post',
-				displayOptions: {
-					show: {
-						operation: ['uploadText'],
-						platform: ['x']
-					}
-				},
+				displayOptions: { show: { OR: [ { operation: ['uploadText'], platform: ['x'] }, { operation: ['editPost'], platformSingle: ['x'] } ] } },
 			},
 			{
 				displayName: 'X Poll Reply Settings',
