@@ -1357,8 +1357,6 @@ export class UploadPost implements INodeType {
 					}
 				},
 			},
-			// Removed platform filter (not supported by API)
-			// Removed status filter (not supported by API)
 			{
 				displayName: 'Page',
 				name: 'historyPage',
@@ -1424,7 +1422,6 @@ export class UploadPost implements INodeType {
 					description: 'Platforms to fetch analytics for (comma-joined in request)',
 					displayOptions: { show: { operation: ['getAnalytics'] } },
 			},
-			// Removed from/to date filters (not supported by API)
 
 			// Create user
 			{
@@ -1850,7 +1847,7 @@ export class UploadPost implements INodeType {
 					{ name: 'Media Upload (Inbox)', value: 'MEDIA_UPLOAD' },
 				],
 				default: 'DIRECT_POST',
-				description: 'Choose TikTok posting mode for video',
+				description: 'Choose TikTok posting mode for video. Note: In MEDIA_UPLOAD (Draft) mode, title and caption are ignored and must be set in the TikTok app.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
