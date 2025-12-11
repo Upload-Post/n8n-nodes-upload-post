@@ -1065,7 +1065,7 @@ export class UploadPost implements INodeType {
 				options: [
 						{ name: 'Cancel Scheduled Post', value: 'cancelScheduled', action: 'Cancel scheduled post', description: 'Cancel a scheduled post by its job ID' },
 						{ name: 'Edit Scheduled Post', value: 'editScheduled', action: 'Edit scheduled post', description: 'Edit schedule details (like date/time) by job ID' },
-						{ name: 'Edit Post', value: 'editPost', action: 'Edit post', description: 'Edit a previously published post (YouTube, Facebook, LinkedIn, Pinterest, Reddit)' },
+						{ name: 'Edit Post', value: 'editPost', action: 'Edit post', description: 'Edit a previously published post (YouTube, Facebook, Instagram, Pinterest, Reddit)' },
 						{ name: 'Get Analytics', value: 'getAnalytics', action: 'Get analytics', description: 'Retrieve aggregated analytics for uploads' },
 					{ name: 'Get Upload History', value: 'getHistory', action: 'Get upload history', description: 'List past uploads with optional filters' },
 					{ name: 'Get Upload Status', value: 'getStatus', action: 'Get upload status', description: 'Check the status of an upload using the request_id' },
@@ -1140,7 +1140,7 @@ export class UploadPost implements INodeType {
 				type: 'options',
 				options: [
 					{ name: 'Facebook', value: 'facebook' },
-					{ name: 'LinkedIn', value: 'linkedin' },
+					{ name: 'Instagram', value: 'instagram' },
 					{ name: 'Pinterest', value: 'pinterest' },
 					{ name: 'Reddit', value: 'reddit' },
 					{ name: 'YouTube', value: 'youtube' },
@@ -1149,6 +1149,7 @@ export class UploadPost implements INodeType {
 				description: 'The platform to edit the post on',
 				displayOptions: { show: { operation: ['editPost'] } },
 			},
+			{
 				displayName: 'Title / Main Content',
 				name: 'title',
 				type: 'string',
@@ -1240,9 +1241,6 @@ export class UploadPost implements INodeType {
 				description: 'Optional extended description used for LinkedIn commentary, Facebook description/message, YouTube video description, Pinterest description, and TikTok photo captions. Other platforms ignore it. When empty we fall back to the main title where a description is required. Platform-specific overrides below take precedence.',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos', 'uploadVideo'],
-				displayOptions: {
-					show: {
 						OR: [
 							{
 								operation: ['uploadPhotos', 'uploadVideo'],
@@ -1252,8 +1250,6 @@ export class UploadPost implements INodeType {
 								operation: ['editPost']
 							}
 						]
-					}
-				},
 					}
 				},
 			},
