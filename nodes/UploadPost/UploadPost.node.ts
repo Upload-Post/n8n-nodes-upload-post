@@ -259,6 +259,10 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 	const scheduledDate = normalizeDateInput(ctx.node.getNodeParameter('scheduledDate', ctx.itemIndex, '') as string);
 	if (scheduledDate) {
 		formData.scheduled_date = scheduledDate;
+		const timezone = ctx.node.getNodeParameter("timezone", ctx.itemIndex, "") as string;
+		if (timezone) {
+			formData.timezone = timezone;
+		}
 	}
 
 	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean | undefined;
@@ -815,6 +819,10 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 			if (normalizedDate) {
 				body.scheduled_date = normalizedDate;
 			}
+			const timezone = ctx.node.getNodeParameter("timezone", ctx.itemIndex, "") as string;
+			if (timezone) {
+				body.timezone = timezone;
+			}
 			return {
 				endpoint: `/uploadposts/schedule/${jobId}`,
 				method: 'POST',
@@ -1294,6 +1302,14 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
 			},
 			{
+				displayName: "Timezone",
+				name: "timezone",
+				type: "string",
+				default: "",
+				description: "Optional timezone for the scheduled date (e.g. Europe/Madrid)",
+				displayOptions: { show: { resource: ["uploads"], operation: ["uploadPhotos","uploadVideo","uploadText"] } },
+			},
+			{
 				displayName: 'Upload Asynchronously',
 				name: 'uploadAsync',
 				type: 'boolean',
@@ -1409,6 +1425,14 @@ export class UploadPost implements INodeType {
 					default: '',
 					description: 'New scheduled date/time for the post',
 					displayOptions: { show: { operation: ['editScheduled'] } },
+				},
+				{
+					displayName: "Timezone",
+					name: "timezone",
+					type: "string",
+					default: "",
+					description: "Timezone for the scheduled date (e.g. Europe/Madrid)",
+					displayOptions: { show: { operation: ["editScheduled"] } },
 				},
 				{
 					displayName: 'Platforms (Optional)',
