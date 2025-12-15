@@ -459,7 +459,6 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 	formData.embeddable = String(embeddable);
 	if (license) formData.license = license;
 	formData.publicStatsViewable = String(publicStatsViewable);
-	formData.madeForKids = String(madeForKids);
 
 	if (thumbnailInput) {
 		if (thumbnailInput.toLowerCase().startsWith('http://') || thumbnailInput.toLowerCase().startsWith('https://')) {
@@ -479,7 +478,7 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 	const hasPaidProductPlacement = ctx.node.getNodeParameter('youtubeHasPaidProductPlacement', ctx.itemIndex, false) as boolean;
 	const recordingDate = ctx.node.getNodeParameter('youtubeRecordingDate', ctx.itemIndex, '') as string;
 
-	formData.selfDeclaredMadeForKids = String(selfDeclaredMadeForKids);
+	formData.selfDeclaredMadeForKids = String(selfDeclaredMadeForKids || madeForKids);
 	formData.containsSyntheticMedia = String(containsSyntheticMedia);
 	if (defaultLanguage) formData.defaultLanguage = defaultLanguage;
 	if (defaultAudioLanguage) formData.defaultAudioLanguage = defaultAudioLanguage;
