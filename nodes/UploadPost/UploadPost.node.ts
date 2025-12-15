@@ -261,6 +261,11 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 		formData.scheduled_date = scheduledDate;
 	}
 
+	const timezone = ctx.node.getNodeParameter("timezone", ctx.itemIndex, "") as string;
+	if (timezone) {
+		formData.timezone = timezone;
+	}
+
 	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean | undefined;
 	if (uploadAsync !== undefined) {
 		formData.async_upload = String(uploadAsync);
@@ -812,6 +817,10 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 			const body: IDataObject = {};
 			if (normalizedDate) {
 				body.scheduled_date = normalizedDate;
+			const newTimezone = ctx.node.getNodeParameter("newTimezone", ctx.itemIndex, "") as string;
+			if (newTimezone) {
+				body.timezone = newTimezone;
+			}
 			}
 			return {
 				endpoint: `/uploadposts/schedule/${jobId}`,
@@ -1292,6 +1301,15 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
 			},
 			{
+		{
+				displayName: "Timezone",
+				name: "timezone",
+				type: "string",
+				default: "",
+				placeholder: "Europe/Madrid",
+				description: "Optional timezone for the scheduled date. If not provided, UTC is assumed.",
+				displayOptions: { show: { resource: ["uploads"], operation: ["uploadPhotos","uploadVideo","uploadText"] } },
+			},
 				displayName: 'Upload Asynchronously',
 				name: 'uploadAsync',
 				type: 'boolean',
@@ -1409,6 +1427,15 @@ export class UploadPost implements INodeType {
 					displayOptions: { show: { operation: ['editScheduled'] } },
 				},
 				{
+			{
+					displayName: "New Timezone",
+					name: "newTimezone",
+					type: "string",
+					default: "",
+					placeholder: "Europe/Madrid",
+					description: "New timezone for the scheduled date",
+					displayOptions: { show: { operation: ["editScheduled"] } },
+				},
 					displayName: 'Platforms (Optional)',
 					name: 'analyticsPlatforms',
 					type: 'multiOptions',
