@@ -450,7 +450,6 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 	const embeddable = ctx.node.getNodeParameter('youtubeEmbeddable', ctx.itemIndex, true) as boolean;
 	const license = ctx.node.getNodeParameter('youtubeLicense', ctx.itemIndex, '') as string;
 	const publicStatsViewable = ctx.node.getNodeParameter('youtubePublicStatsViewable', ctx.itemIndex, true) as boolean;
-	const madeForKids = ctx.node.getNodeParameter('youtubeMadeForKids', ctx.itemIndex, false) as boolean;
 	const thumbnailInput = ctx.node.getNodeParameter('youtubeThumbnail', ctx.itemIndex, '') as string;
 
 	if (tagsRaw) formData['tags[]'] = ensureArrayFromCommaSeparated(tagsRaw);
@@ -459,7 +458,6 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 	formData.embeddable = String(embeddable);
 	if (license) formData.license = license;
 	formData.publicStatsViewable = String(publicStatsViewable);
-	formData.madeForKids = String(madeForKids);
 
 	if (thumbnailInput) {
 		if (thumbnailInput.toLowerCase().startsWith('http://') || thumbnailInput.toLowerCase().startsWith('https://')) {
@@ -970,7 +968,7 @@ const pollUploadStatus = async (
 ): Promise<any> => {
 	const start = Date.now();
 	let finalData: any = { success: false, message: 'Polling timed out', request_id: requestId };
-	while (true) {
+	let isPolling = true; while (isPolling) {
 		await sleep(Math.max(1, pollInterval) * 1000);
 		if (Date.now() - start > Math.max(5, pollTimeout) * 1000) {
 			break;
@@ -2073,19 +2071,6 @@ export class UploadPost implements INodeType {
 				type: 'boolean',
 				default: true,
 				description: 'Whether public stats are viewable for the YouTube video. Only for Upload Video.',
-				displayOptions: {
-					show: {
-						operation: ['uploadVideo'],
-						platform: ['youtube']
-					},
-				},
-			},
-			{
-				displayName: 'YouTube Made For Kids',
-				name: 'youtubeMadeForKids',
-				type: 'boolean',
-				default: false,
-				description: 'Whether the YouTube video is made for kids. Only for Upload Video.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
