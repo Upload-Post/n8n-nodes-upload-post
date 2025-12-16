@@ -1301,7 +1301,6 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
 			},
 			{
-		{
 				displayName: "Timezone",
 				name: "timezone",
 				type: "string",
@@ -1310,6 +1309,7 @@ export class UploadPost implements INodeType {
 				description: "Optional timezone for the scheduled date. If not provided, UTC is assumed.",
 				displayOptions: { show: { resource: ["uploads"], operation: ["uploadPhotos","uploadVideo","uploadText"] } },
 			},
+			{
 				displayName: 'Upload Asynchronously',
 				name: 'uploadAsync',
 				type: 'boolean',
@@ -1427,7 +1427,6 @@ export class UploadPost implements INodeType {
 					displayOptions: { show: { operation: ['editScheduled'] } },
 				},
 				{
-			{
 					displayName: "New Timezone",
 					name: "newTimezone",
 					type: "string",
@@ -1436,6 +1435,7 @@ export class UploadPost implements INodeType {
 					description: "New timezone for the scheduled date",
 					displayOptions: { show: { operation: ["editScheduled"] } },
 				},
+				{
 					displayName: 'Platforms (Optional)',
 					name: 'analyticsPlatforms',
 					type: 'multiOptions',
@@ -1448,7 +1448,7 @@ export class UploadPost implements INodeType {
 					default: [],
 					description: 'Platforms to fetch analytics for (comma-joined in request)',
 					displayOptions: { show: { operation: ['getAnalytics'] } },
-			},
+				},
 			// Removed from/to date filters (not supported by API)
 
 			// Create user
