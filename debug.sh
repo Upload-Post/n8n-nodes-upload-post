@@ -13,13 +13,19 @@ build_and_restart() {
     echo "🔗 Linking package..."
     npm link
 
-    echo "📂 Changing to ~/.n8n directory..."
-    cd ~/.n8n
+    echo "📂 Changing to ~/.n8n/custom directory..."
+    mkdir -p ~/.n8n/custom
+    cd ~/.n8n/custom
+
+    if [ ! -f package.json ]; then
+        echo "📄 Initializing package.json in ~/.n8n/custom..."
+        npm init -y
+    fi
 
     echo "🛑 Stopping n8n if running..."
     pkill -f "n8n start" || true  # Do not fail if no process is running
 
-    echo "🔗 Linking n8n-nodes-upload-post in n8n..."
+    echo "🔗 Linking n8n-nodes-upload-post in ~/.n8n/custom..."
     npm link n8n-nodes-upload-post
 
     echo "🎯 Starting n8n..."
