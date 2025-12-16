@@ -105,6 +105,40 @@ Agent → Content Generation → Upload Post Node → Multiple Platforms
 }
 ```
 
+
+### Pinterest Upload with Alt Text
+
+```json
+{
+  "operation": "uploadPhotos",
+  "user": "design_profile",
+  "platform": ["pinterest"],
+  "title": "Modern Home Office Setup",
+  "description": "Minimalist workspace inspiration for remote work",
+  "photos": "{{ $binary.data }}",
+  "pinterestBoardId": "1234567890",
+  "pinterestAltText": "A clean white desk with a laptop, plant, and notebook arranged neatly",
+  "pinterestLink": "https://example.com/home-office-tips"
+}
+```
+
+### Pinterest Video Upload
+
+```json
+{
+  "operation": "uploadVideo",
+  "user": "creator_profile",
+  "platform": ["pinterest"],
+  "title": "DIY Desk Makeover Tutorial",
+  "description": "Transform your workspace in 10 minutes",
+  "video": "{{ $binary.video }}",
+  "pinterestBoardId": "1234567890",
+  "pinterestAltText": "Step-by-step video showing desk transformation with tools and materials",
+  "pinterestLink": "https://example.com/diy-desk",
+  "pinterestCoverImageUrl": "https://example.com/cover.jpg"
+}
+```
+
 ## Agent Best Practices
 
 ### Content Preparation

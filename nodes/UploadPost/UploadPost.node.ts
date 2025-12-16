@@ -304,6 +304,10 @@ const applyPinterestOptions = (ctx: ExecutionContext, operation: UploadOperation
 	if (pinterestLink) {
 		formData.pinterest_link = pinterestLink;
 	}
+	const pinterestAltText = ctx.node.getNodeParameter('pinterestAltText', ctx.itemIndex, '') as string;
+	if (pinterestAltText) {
+		formData.pinterest_alt_text = pinterestAltText;
+	}
 	if (operation === 'uploadVideo') {
 		const pinterestCoverImageUrl = ctx.node.getNodeParameter('pinterestCoverImageUrl', ctx.itemIndex, '') as string;
 		const pinterestCoverImageContentType = ctx.node.getNodeParameter('pinterestCoverImageContentType', ctx.itemIndex, '') as string;
@@ -2263,6 +2267,19 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional link to attach to the Pinterest pin',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos', 'uploadVideo'],
+						platform: ['pinterest']
+					}
+				},
+			},
+			{
+				displayName: 'Pinterest Alt Text (Photo/Video)',
+				name: 'pinterestAltText',
+				type: 'string',
+				default: '',
+				description: 'Optional alt text for accessibility. Describes the image for screen readers and improves SEO.',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo'],
