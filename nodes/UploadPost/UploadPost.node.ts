@@ -300,6 +300,10 @@ const applyPinterestOptions = (ctx: ExecutionContext, operation: UploadOperation
 	if (pinterestBoardId) {
 		formData.pinterest_board_id = pinterestBoardId;
 	}
+	const pinterestAltText = ctx.node.getNodeParameter('pinterestAltText', ctx.itemIndex, '') as string;
+	if (pinterestAltText) {
+		formData.pinterest_alt_text = pinterestAltText;
+	}
 	const pinterestLink = ctx.node.getNodeParameter('pinterestLink', ctx.itemIndex, '') as string;
 	if (pinterestLink) {
 		formData.pinterest_link = pinterestLink;
@@ -1252,6 +1256,14 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'Override for YouTube video description. When empty we default to the main title.',
 				displayOptions: { show: { operation: ['uploadVideo'], platform: ['youtube'] } },
+			},
+			{
+				displayName: 'Pinterest Alt Text (Override)',
+				name: 'pinterestAltText',
+				type: 'string',
+				default: '',
+				description: 'Optional override for Pinterest alt text',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['pinterest'] } },
 			},
 			{
 				displayName: 'Pinterest Description (Override)',
