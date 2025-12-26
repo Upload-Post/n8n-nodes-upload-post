@@ -165,7 +165,7 @@ const getBinaryFieldFromItem = async (
 };
 
 const PLATFORM_SUPPORT: Record<UploadOperation, string[]> = {
-	uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x'],
+	uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'reddit'],
 	uploadVideo: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
 	uploadText: ['bluesky', 'facebook', 'linkedin', 'reddit', 'threads', 'x'],
 };
@@ -186,7 +186,7 @@ const TITLE_OVERRIDES: Array<{
 	{ platform: 'x', param: 'xTitle', field: 'x_title' },
 	{ platform: 'youtube', param: 'youtubeTitle', field: 'youtube_title', operations: ['uploadVideo'] },
 	{ platform: 'pinterest', param: 'pinterestTitle', field: 'pinterest_title' },
-	{ platform: 'threads', param: 'threadsTitle', field: 'threads_title', operations: ['uploadText'] },
+	{ platform: 'threads', param: 'threadsTitle', field: 'threads_title' },
 ];
 
 const DESCRIPTION_OVERRIDES: Array<{
@@ -256,6 +256,16 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 	formData.user = user;
 	formData.title = title;
 
+	const firstComment = ctx.node.getNodeParameter('firstComment', ctx.itemIndex, '') as string;
+	if (firstComment) {
+		formData.first_comment = firstComment;
+	}
+
+	const altText = ctx.node.getNodeParameter('altText', ctx.itemIndex, '') as string;
+	if (altText) {
+		formData.alt_text = altText;
+	}
+
 	const scheduledDate = normalizeDateInput(ctx.node.getNodeParameter('scheduledDate', ctx.itemIndex, '') as string);
 	if (scheduledDate) {
 		formData.scheduled_date = scheduledDate;
@@ -266,10 +276,8 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 		formData.timezone = timezone;
 	}
 
-	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean | undefined;
-	if (uploadAsync !== undefined) {
-		formData.async_upload = String(uploadAsync);
-	}
+	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean;
+	formData.async_upload = String(uploadAsync);
 
 	const rawPlatforms = ctx.node.getNodeParameter('platform', ctx.itemIndex) as string[];
 	const platforms = getFilteredPlatforms(operation, Array.isArray(rawPlatforms) ? rawPlatforms : []);
@@ -664,11 +672,11 @@ const applyUploadPlatformOptions = async (
 		applyXOptions(ctx, operation, formData);
 	}
 
-	if (operation === 'uploadText' && platforms.includes('threads')) {
+	if (platforms.includes('threads')) {
 		applyThreadsOptions(ctx, formData);
 	}
 
-	if (operation === 'uploadText' && platforms.includes('reddit')) {
+	if (platforms.includes('reddit')) {
 		applyRedditOptions(ctx, formData);
 	}
 };
@@ -1084,7 +1092,6 @@ export class UploadPost implements INodeType {
 				default: 'listUsers',
 				displayOptions: { show: { resource: ['users'] } },
 			},
-			// (Removed separate JWT resource; JWT operations are under Users below)
 
 		// Common Fields for all operations
 			{
@@ -1136,6 +1143,22 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'Title of the post. For Upload Text, this is the main text content. For some video platforms, this acts as a fallback for description if a specific description is not provided.',
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+			},
+			{
+				displayName: 'First Comment',
+				name: 'firstComment',
+				type: 'string',
+				default: '',
+				description: 'Text to post as the first comment (or reply) immediately after publishing. Supported on Instagram, Facebook, X, Threads, YouTube, Reddit, Bluesky.',
+				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+			},
+			{
+				displayName: 'Alt Text (Extended)',
+				name: 'altText',
+				type: 'string',
+				default: '',
+				description: 'Alternative text for images. Supported on LinkedIn, Pinterest, and others.',
+				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos'] } },
 			},
 				// Platform-specific Title Overrides (appear when the platform is selected)
 				{
@@ -1200,7 +1223,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for Pinterest title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['pinterest'] } 				},
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['pinterest'] } },
 			},
 			{
 				displayName: 'Threads Title (Override)',
@@ -1208,7 +1231,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional override for Threads title',
-				displayOptions: { show: { operation: ['uploadText'], platform: ['threads'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads'] } },
 			},
 
 			// Generic Description & Platform Overrides
@@ -1385,8 +1408,6 @@ export class UploadPost implements INodeType {
 					}
 				},
 			},
-			// Removed platform filter (not supported by API)
-			// Removed status filter (not supported by API)
 			{
 				displayName: 'Page',
 				name: 'historyPage',
@@ -1461,7 +1482,6 @@ export class UploadPost implements INodeType {
 					description: 'Platforms to fetch analytics for (comma-joined in request)',
 					displayOptions: { show: { operation: ['getAnalytics'] } },
 				},
-			// Removed from/to date filters (not supported by API)
 
 			// Create user
 			{
@@ -2007,7 +2027,7 @@ export class UploadPost implements INodeType {
 				type: 'boolean',
 				default: false,
 				description: 'Whether long text is published as a single post. If false (default), a thread is created if the text exceeds 500 characters.',
-				displayOptions: { show: { operation: ['uploadText'], platform: ['threads'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads'] } },
 			},
 
 		// ----- Reddit Specific Parameters -----
@@ -2018,7 +2038,7 @@ export class UploadPost implements INodeType {
 				required: true,
 				default: '',
 				description: 'Destination subreddit, without r/ (e.g., python)',
-				displayOptions: { show: { operation: ['uploadText'], platform: ['reddit'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit'] } },
 			},
 			{
 				displayName: 'Reddit Flair ID',
@@ -2026,7 +2046,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'ID of the flair template to apply to the post',
-				displayOptions: { show: { operation: ['uploadText'], platform: ['reddit'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit'] } },
 			},
 
 		// ----- YouTube Specific Parameters (Video Only) -----
@@ -2586,7 +2606,7 @@ export class UploadPost implements INodeType {
 				];
 
 				const platformSupport: Record<string, string[]> = {
-					uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x'],
+					uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'reddit'],
 					uploadVideo: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
 					uploadText: ['bluesky', 'facebook', 'linkedin', 'reddit', 'threads', 'x'],
 				};
