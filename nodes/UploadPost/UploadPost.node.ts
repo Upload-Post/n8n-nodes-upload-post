@@ -814,6 +814,38 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 				waitForCompletion: false,
 			};
 		}
+t	case 'editPost': {
+			const requestId = ctx.node.getNodeParameter('editRequestId', ctx.itemIndex) as string;
+			const platform = ctx.node.getNodeParameter('editPlatform', ctx.itemIndex) as string;
+			const title = ctx.node.getNodeParameter('editTitle', ctx.itemIndex, '') as string;
+			const description = ctx.node.getNodeParameter('editDescription', ctx.itemIndex, '') as string;
+			const body: IDataObject = { request_id: requestId, platform };
+			if (title) body.title = title;
+			if (description) body.description = description;
+
+			if (platform === 'youtube') {
+				const tags = ctx.node.getNodeParameter('editYoutubeTags', ctx.itemIndex, '') as string;
+				const categoryId = ctx.node.getNodeParameter('editYoutubeCategoryId', ctx.itemIndex, '') as string;
+				const privacyStatus = ctx.node.getNodeParameter('editYoutubePrivacyStatus', ctx.itemIndex, '') as string;
+				if (tags) body.tags = tags;
+				if (categoryId) body.categoryId = categoryId;
+				if (privacyStatus) body.privacyStatus = privacyStatus;
+			}
+			if (platform === 'pinterest') {
+				const link = ctx.node.getNodeParameter('editPinterestLink', ctx.itemIndex, '') as string;
+				const boardId = ctx.node.getNodeParameter('editPinterestBoardId', ctx.itemIndex, '') as string;
+				if (link) body.link = link;
+				if (boardId) body.board_id = boardId;
+			}
+
+			return {
+				endpoint: '/uploadposts/edit',
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
 		case 'editScheduled': {
 			const jobId = ctx.node.getNodeParameter('scheduleJobId', ctx.itemIndex) as string;
 			const newScheduledDateRaw = ctx.node.getNodeParameter('newScheduledDate', ctx.itemIndex, '') as string;
@@ -1059,6 +1091,7 @@ export class UploadPost implements INodeType {
 				noDataExpression: true,
 				options: [
 						{ name: 'Cancel Scheduled Post', value: 'cancelScheduled', action: 'Cancel scheduled post', description: 'Cancel a scheduled post by its job ID' },
+t					{ name: 'Edit Post (Live)', value: 'editPost', action: 'Edit post', description: 'Edit a post after it has been published (Supported: YouTube, Instagram, Facebook, Pinterest, Reddit)' },
 						{ name: 'Edit Scheduled Post', value: 'editScheduled', action: 'Edit scheduled post', description: 'Edit schedule details (like date/time) by job ID' },
 						{ name: 'Get Analytics', value: 'getAnalytics', action: 'Get analytics', description: 'Retrieve aggregated analytics for uploads' },
 					{ name: 'Get Upload History', value: 'getHistory', action: 'Get upload history', description: 'List past uploads with optional filters' },
@@ -1419,6 +1452,92 @@ export class UploadPost implements INodeType {
 					default: '',
 					description: 'Scheduled job identifier',
 					displayOptions: { show: { operation: ['cancelScheduled','editScheduled'] } },
+				},
+t			// Edit Post fields
+				{
+					displayName: 'Request ID',
+					name: 'editRequestId',
+					type: 'string',
+					required: true,
+					default: '',
+					description: 'The request ID of the original upload',
+					displayOptions: { show: { operation: ['editPost'] } },
+				},
+				{
+					displayName: 'Platform',
+					name: 'editPlatform',
+					type: 'options',
+					options: [
+						{ name: 'YouTube', value: 'youtube' },
+						{ name: 'Instagram', value: 'instagram' },
+						{ name: 'Facebook', value: 'facebook' },
+						{ name: 'Pinterest', value: 'pinterest' },
+						{ name: 'Reddit', value: 'reddit' },
+					],
+					default: 'youtube',
+					description: 'The platform where the post is published',
+					displayOptions: { show: { operation: ['editPost'] } },
+				},
+				{
+					displayName: 'New Title',
+					name: 'editTitle',
+					type: 'string',
+					default: '',
+					description: 'New title (YouTube, Pinterest)',
+					displayOptions: { show: { operation: ['editPost'], editPlatform: ['youtube', 'pinterest'] } },
+				},
+				{
+					displayName: 'New Description/Caption',
+					name: 'editDescription',
+					type: 'string',
+					default: '',
+					description: 'New description, caption, or post text',
+					displayOptions: { show: { operation: ['editPost'] } },
+				},
+				{
+					displayName: 'YouTube Tags',
+					name: 'editYoutubeTags',
+					type: 'string',
+					default: '',
+					description: 'Comma-separated tags (YouTube only)',
+					displayOptions: { show: { operation: ['editPost'], editPlatform: ['youtube'] } },
+				},
+				{
+					displayName: 'YouTube Category ID',
+					name: 'editYoutubeCategoryId',
+					type: 'string',
+					default: '',
+					description: 'Category ID (YouTube only)',
+					displayOptions: { show: { operation: ['editPost'], editPlatform: ['youtube'] } },
+				},
+				{
+					displayName: 'YouTube Privacy Status',
+					name: 'editYoutubePrivacyStatus',
+					type: 'options',
+					options: [
+						{ name: 'Public', value: 'public' },
+						{ name: 'Private', value: 'private' },
+						{ name: 'Unlisted', value: 'unlisted' },
+					],
+					default: '',
+					description: 'Privacy status (YouTube only)',
+					displayOptions: { show: { operation: ['editPost'], editPlatform: ['youtube'] } },
+				},
+				{
+					displayName: 'Pinterest Link',
+					name: 'editPinterestLink',
+					type: 'string',
+					default: '',
+					description: 'New link URL (Pinterest only)',
+					displayOptions: { show: { operation: ['editPost'], editPlatform: ['pinterest'] } },
+				},
+				{
+					displayName: 'Pinterest Board ID',
+					name: 'editPinterestBoardId',
+					type: 'string',
+					default: '',
+					description: 'New Board ID (Pinterest only)',
+					displayOptions: { show: { operation: ['editPost'], editPlatform: ['pinterest'] } },
 				},
 				// Analytics fields
 				{
