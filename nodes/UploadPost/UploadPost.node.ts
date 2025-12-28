@@ -607,7 +607,7 @@ const applyXOptions = (ctx: ExecutionContext, operation: UploadOperation, formDa
 		if (replySettings && replySettings !== 'everyone') formData.reply_settings = replySettings;
 		formData.nullcast = String(nullcast);
 
-		if (operation === 'uploadVideo') {
+		if (operation === 'uploadVideo' || operation === 'uploadPhotos') {
 			const xLongTextAsPost = ctx.node.getNodeParameter('xLongTextAsPost', ctx.itemIndex, false) as boolean;
 			if (xLongTextAsPost) {
 				formData.x_long_text_as_post = String(xLongTextAsPost);
@@ -2578,7 +2578,7 @@ export class UploadPost implements INodeType {
 				description: 'Whether to post long text as a single post instead of splitting into a thread (if supported)',
 				displayOptions: {
 					show: {
-						operation: ['uploadVideo', 'uploadText'],
+						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
 						platform: ['x']
 					},
 				},
