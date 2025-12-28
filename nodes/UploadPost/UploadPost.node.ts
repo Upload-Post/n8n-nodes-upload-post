@@ -94,7 +94,7 @@ const parseJsonIfNeeded = (data: any): any => {
 
 const API_BASE_URL = 'https://api.upload-post.com/api';
 
-type UploadOperation = 'uploadPhotos' | 'uploadVideo' | 'uploadText';
+type UploadOperation = 'uploadPhotos' | 'uploadVideo' | 'uploadText' | 'uploadDocument';
 
 type RequestMethod = 'GET' | 'POST' | 'DELETE';
 
@@ -168,6 +168,7 @@ const PLATFORM_SUPPORT: Record<UploadOperation, string[]> = {
 	uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'reddit'],
 	uploadVideo: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
 	uploadText: ['bluesky', 'facebook', 'linkedin', 'reddit', 'threads', 'x'],
+	uploadDocument: ['linkedin'],
 };
 
 const DESCRIPTION_ENABLED_PLATFORMS = new Set(['linkedin', 'facebook', 'youtube', 'pinterest', 'tiktok']);
@@ -353,6 +354,13 @@ const applyLinkedinOptions = (ctx: ExecutionContext, operation: UploadOperation,
 	} else if (operation === 'uploadVideo') {
 		const linkedinVisibility = ctx.node.getNodeParameter('linkedinVisibility', ctx.itemIndex, 'PUBLIC') as string;
 		formData.visibility = linkedinVisibility;
+	} else if (operation === 'uploadDocument') {
+		const linkedinVisibility = ctx.node.getNodeParameter('linkedinVisibility', ctx.itemIndex, 'PUBLIC') as string;
+		formData.visibility = linkedinVisibility;
+		const documentDescription = ctx.node.getNodeParameter('documentDescription', ctx.itemIndex, '') as string;
+		if (documentDescription) {
+			formData.description = documentDescription;
+		}
 	}
 };
 
@@ -767,6 +775,37 @@ const buildUploadTextRequest = async (
 	};
 };
 
+const buildUploadDocumentRequest = async (
+	ctx: ExecutionContext,
+): Promise<RequestConfig> => {
+	const prep = prepareUploadBase(ctx, 'uploadDocument');
+	const documentInput = ctx.node.getNodeParameter('document', ctx.itemIndex, '') as string;
+
+	if (documentInput) {
+		if (documentInput.toLowerCase().startsWith('http://') || documentInput.toLowerCase().startsWith('https://')) {
+			prep.formData.document = documentInput;
+		} else {
+			const binaryField = await getBinaryFieldFromItem(ctx, documentInput, 'Binary data for document property');
+			prep.formData.document = binaryField;
+		}
+	}
+
+	// Apply LinkedIn options for document uploads
+	if (prep.platforms.includes('linkedin')) {
+		applyLinkedinOptions(ctx, 'uploadDocument', prep.formData);
+	}
+
+	return {
+		endpoint: '/upload_document',
+		method: 'POST',
+		formData: prep.formData,
+		isUploadOperation: true,
+		waitForCompletion: prep.waitForCompletion,
+		pollInterval: prep.pollInterval,
+		pollTimeout: prep.pollTimeout,
+	};
+};
+
 const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 	switch (ctx.operation) {
 		case 'getStatus': {
@@ -925,6 +964,9 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 	if (ctx.operation === 'uploadText') {
 		return buildUploadTextRequest(ctx);
 	}
+	if (ctx.operation === 'uploadDocument') {
+		return buildUploadDocumentRequest(ctx);
+	}
 
 	const resource = ctx.node.getNodeParameter('resource', ctx.itemIndex) as string;
 	if (resource === 'monitoring') {
@@ -1052,6 +1094,7 @@ export class UploadPost implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				options: [
+					{ name: 'Upload Document', value: 'uploadDocument', action: 'Upload a document', description: 'Upload a document (PDF, PPT, PPTX, DOC, DOCX) as a native carousel/viewer (Supports: LinkedIn only)' },
 					{ name: 'Upload Photo(s)', value: 'uploadPhotos', action: 'Upload photos', description: 'Upload one or more photos (Supports: TikTok, Instagram, LinkedIn, Facebook, X, Threads)' },
 					{ name: 'Upload Text', value: 'uploadText', action: 'Upload a text post', description: 'Upload a text-based post (Supports: X, LinkedIn, Facebook, Threads)' },
 					{ name: 'Upload Video', value: 'uploadVideo', action: 'Upload a video', description: 'Upload a single video (Supports: TikTok, Instagram, LinkedIn, YouTube, Facebook, X, Threads)' },
@@ -1106,7 +1149,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['uploads','users'],
-						operation: ['uploadPhotos','uploadVideo','uploadText','generateJwt']
+						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument','generateJwt']
 					}
 				},
 			},
@@ -1120,7 +1163,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['uploads','users'],
-						operation: ['uploadPhotos','uploadVideo','uploadText','generateJwt'],
+						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument','generateJwt'],
 						user: [MANUAL_USER_VALUE]
 					}
 				},
@@ -1133,7 +1176,7 @@ export class UploadPost implements INodeType {
 				typeOptions: { loadOptionsMethod: 'getPlatforms' },
 				default: [],
 				description: 'Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
-				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'] } },
 			},
 			{
 				displayName: 'Title / Main Content',
@@ -1142,7 +1185,7 @@ export class UploadPost implements INodeType {
 				required: true,
 				default: '',
 				description: 'Title of the post. For Upload Text, this is the main text content. For some video platforms, this acts as a fallback for description if a specific description is not provided.',
-				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'] } },
 			},
 			{
 				displayName: 'First Comment',
@@ -1327,13 +1370,40 @@ export class UploadPost implements INodeType {
 					},
 				},
 			},
+		// Fields for Upload Document
+			{
+				displayName: 'Document (File or URL)',
+				name: 'document',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The document file (PDF, PPT, PPTX, DOC, DOCX) to upload or a document URL. For files, enter the binary property name (e.g., data). Max 100MB, 300 pages.',
+				displayOptions: {
+					show: {
+						operation: ['uploadDocument'],
+					},
+				},
+			},
+			{
+				displayName: 'Document Description',
+				name: 'documentDescription',
+				type: 'string',
+				default: '',
+				description: 'Optional description/commentary for the LinkedIn document post',
+				displayOptions: {
+					show: {
+						operation: ['uploadDocument'],
+						platform: ['linkedin'],
+					},
+				},
+			},
 			{
 				displayName: 'Scheduled Date',
 				name: 'scheduledDate',
 				type: 'dateTime',
 				default: '',
 				description: 'Optional scheduling date/time. If set, the API will schedule the publication instead of posting immediately.',
-				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'] } },
 			},
 			{
 				displayName: "Timezone",
@@ -1342,7 +1412,7 @@ export class UploadPost implements INodeType {
 				default: "",
 				placeholder: "Europe/Madrid",
 				description: "Optional timezone for the scheduled date. If not provided, UTC is assumed.",
-				displayOptions: { show: { resource: ["uploads"], operation: ["uploadPhotos","uploadVideo","uploadText"] } },
+				displayOptions: { show: { resource: ["uploads"], operation: ["uploadPhotos","uploadVideo","uploadText","uploadDocument"] } },
 			},
 			{
 				displayName: 'Upload Asynchronously',
@@ -1352,7 +1422,7 @@ export class UploadPost implements INodeType {
 				description: 'Whether to process the upload asynchronously and return immediately. If you set to false but the upload takes longer than 59 seconds, it will automatically switch to asynchronous processing to avoid timeouts. In that case, use the request_id with the Upload Status endpoint to check the upload status and result.',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos','uploadVideo','uploadText']
+						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument']
 					}
 				},
 			},
@@ -1364,7 +1434,7 @@ export class UploadPost implements INodeType {
 				description: 'Whether to perform best-effort sleeping between status checks within this node. Not guaranteed to finish; for reliable long polling use a separate Wait node plus Get Upload Status.',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos','uploadVideo','uploadText']
+						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument']
 					}
 				},
 			},
@@ -1376,7 +1446,7 @@ export class UploadPost implements INodeType {
 				description: 'Sleep interval between status checks when waiting for completion',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos','uploadVideo','uploadText'],
+						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'],
 						waitForCompletion: [true]
 					}
 				},
@@ -1389,7 +1459,7 @@ export class UploadPost implements INodeType {
 				description: 'Maximum time to sleep-and-check before giving up inside this node',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos','uploadVideo','uploadText'],
+						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'],
 						waitForCompletion: [true]
 					}
 				},
@@ -1564,7 +1634,7 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { operation: ['validateJwt'] } },
 			},
 
-		// ----- LinkedIn Specific Parameters ----- 
+		// ----- LinkedIn Specific Parameters -----
 			{
 				displayName: 'LinkedIn Visibility',
 				name: 'linkedinVisibility',
@@ -1572,14 +1642,14 @@ export class UploadPost implements INodeType {
 				options: [
 					{ name: 'Public', value: 'PUBLIC' },
 					{ name: 'Connections', value: 'CONNECTIONS'},
-					{ name: 'Logged In', value: 'LOGGED_IN', displayOptions: { show: { operation: ['uploadVideo'] } } },
-					{ name: 'Container', value: 'CONTAINER', displayOptions: { show: { operation: ['uploadVideo'] } } },
+					{ name: 'Logged In', value: 'LOGGED_IN', displayOptions: { show: { operation: ['uploadVideo', 'uploadDocument'] } } },
+					{ name: 'Container', value: 'CONTAINER', displayOptions: { show: { operation: ['uploadVideo', 'uploadDocument'] } } },
 				],
 				default: 'PUBLIC',
-				description: 'Visibility for LinkedIn. For Photos, only PUBLIC is supported by API. For Video, CONNECTIONS, PUBLIC, LOGGED_IN, CONTAINER. Not used for Upload Text.',
+				description: 'Visibility for LinkedIn. For Photos, only PUBLIC is supported by API. For Video/Document, CONNECTIONS, PUBLIC, LOGGED_IN, CONTAINER. Not used for Upload Text.',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos', 'uploadVideo'],
+						operation: ['uploadPhotos', 'uploadVideo', 'uploadDocument'],
 						platform: ['linkedin']
 					},
 				},
@@ -1594,7 +1664,7 @@ export class UploadPost implements INodeType {
 				typeOptions: { loadOptionsMethod: 'getLinkedinPages', loadOptionsDependsOn: ['user'] },
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
+						operation: ['uploadPhotos', 'uploadVideo', 'uploadText', 'uploadDocument'],
 						platform: ['linkedin']
 					}
 				},
@@ -1608,7 +1678,7 @@ export class UploadPost implements INodeType {
 				description: 'Provide the LinkedIn page identifier when it does not appear in the list',
 				displayOptions: {
 					show: {
-						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
+						operation: ['uploadPhotos', 'uploadVideo', 'uploadText', 'uploadDocument'],
 						platform: ['linkedin'],
 						targetLinkedinPageId: [MANUAL_LINKEDIN_VALUE]
 					}
