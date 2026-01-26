@@ -303,6 +303,11 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 		formData.timezone = timezone;
 	}
 
+	const addToQueue = ctx.node.getNodeParameter('addToQueue', ctx.itemIndex, false) as boolean;
+	if (addToQueue) {
+		formData.add_to_queue = 'true';
+	}
+
 	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean;
 	formData.async_upload = String(uploadAsync);
 
@@ -1497,6 +1502,14 @@ export class UploadPost implements INodeType {
 				placeholder: "Europe/Madrid",
 				description: "Optional timezone for the scheduled date. If not provided, UTC is assumed.",
 				displayOptions: { show: { resource: ["uploads"], operation: ["uploadPhotos","uploadVideo","uploadText","uploadDocument"] } },
+			},
+			{
+				displayName: 'Add to Queue',
+				name: 'addToQueue',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to add this post to your configured queue instead of posting immediately. The post will be automatically scheduled to your next available queue slot. Configure your queue settings in the Upload-Post dashboard.',
+				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'] } },
 			},
 			{
 				displayName: 'Upload Asynchronously',
