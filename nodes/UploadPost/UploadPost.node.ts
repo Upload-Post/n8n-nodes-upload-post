@@ -203,6 +203,21 @@ const DESCRIPTION_OVERRIDES: Array<{
 	{ platform: 'pinterest', param: 'pinterestDescription', field: 'pinterest_description', operations: ['uploadPhotos', 'uploadVideo'] },
 ];
 
+const FIRST_COMMENT_OVERRIDES: Array<{
+	platform: string;
+	param: string;
+	field: string;
+	operations?: UploadOperation[];
+}> = [
+	{ platform: 'instagram', param: 'instagramFirstComment', field: 'instagram_first_comment' },
+	{ platform: 'facebook', param: 'facebookFirstComment', field: 'facebook_first_comment' },
+	{ platform: 'x', param: 'xFirstComment', field: 'x_first_comment' },
+	{ platform: 'threads', param: 'threadsFirstComment', field: 'threads_first_comment' },
+	{ platform: 'youtube', param: 'youtubeFirstComment', field: 'youtube_first_comment', operations: ['uploadVideo'] },
+	{ platform: 'reddit', param: 'redditFirstComment', field: 'reddit_first_comment' },
+	{ platform: 'bluesky', param: 'blueskyFirstComment', field: 'bluesky_first_comment' },
+];
+
 const getFilteredPlatforms = (operation: UploadOperation, platforms: string[]): string[] => {
 	const allowed = PLATFORM_SUPPORT[operation] ?? [];
 	return platforms.filter(platform => allowed.includes(platform));
@@ -230,6 +245,17 @@ const applyDescriptionOverrides = (ctx: ExecutionContext, operation: UploadOpera
 	}
 
 	for (const override of DESCRIPTION_OVERRIDES) {
+		if (!platforms.includes(override.platform)) continue;
+		if (override.operations && !override.operations.includes(operation)) continue;
+		const value = ctx.node.getNodeParameter(override.param, ctx.itemIndex, '') as string;
+		if (value) {
+			formData[override.field] = value;
+		}
+	}
+};
+
+const applyFirstCommentOverrides = (ctx: ExecutionContext, operation: UploadOperation, platforms: string[], formData: IDataObject) => {
+	for (const override of FIRST_COMMENT_OVERRIDES) {
 		if (!platforms.includes(override.platform)) continue;
 		if (override.operations && !override.operations.includes(operation)) continue;
 		const value = ctx.node.getNodeParameter(override.param, ctx.itemIndex, '') as string;
@@ -286,6 +312,7 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 
 	applyTitleOverrides(ctx, operation, platforms, formData);
 	applyDescriptionOverrides(ctx, operation, platforms, formData);
+	applyFirstCommentOverrides(ctx, operation, platforms, formData);
 
 	const waitForCompletion = ctx.node.getNodeParameter('waitForCompletion', ctx.itemIndex, false) as boolean;
 	const pollInterval = ctx.node.getNodeParameter('pollInterval', ctx.itemIndex, 10) as number;
@@ -1340,6 +1367,63 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['pinterest'] } },
 			},
 
+			// Platform-specific First Comment Overrides
+			{
+				displayName: 'Instagram First Comment (Override)',
+				name: 'instagramFirstComment',
+				type: 'string',
+				default: '',
+				description: 'Optional override for Instagram first comment. If provided, overrides the generic First Comment for Instagram.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['instagram'] } },
+			},
+			{
+				displayName: 'Facebook First Comment (Override)',
+				name: 'facebookFirstComment',
+				type: 'string',
+				default: '',
+				description: 'Optional override for Facebook first comment. If provided, overrides the generic First Comment for Facebook.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['facebook'] } },
+			},
+			{
+				displayName: 'X First Comment (Override)',
+				name: 'xFirstComment',
+				type: 'string',
+				default: '',
+				description: 'Optional override for X (Twitter) first comment/reply. If provided, overrides the generic First Comment for X.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['x'] } },
+			},
+			{
+				displayName: 'Threads First Comment (Override)',
+				name: 'threadsFirstComment',
+				type: 'string',
+				default: '',
+				description: 'Optional override for Threads first comment/reply. If provided, overrides the generic First Comment for Threads.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads'] } },
+			},
+			{
+				displayName: 'YouTube First Comment (Override)',
+				name: 'youtubeFirstComment',
+				type: 'string',
+				default: '',
+				description: 'Optional override for YouTube first comment. If provided, overrides the generic First Comment for YouTube.',
+				displayOptions: { show: { operation: ['uploadVideo'], platform: ['youtube'] } },
+			},
+			{
+				displayName: 'Reddit First Comment (Override)',
+				name: 'redditFirstComment',
+				type: 'string',
+				default: '',
+				description: 'Optional override for Reddit first comment. If provided, overrides the generic First Comment for Reddit.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit'] } },
+			},
+			{
+				displayName: 'Bluesky First Comment (Override)',
+				name: 'blueskyFirstComment',
+				type: 'string',
+				default: '',
+				description: 'Optional override for Bluesky first comment/reply. If provided, overrides the generic First Comment for Bluesky.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky'] } },
+			},
 
 		// Fields for Upload Photo(s)
 			{
