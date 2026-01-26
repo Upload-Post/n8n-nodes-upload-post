@@ -149,7 +149,8 @@ You have two ways to handle this in n8n:
 - **Thumbnail**: Custom thumbnail via URL or binary file.
 
 #### X (Twitter)
-- **Common Options**: Tagged user IDs (comma-separated), reply settings (everyone/following/mentioned/verified/subscribers), geo place ID, long text as single post.
+- **Common Options**: Tagged user IDs (comma-separated), reply settings (everyone/following/mentioned/verified/subscribers), geo place ID.
+- **Long-Form Posts (X Premium)**: Enable "X Long Text as Single Post" to post up to 25,000 characters as a single post instead of a thread. Requires X Premium subscription.
 - **Video/Photo Options**: Nullcast (promoted-only posts), place ID.
 - **Text Options**: Poll options (2-4 options, 25 chars max each, 5-10080 min duration), poll reply settings, post URL, quote tweet ID, card URI, direct message deep link.
 - **Community Features**: Community ID, share with followers.
