@@ -2641,11 +2641,11 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'X Long Text as Single Post',
+				displayName: 'X Long Text as Single Post (Premium)',
 				name: 'xLongTextAsPost',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to post long text as a single post instead of splitting into a thread (if supported)',
+				description: 'Whether to post long content as a single post (up to 25,000 characters) instead of a thread. Requires X Premium subscription.',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
