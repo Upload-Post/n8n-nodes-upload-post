@@ -8,7 +8,6 @@ import {
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
-	NodeConnectionType,
 	NodeOperationError,
 	sleep
 } from 'n8n-workflow';
@@ -1099,8 +1098,8 @@ export class UploadPost implements INodeType {
 		defaults: {
 			name: 'Upload Post',
 		},
-		inputs: [NodeConnectionType.Main],
-		outputs: [NodeConnectionType.Main],
+		inputs: ['main'],
+		outputs: ['main'],
 		credentials: [
 			{
 				name: 'uploadPostApi',
