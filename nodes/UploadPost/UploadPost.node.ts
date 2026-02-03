@@ -492,8 +492,12 @@ const applyInstagramOptions = (ctx: ExecutionContext, operation: UploadOperation
 		const coverUrl = ctx.node.getNodeParameter('instagramCoverUrl', ctx.itemIndex, '') as string;
 		const audioName = ctx.node.getNodeParameter('instagramAudioName', ctx.itemIndex, '') as string;
 		const thumbOffset = ctx.node.getNodeParameter('instagramThumbOffset', ctx.itemIndex, '') as string;
+		const shareMode = ctx.node.getNodeParameter('instagramShareMode', ctx.itemIndex, 'CUSTOM') as string;
 
 		formData.share_to_feed = String(shareToFeed);
+		if (shareMode && shareMode !== 'CUSTOM') {
+			formData.share_mode = shareMode;
+		}
 		if (coverUrl) formData.cover_url = coverUrl;
 		if (audioName) formData.audio_name = audioName;
 		if (thumbOffset) formData.thumb_offset = thumbOffset;
@@ -2103,15 +2107,35 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
+				displayName: 'Instagram Reel Type',
+				name: 'instagramShareMode',
+				type: 'options',
+				options: [
+					{ name: 'Regular Reel', value: 'CUSTOM' },
+					{ name: 'Trial Reel (Auto-Share If Liked)', value: 'TRIAL_REELS_SHARE_TO_FOLLOWERS_IF_LIKED' },
+					{ name: 'Trial Reel (Don\'t Auto-Share)', value: 'TRIAL_REELS_DONT_SHARE_TO_FOLLOWERS' },
+				],
+				default: 'CUSTOM',
+				description: 'Choose posting mode. Trial Reels are shown to non-followers first to test content performance before sharing with followers.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['instagram'],
+						instagramMediaType: ['REELS'],
+					},
+				},
+			},
+			{
 				displayName: 'Instagram Share to Feed (Video)',
 				name: 'instagramShareToFeed',
 				type: 'boolean',
 				default: true,
-				description: 'Whether to share Instagram video (Reel/Story) to feed. Only for Upload Video.',
+				description: 'Whether to share Instagram video (Reel/Story) to feed. Only for Upload Video with Regular Reels.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['instagram']
+						platform: ['instagram'],
+						instagramShareMode: ['CUSTOM'],
 					},
 				},
 			},

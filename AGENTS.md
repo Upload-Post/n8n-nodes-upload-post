@@ -134,6 +134,10 @@ Agent → Content Generation → Upload Post Node → Multiple Platforms
 
 ### Instagram
 - **Media Types**: IMAGE (feed), STORIES, REELS
+- **Trial Reels**: Test content with non-followers first before sharing with followers
+  - `CUSTOM`: Regular Reel (default)
+  - `TRIAL_REELS_SHARE_TO_FOLLOWERS_IF_LIKED`: Auto-share if performs well
+  - `TRIAL_REELS_DONT_SHARE_TO_FOLLOWERS`: Manual decision later
 - **Video Options**: Share to feed, collaborators, cover URL
 - **Best Practice**: Use high-quality, vertical videos for Reels
 
