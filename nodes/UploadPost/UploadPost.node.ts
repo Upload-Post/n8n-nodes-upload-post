@@ -413,6 +413,11 @@ const applyFacebookOptions = (ctx: ExecutionContext, operation: UploadOperation,
 		if (facebookMediaType) {
 			formData.facebook_media_type = facebookMediaType;
 		}
+	} else if (operation === 'uploadPhotos') {
+		const facebookMediaTypePhoto = ctx.node.getNodeParameter('facebookMediaTypePhoto', ctx.itemIndex, 'POSTS') as string;
+		if (facebookMediaTypePhoto && facebookMediaTypePhoto !== 'POSTS') {
+			formData.facebook_media_type = facebookMediaTypePhoto;
+		}
 	} else if (operation === 'uploadText') {
 		const facebookLink = ctx.node.getNodeParameter('facebookLink', ctx.itemIndex, '') as string;
 		if (facebookLink) {
@@ -1883,6 +1888,23 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
+						platform: ['facebook']
+					},
+				},
+			},
+			{
+				displayName: 'Facebook Media Type (Photo)',
+				name: 'facebookMediaTypePhoto',
+				type: 'options',
+				options: [
+					{ name: 'Posts (Feed)', value: 'POSTS' },
+					{ name: 'Stories', value: 'STORIES' },
+				],
+				default: 'POSTS',
+				description: 'Choose whether to post photos to Feed or Stories',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos'],
 						platform: ['facebook']
 					},
 				},
