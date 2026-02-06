@@ -17,6 +17,7 @@ const MANUAL_USER_VALUE = '__manual_user__';
 const MANUAL_FACEBOOK_VALUE = '__manual_facebook__';
 const MANUAL_LINKEDIN_VALUE = '__manual_linkedin__';
 const MANUAL_PINTEREST_VALUE = '__manual_pinterest__';
+const MANUAL_PLATFORM_VALUE = '__manual_platform__';
 
 type BinaryFormField = {
 	value: Buffer | string;
@@ -1252,7 +1253,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for Bluesky title (max 300 characters)',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky', '__manual_platform__'] } },
 				},
 				{
 					displayName: 'Instagram Title (Override)',
@@ -1260,7 +1261,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for Instagram title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['instagram'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['instagram', '__manual_platform__'] } },
 				},
 				{
 					displayName: 'Facebook Title (Override)',
@@ -1268,7 +1269,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for Facebook title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['facebook'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['facebook', '__manual_platform__'] } },
 				},
 				{
 					displayName: 'TikTok Title (Override)',
@@ -1276,7 +1277,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for TikTok title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['tiktok'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['tiktok', '__manual_platform__'] } },
 				},
 				{
 					displayName: 'LinkedIn Title (Override)',
@@ -1284,7 +1285,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for LinkedIn title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['linkedin'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['linkedin', '__manual_platform__'] } },
 				},
 				{
 					displayName: 'X Title (Override)',
@@ -1292,7 +1293,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for X title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['x'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['x', '__manual_platform__'] } },
 				},
 				{
 					displayName: 'YouTube Title (Override)',
@@ -1300,7 +1301,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for YouTube title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['youtube'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['youtube', '__manual_platform__'] } },
 				},
 				{
 					displayName: 'Pinterest Title (Override)',
@@ -1308,7 +1309,7 @@ export class UploadPost implements INodeType {
 					type: 'string',
 					default: '',
 					description: 'Optional override for Pinterest title',
-					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['pinterest'] } },
+					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['pinterest', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'Threads Title (Override)',
@@ -1316,7 +1317,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional override for Threads title',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads', '__manual_platform__'] } },
 			},
 
 			// Generic Description & Platform Overrides
@@ -1329,7 +1330,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo'],
-						platform: ['linkedin', 'facebook', 'youtube', 'pinterest', 'tiktok']
+						platform: ['linkedin', 'facebook', 'youtube', 'pinterest', 'tiktok', '__manual_platform__']
 					}
 				},
 			},
@@ -1339,7 +1340,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Override for Facebook description/message when supported (Reels/feed, albums). Falls back to the main title when empty.',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['facebook'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['facebook', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'TikTok Description (Override)',
@@ -1347,7 +1348,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Override for TikTok photo post description. Video uploads ignore this value.',
-				displayOptions: { show: { operation: ['uploadPhotos'], platform: ['tiktok'] } },
+				displayOptions: { show: { operation: ['uploadPhotos'], platform: ['tiktok', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'LinkedIn Description (Override)',
@@ -1355,7 +1356,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Override for LinkedIn post commentary. When empty we repeat the main title.',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['linkedin'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['linkedin', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'YouTube Description (Override)',
@@ -1363,7 +1364,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Override for YouTube video description. When empty we default to the main title.',
-				displayOptions: { show: { operation: ['uploadVideo'], platform: ['youtube'] } },
+				displayOptions: { show: { operation: ['uploadVideo'], platform: ['youtube', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'Pinterest Alt Text (Override)',
@@ -1371,7 +1372,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional override for Pinterest alt text',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['pinterest'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['pinterest', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'Pinterest Description (Override)',
@@ -1379,7 +1380,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Override for Pinterest pin description (and alt text fallback). When empty we re-use the main title.',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['pinterest'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['pinterest', '__manual_platform__'] } },
 			},
 
 			// Platform-specific First Comment Overrides
@@ -1389,7 +1390,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional override for Instagram first comment. If provided, overrides the generic First Comment for Instagram.',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['instagram'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['instagram', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'Facebook First Comment (Override)',
@@ -1397,7 +1398,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional override for Facebook first comment. If provided, overrides the generic First Comment for Facebook.',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['facebook'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['facebook', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'X First Comment (Override)',
@@ -1405,7 +1406,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional override for X (Twitter) first comment/reply. If provided, overrides the generic First Comment for X.',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['x'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['x', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'Threads First Comment (Override)',
@@ -1413,7 +1414,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional override for Threads first comment/reply. If provided, overrides the generic First Comment for Threads.',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'YouTube First Comment (Override)',
@@ -1421,7 +1422,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional override for YouTube first comment. If provided, overrides the generic First Comment for YouTube.',
-				displayOptions: { show: { operation: ['uploadVideo'], platform: ['youtube'] } },
+				displayOptions: { show: { operation: ['uploadVideo'], platform: ['youtube', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'Reddit First Comment (Override)',
@@ -1429,7 +1430,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional override for Reddit first comment. If provided, overrides the generic First Comment for Reddit.',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'Bluesky First Comment (Override)',
@@ -1437,7 +1438,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional override for Bluesky first comment/reply. If provided, overrides the generic First Comment for Bluesky.',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky', '__manual_platform__'] } },
 			},
 
 		// Fields for Upload Photo(s)
@@ -1492,7 +1493,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadDocument'],
-						platform: ['linkedin'],
+						platform: ['linkedin', '__manual_platform__'],
 					},
 				},
 			},
@@ -1757,7 +1758,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadDocument'],
-						platform: ['linkedin']
+						platform: ['linkedin', '__manual_platform__']
 					},
 				},
 			},
@@ -1772,7 +1773,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText', 'uploadDocument'],
-						platform: ['linkedin']
+						platform: ['linkedin', '__manual_platform__']
 					}
 				},
 			},
@@ -1780,15 +1781,14 @@ export class UploadPost implements INodeType {
 				displayName: 'LinkedIn Page Name or ID (Manual Entry)',
 				name: 'targetLinkedinPageIdManual',
 				type: 'string',
-				required: true,
+				required: false,
 				default: '',
 				description: 'Provide the LinkedIn page identifier when it does not appear in the list',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText', 'uploadDocument'],
-						platform: ['linkedin'],
-						targetLinkedinPageId: [MANUAL_LINKEDIN_VALUE]
-					}
+						platform: ['linkedin', '__manual_platform__'],
+						}
 				},
 			},
 			{
@@ -1800,7 +1800,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['linkedin']
+						platform: ['linkedin', '__manual_platform__']
 					},
 				},
 			},
@@ -1811,14 +1811,14 @@ export class UploadPost implements INodeType {
 				name: 'facebookPageId',
 				type: 'options',
 				noDataExpression: true,
-				required: true,
+				required: false,
 				default: '',
 				description: 'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
 				typeOptions: { loadOptionsMethod: 'getFacebookPages', loadOptionsDependsOn: ['user'] },
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
-						platform: ['facebook']
+						platform: ['facebook', '__manual_platform__']
 					}
 				},
 			},
@@ -1826,15 +1826,14 @@ export class UploadPost implements INodeType {
 				displayName: 'Facebook Page Name or ID (Manual Entry)',
 				name: 'facebookPageIdManual',
 				type: 'string',
-				required: true,
+				required: false,
 				default: '',
 				description: 'Provide the Facebook page identifier when it does not appear in the list',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
-						platform: ['facebook'],
-						facebookPageId: [MANUAL_FACEBOOK_VALUE]
-					}
+						platform: ['facebook', '__manual_platform__'],
+						}
 				},
 			},
 			{
@@ -1846,7 +1845,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadText'],
-						platform: ['facebook']
+						platform: ['facebook', '__manual_platform__']
 					},
 				},
 			},
@@ -1859,7 +1858,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['facebook']
+						platform: ['facebook', '__manual_platform__']
 					},
 				},
 			},
@@ -1876,7 +1875,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['facebook']
+						platform: ['facebook', '__manual_platform__']
 					},
 				},
 			},
@@ -1893,7 +1892,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['facebook']
+						platform: ['facebook', '__manual_platform__']
 					},
 				},
 			},
@@ -1910,7 +1909,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos'],
-						platform: ['facebook']
+						platform: ['facebook', '__manual_platform__']
 					},
 				},
 			},
@@ -1925,7 +1924,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					},
 				},
 			},
@@ -1938,7 +1937,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					},
 				},
 			},
@@ -1952,7 +1951,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					},
 				},
 			},
@@ -1965,7 +1964,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					},
 				},
 			},
@@ -1978,7 +1977,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					},
 				},
 			},
@@ -1991,7 +1990,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					},
 				},
 			},
@@ -2010,7 +2009,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					},
 				},
 			},
@@ -2023,7 +2022,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					},
 				},
 			},
@@ -2036,7 +2035,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					},
 				},
 			},
@@ -2049,7 +2048,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					},
 				},
 			},
@@ -2062,7 +2061,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					},
 				},
 			},
@@ -2075,7 +2074,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					},
 				},
 			},
@@ -2088,7 +2087,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					}
 				},
 			},
@@ -2105,7 +2104,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['tiktok']
+						platform: ['tiktok', '__manual_platform__']
 					}
 				},
 			},
@@ -2125,7 +2124,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo'],
-						platform: ['instagram']
+						platform: ['instagram', '__manual_platform__']
 					},
 				},
 			},
@@ -2143,7 +2142,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['instagram'],
+						platform: ['instagram', '__manual_platform__'],
 						instagramMediaType: ['REELS'],
 					},
 				},
@@ -2157,7 +2156,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['instagram'],
+						platform: ['instagram', '__manual_platform__'],
 						instagramShareMode: ['CUSTOM'],
 					},
 				},
@@ -2169,7 +2168,7 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'Comma-separated collaborator usernames for Instagram. Sent as a string.',
 				displayOptions: { show: { operation: ['uploadVideo', 'uploadPhotos'],
-						platform: ['instagram']
+						platform: ['instagram', '__manual_platform__']
 					},
 				},
 			},
@@ -2182,7 +2181,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['instagram']
+						platform: ['instagram', '__manual_platform__']
 					},
 				},
 			},
@@ -2195,7 +2194,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['instagram']
+						platform: ['instagram', '__manual_platform__']
 					},
 				},
 			},
@@ -2206,7 +2205,7 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'Comma-separated user tags for Instagram. Sent as a string.',
 				displayOptions: { show: { operation: ['uploadVideo', 'uploadPhotos'],
-						platform: ['instagram']
+						platform: ['instagram', '__manual_platform__']
 					},
 				},
 			},
@@ -2216,7 +2215,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				displayOptions: { show: { operation: ['uploadVideo', 'uploadPhotos'],
-						platform: ['instagram']
+						platform: ['instagram', '__manual_platform__']
 					},
 				},
 			},
@@ -2229,7 +2228,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['instagram']
+						platform: ['instagram', '__manual_platform__']
 					}
 				},
 			},
@@ -2241,7 +2240,7 @@ export class UploadPost implements INodeType {
 				type: 'boolean',
 				default: false,
 				description: 'Whether long text is published as a single post. If false (default), a thread is created if the text exceeds 500 characters.',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads', '__manual_platform__'] } },
 			},
 
 		// ----- Reddit Specific Parameters -----
@@ -2249,10 +2248,10 @@ export class UploadPost implements INodeType {
 				displayName: 'Reddit Subreddit',
 				name: 'redditSubreddit',
 				type: 'string',
-				required: true,
+				required: false,
 				default: '',
 				description: 'Destination subreddit, without r/ (e.g., python)',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'Reddit Flair ID',
@@ -2260,7 +2259,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'ID of the flair template to apply to the post',
-				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit'] } },
+				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit', '__manual_platform__'] } },
 			},
 
 		// ----- YouTube Specific Parameters (Video Only) -----
@@ -2273,7 +2272,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2286,7 +2285,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2304,7 +2303,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2317,7 +2316,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2334,7 +2333,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2347,7 +2346,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2360,7 +2359,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2373,7 +2372,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2386,7 +2385,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2399,7 +2398,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2412,7 +2411,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2425,7 +2424,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2438,7 +2437,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2451,7 +2450,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2464,7 +2463,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['youtube']
+						platform: ['youtube', '__manual_platform__']
 					},
 				},
 			},
@@ -2483,7 +2482,7 @@ export class UploadPost implements INodeType {
 					show: {
 						resource: ['uploads'],
 						operation: ['uploadPhotos', 'uploadVideo'],
-						platform: ['pinterest']
+						platform: ['pinterest', '__manual_platform__']
 					},
 				},
 			},
@@ -2491,16 +2490,15 @@ export class UploadPost implements INodeType {
 				displayName: 'Pinterest Board Name or ID (Manual Entry)',
 				name: 'pinterestBoardIdManual',
 				type: 'string',
-				required: true,
+				required: false,
 				default: '',
 				description: 'Provide the Pinterest board identifier when it does not appear in the list',
 				displayOptions: {
 					show: {
 						resource: ['uploads'],
 						operation: ['uploadPhotos', 'uploadVideo'],
-						platform: ['pinterest'],
-						pinterestBoardId: [MANUAL_PINTEREST_VALUE]
-					},
+						platform: ['pinterest', '__manual_platform__'],
+						},
 				},
 			},
 			{
@@ -2512,7 +2510,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo'],
-						platform: ['pinterest']
+						platform: ['pinterest', '__manual_platform__']
 					}
 				},
 			},
@@ -2525,7 +2523,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['pinterest']
+						platform: ['pinterest', '__manual_platform__']
 					}
 				},
 			},
@@ -2544,7 +2542,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['pinterest']
+						platform: ['pinterest', '__manual_platform__']
 					}
 				},
 			},
@@ -2557,7 +2555,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['pinterest']
+						platform: ['pinterest', '__manual_platform__']
 					}
 				},
 			},
@@ -2570,7 +2568,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['pinterest']
+						platform: ['pinterest', '__manual_platform__']
 					}
 				},
 			},
@@ -2585,7 +2583,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					},
 				},
 			},
@@ -2605,7 +2603,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					},
 				},
 			},
@@ -2618,7 +2616,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					},
 				},
 			},
@@ -2631,7 +2629,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					},
 				},
 			},
@@ -2644,7 +2642,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					}
 				},
 			},
@@ -2657,7 +2655,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					}
 				},
 			},
@@ -2676,7 +2674,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					}
 				},
 			},
@@ -2689,7 +2687,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					},
 				},
 			},
@@ -2702,7 +2700,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					}
 				},
 			},
@@ -2715,7 +2713,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					},
 				},
 			},
@@ -2728,7 +2726,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					},
 				},
 			},
@@ -2741,7 +2739,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					},
 				},
 			},
@@ -2754,7 +2752,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					},
 				},
 			},
@@ -2767,7 +2765,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					}
 				},
 			},
@@ -2780,7 +2778,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					}
 				},
 			},
@@ -2793,7 +2791,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
-						platform: ['x']
+						platform: ['x', '__manual_platform__']
 					},
 				},
 			},
@@ -2826,7 +2824,9 @@ export class UploadPost implements INodeType {
 				};
 
 				const supportedPlatforms = platformSupport[operation] || [];
-				return allPlatforms.filter(platform => supportedPlatforms.includes(platform.value));
+				const filtered = allPlatforms.filter(platform => supportedPlatforms.includes(platform.value));
+				filtered.push({ name: 'Manual Entry (all fields)', value: MANUAL_PLATFORM_VALUE });
+				return filtered;
 			},
 			async getFacebookPages(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				try {
