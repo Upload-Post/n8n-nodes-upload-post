@@ -1108,6 +1108,7 @@ export class UploadPost implements INodeType {
 		defaults: {
 			name: 'Upload Post',
 		},
+		usableAsTool: true,
 		inputs: [NodeConnectionType.Main],
 		outputs: [NodeConnectionType.Main],
 		credentials: [
