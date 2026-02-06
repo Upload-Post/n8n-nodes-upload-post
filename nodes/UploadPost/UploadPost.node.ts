@@ -964,11 +964,19 @@ const buildUserRequest = (ctx: ExecutionContext): RequestConfig => {
 			const logoImage = ctx.node.getNodeParameter('logoImage', ctx.itemIndex, '') as string;
 			const redirectButtonText = ctx.node.getNodeParameter('redirectButtonText', ctx.itemIndex, '') as string;
 			const platforms = ctx.node.getNodeParameter('jwtPlatforms', ctx.itemIndex, []) as string[];
+			const showCalendar = ctx.node.getNodeParameter('showCalendar', ctx.itemIndex, true) as boolean;
+			const readonlyCalendar = ctx.node.getNodeParameter('readonlyCalendar', ctx.itemIndex, false) as boolean;
+			const connectTitle = ctx.node.getNodeParameter('connectTitle', ctx.itemIndex, '') as string;
+			const connectDescription = ctx.node.getNodeParameter('connectDescription', ctx.itemIndex, '') as string;
 			const body: IDataObject = { username };
 			if (redirectUrl) body.redirect_url = redirectUrl;
 			if (logoImage) body.logo_image = logoImage;
 			if (redirectButtonText) body.redirect_button_text = redirectButtonText;
 			if (Array.isArray(platforms) && platforms.length > 0) body.platforms = platforms;
+			body.show_calendar = showCalendar;
+			body.readonly_calendar = readonlyCalendar;
+			if (connectTitle) body.connect_title = connectTitle;
+			if (connectDescription) body.connect_description = connectDescription;
 			return {
 				endpoint: '/uploadposts/users/generate-jwt',
 				method: 'POST',
@@ -1725,6 +1733,38 @@ export class UploadPost implements INodeType {
 				],
 				default: [],
 				description: 'Optional list of platforms to show for connection. Defaults to all supported platforms.',
+				displayOptions: { show: { operation: ['generateJwt'] } },
+			},
+			{
+				displayName: 'Show Calendar View',
+				name: 'showCalendar',
+				type: 'boolean',
+				default: true,
+				description: 'Whether to show the calendar view on the connection page',
+				displayOptions: { show: { operation: ['generateJwt'] } },
+			},
+			{
+				displayName: 'Read-Only Calendar',
+				name: 'readonlyCalendar',
+				type: 'boolean',
+				default: false,
+				description: 'Show only a read-only calendar view (no editing, no account connection). Ideal for sharing with end clients.',
+				displayOptions: { show: { operation: ['generateJwt'], showCalendar: [true] } },
+			},
+			{
+				displayName: 'Connect Title',
+				name: 'connectTitle',
+				type: 'string',
+				default: '',
+				description: 'Optional custom title for the connection page',
+				displayOptions: { show: { operation: ['generateJwt'] } },
+			},
+			{
+				displayName: 'Connect Description',
+				name: 'connectDescription',
+				type: 'string',
+				default: '',
+				description: 'Optional custom description for the connection page',
 				displayOptions: { show: { operation: ['generateJwt'] } },
 			},
 
