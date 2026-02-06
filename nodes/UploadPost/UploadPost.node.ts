@@ -1798,7 +1798,6 @@ export class UploadPost implements INodeType {
 				displayName: 'LinkedIn Page Name or ID (Manual Entry)',
 				name: 'targetLinkedinPageIdManual',
 				type: 'string',
-				required: false,
 				default: '',
 				description: 'Provide the LinkedIn page identifier when it does not appear in the list',
 				displayOptions: {
@@ -1829,7 +1828,6 @@ export class UploadPost implements INodeType {
 				name: 'facebookPageId',
 				type: 'options',
 				noDataExpression: true,
-				required: false,
 				default: '',
 				description: 'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
 				typeOptions: { loadOptionsMethod: 'getFacebookPages', loadOptionsDependsOn: ['user'] },
@@ -1844,7 +1842,6 @@ export class UploadPost implements INodeType {
 				displayName: 'Facebook Page Name or ID (Manual Entry)',
 				name: 'facebookPageIdManual',
 				type: 'string',
-				required: false,
 				default: '',
 				description: 'Provide the Facebook page identifier when it does not appear in the list',
 				displayOptions: {
@@ -2267,7 +2264,6 @@ export class UploadPost implements INodeType {
 				displayName: 'Reddit Subreddit',
 				name: 'redditSubreddit',
 				type: 'string',
-				required: false,
 				default: '',
 				description: 'Destination subreddit, without r/ (e.g., python)',
 				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit', '__manual_platform__'] } },
@@ -2509,7 +2505,6 @@ export class UploadPost implements INodeType {
 				displayName: 'Pinterest Board Name or ID (Manual Entry)',
 				name: 'pinterestBoardIdManual',
 				type: 'string',
-				required: false,
 				default: '',
 				description: 'Provide the Pinterest board identifier when it does not appear in the list',
 				displayOptions: {
