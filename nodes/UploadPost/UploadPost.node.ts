@@ -1100,7 +1100,7 @@ export class UploadPost implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Upload Post',
 		name: 'uploadPost',
-		icon: 'file:UploadPost.svg',
+		icon: 'file:uploadpost.svg',
 		group: ['output'],
 		version: 1,
 		subtitle: '={{$parameter["operation"]}}',
