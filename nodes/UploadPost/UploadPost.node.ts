@@ -280,9 +280,11 @@ const getUserForOperation = (ctx: ExecutionContext, needsUser: boolean): string 
 const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): UploadPreparation => {
 	const formData: IDataObject = {};
 	const user = getUserForOperation(ctx, true);
-	const title = ctx.node.getNodeParameter('title', ctx.itemIndex) as string;
+	const title = ctx.node.getNodeParameter('title', ctx.itemIndex, '') as string;
 	formData.user = user;
-	formData.title = title;
+	if (title) {
+		formData.title = title;
+	}
 
 	const firstComment = ctx.node.getNodeParameter('firstComment', ctx.itemIndex, '') as string;
 	if (firstComment) {
@@ -1250,9 +1252,9 @@ export class UploadPost implements INodeType {
 				displayName: 'Title / Main Content',
 				name: 'title',
 				type: 'string',
-				required: true,
+				required: false,
 				default: '',
-				description: 'Title of the post. For Upload Text, this is the main text content. For some video platforms, this acts as a fallback for description if a specific description is not provided.',
+				description: 'Title of the post. Required for most platforms; optional when uploading only to TikTok. For Upload Text, this is the main text content. For some video platforms, this acts as a fallback for description if a specific description is not provided.',
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'] } },
 			},
 			{
@@ -1301,7 +1303,7 @@ export class UploadPost implements INodeType {
 					name: 'tiktokTitle',
 					type: 'string',
 					default: '',
-					description: 'Optional override for TikTok title',
+					description: 'Optional override for TikTok title (max 90 chars for photos, 2200 for videos)',
 					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['tiktok', '__manual_platform__'] } },
 				},
 				{
@@ -1372,7 +1374,7 @@ export class UploadPost implements INodeType {
 				name: 'tiktokDescription',
 				type: 'string',
 				default: '',
-				description: 'Override for TikTok photo post description. Video uploads ignore this value.',
+				description: 'Override for TikTok photo post description (max 4000 chars). Video uploads ignore this value.',
 				displayOptions: { show: { operation: ['uploadPhotos'], platform: ['tiktok', '__manual_platform__'] } },
 			},
 			{
