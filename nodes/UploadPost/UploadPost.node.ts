@@ -429,6 +429,12 @@ const applyFacebookOptions = (ctx: ExecutionContext, operation: UploadOperation,
 		if (facebookMediaType) {
 			formData.facebook_media_type = facebookMediaType;
 		}
+		if (facebookMediaType === 'VIDEO') {
+			const facebookThumbnailUrl = ctx.node.getNodeParameter('facebookThumbnailUrl', ctx.itemIndex, '') as string;
+			if (facebookThumbnailUrl) {
+				formData.thumbnail_url = facebookThumbnailUrl;
+			}
+		}
 	} else if (operation === 'uploadPhotos') {
 		const facebookMediaTypePhoto = ctx.node.getNodeParameter('facebookMediaTypePhoto', ctx.itemIndex, 'POSTS') as string;
 		if (facebookMediaTypePhoto && facebookMediaTypePhoto !== 'POSTS') {
@@ -676,6 +682,13 @@ const applyXOptions = (ctx: ExecutionContext, operation: UploadOperation, formDa
 			const xLongTextAsPost = ctx.node.getNodeParameter('xLongTextAsPost', ctx.itemIndex, false) as boolean;
 			if (xLongTextAsPost) {
 				formData.x_long_text_as_post = String(xLongTextAsPost);
+			}
+		}
+
+		if (operation === 'uploadPhotos') {
+			const xThreadImageLayout = ctx.node.getNodeParameter('xThreadImageLayout', ctx.itemIndex, '') as string;
+			if (xThreadImageLayout) {
+				formData.x_thread_image_layout = xThreadImageLayout;
 			}
 		}
 
@@ -1942,13 +1955,28 @@ export class UploadPost implements INodeType {
 				options: [
 					{ name: 'Reels', value: 'REELS' },
 					{ name: 'Stories', value: 'STORIES' },
+					{ name: 'Video (Normal Page Video)', value: 'VIDEO' },
 				],
 				default: 'REELS',
-				description: 'Choose whether to post as Reels or Stories for Facebook video',
+				description: 'Choose whether to post as Reels, Stories, or normal page Video for Facebook',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
 						platform: ['facebook', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'Facebook Video Thumbnail URL',
+				name: 'facebookThumbnailUrl',
+				type: 'string',
+				default: '',
+				description: 'URL of a custom thumbnail image for normal page videos (only when Media Type is VIDEO)',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['facebook', '__manual_platform__'],
+						facebookMediaType: ['VIDEO'],
 					},
 				},
 			},
@@ -2835,6 +2863,19 @@ export class UploadPost implements INodeType {
 						operation: ['uploadText'],
 						platform: ['x', '__manual_platform__']
 					}
+				},
+			},
+			{
+				displayName: 'X Thread Image Layout',
+				name: 'xThreadImageLayout',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated list of how many images to attach to each tweet in the thread (e.g. "4,4" or "2,3,1"). Each value must be 1-4, and the total must equal the number of images. If omitted and more than 4 images are provided, auto-chunks into groups of 4.',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos'],
+						platform: ['x', '__manual_platform__']
+					},
 				},
 			},
 			{
