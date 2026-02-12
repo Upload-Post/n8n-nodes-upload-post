@@ -1788,7 +1788,7 @@ export class UploadPost implements INodeType {
 				name: 'readonlyCalendar',
 				type: 'boolean',
 				default: false,
-				description: 'Show only a read-only calendar view (no editing, no account connection). Ideal for sharing with end clients.',
+				description: 'Whether to show only a read-only calendar view (no editing, no account connection). Ideal for sharing with end clients.',
 				displayOptions: { show: { operation: ['generateJwt'], showCalendar: [true] } },
 			},
 			{
