@@ -700,9 +700,17 @@ const applyXOptions = (ctx: ExecutionContext, operation: UploadOperation, formDa
 };
 
 const applyThreadsOptions = (ctx: ExecutionContext, formData: IDataObject) => {
+	const operation = ctx.node.getNodeParameter('operation', ctx.itemIndex) as string;
 	const threadsLongTextAsPost = ctx.node.getNodeParameter('threadsLongTextAsPost', ctx.itemIndex, false) as boolean;
 	if (threadsLongTextAsPost) {
 		formData.threads_long_text_as_post = String(threadsLongTextAsPost);
+	}
+
+	if (operation === 'uploadPhotos') {
+		const threadsThreadMediaLayout = ctx.node.getNodeParameter('threadsThreadMediaLayout', ctx.itemIndex, '') as string;
+		if (threadsThreadMediaLayout) {
+			formData.threads_thread_media_layout = threadsThreadMediaLayout;
+		}
 	}
 };
 
@@ -2325,6 +2333,19 @@ export class UploadPost implements INodeType {
 				default: false,
 				description: 'Whether long text is published as a single post. If false (default), a thread is created if the text exceeds 500 characters.',
 				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Threads Thread Media Layout',
+				name: 'threadsThreadMediaLayout',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated list of how many media items to include in each Threads post. Each value must be 1-10, and the total must equal the number of files. Example: \'5,5\' splits 10 items into 2 posts with 5 each.',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos'],
+						platform: ['threads', '__manual_platform__']
+					},
+				},
 			},
 
 		// ----- Reddit Specific Parameters -----
