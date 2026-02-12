@@ -429,6 +429,12 @@ const applyFacebookOptions = (ctx: ExecutionContext, operation: UploadOperation,
 		if (facebookMediaType) {
 			formData.facebook_media_type = facebookMediaType;
 		}
+		if (facebookMediaType === 'VIDEO') {
+			const facebookThumbnailUrl = ctx.node.getNodeParameter('facebookThumbnailUrl', ctx.itemIndex, '') as string;
+			if (facebookThumbnailUrl) {
+				formData.thumbnail_url = facebookThumbnailUrl;
+			}
+		}
 	} else if (operation === 'uploadPhotos') {
 		const facebookMediaTypePhoto = ctx.node.getNodeParameter('facebookMediaTypePhoto', ctx.itemIndex, 'POSTS') as string;
 		if (facebookMediaTypePhoto && facebookMediaTypePhoto !== 'POSTS') {
@@ -679,6 +685,13 @@ const applyXOptions = (ctx: ExecutionContext, operation: UploadOperation, formDa
 			}
 		}
 
+		if (operation === 'uploadPhotos') {
+			const xThreadImageLayout = ctx.node.getNodeParameter('xThreadImageLayout', ctx.itemIndex, '') as string;
+			if (xThreadImageLayout) {
+				formData.x_thread_image_layout = xThreadImageLayout;
+			}
+		}
+
 		const xPlaceIdVideo = ctx.node.getNodeParameter('xPlaceIdVideo', ctx.itemIndex, '') as string;
 		if (operation === 'uploadVideo' && xPlaceIdVideo) {
 			formData.place_id = xPlaceIdVideo;
@@ -687,9 +700,17 @@ const applyXOptions = (ctx: ExecutionContext, operation: UploadOperation, formDa
 };
 
 const applyThreadsOptions = (ctx: ExecutionContext, formData: IDataObject) => {
+	const operation = ctx.node.getNodeParameter('operation', ctx.itemIndex) as string;
 	const threadsLongTextAsPost = ctx.node.getNodeParameter('threadsLongTextAsPost', ctx.itemIndex, false) as boolean;
 	if (threadsLongTextAsPost) {
 		formData.threads_long_text_as_post = String(threadsLongTextAsPost);
+	}
+
+	if (operation === 'uploadPhotos') {
+		const threadsThreadMediaLayout = ctx.node.getNodeParameter('threadsThreadMediaLayout', ctx.itemIndex, '') as string;
+		if (threadsThreadMediaLayout) {
+			formData.threads_thread_media_layout = threadsThreadMediaLayout;
+		}
 	}
 };
 
@@ -1942,13 +1963,28 @@ export class UploadPost implements INodeType {
 				options: [
 					{ name: 'Reels', value: 'REELS' },
 					{ name: 'Stories', value: 'STORIES' },
+					{ name: 'Video (Normal Page Video)', value: 'VIDEO' },
 				],
 				default: 'REELS',
-				description: 'Choose whether to post as Reels or Stories for Facebook video',
+				description: 'Choose whether to post as Reels, Stories, or normal page Video for Facebook',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
 						platform: ['facebook', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'Facebook Video Thumbnail URL',
+				name: 'facebookThumbnailUrl',
+				type: 'string',
+				default: '',
+				description: 'URL of a custom thumbnail image for normal page videos (only when Media Type is VIDEO)',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['facebook', '__manual_platform__'],
+						facebookMediaType: ['VIDEO'],
 					},
 				},
 			},
@@ -2297,6 +2333,19 @@ export class UploadPost implements INodeType {
 				default: false,
 				description: 'Whether long text is published as a single post. If false (default), a thread is created if the text exceeds 500 characters.',
 				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Threads Thread Media Layout',
+				name: 'threadsThreadMediaLayout',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated list of how many media items to include in each Threads post. Each value must be 1-10, and the total must equal the number of files. Example: \'5,5\' splits 10 items into 2 posts with 5 each.',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos'],
+						platform: ['threads', '__manual_platform__']
+					},
+				},
 			},
 
 		// ----- Reddit Specific Parameters -----
@@ -2835,6 +2884,19 @@ export class UploadPost implements INodeType {
 						operation: ['uploadText'],
 						platform: ['x', '__manual_platform__']
 					}
+				},
+			},
+			{
+				displayName: 'X Thread Image Layout',
+				name: 'xThreadImageLayout',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated list of how many images to attach to each tweet in the thread (e.g. "4,4" or "2,3,1"). Each value must be 1-4, and the total must equal the number of images. If omitted and more than 4 images are provided, auto-chunks into groups of 4.',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos'],
+						platform: ['x', '__manual_platform__']
+					},
 				},
 			},
 			{
