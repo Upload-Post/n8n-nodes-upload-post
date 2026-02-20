@@ -397,6 +397,11 @@ const applyLinkedinOptions = (ctx: ExecutionContext, operation: UploadOperation,
 	} else if (operation === 'uploadVideo') {
 		const linkedinVisibility = ctx.node.getNodeParameter('linkedinVisibility', ctx.itemIndex, 'PUBLIC') as string;
 		formData.visibility = linkedinVisibility;
+	} else if (operation === 'uploadText') {
+		const linkedinLink = ctx.node.getNodeParameter('linkedinLink', ctx.itemIndex, '') as string;
+		if (linkedinLink) {
+			formData.linkedin_link_url = linkedinLink;
+		}
 	} else if (operation === 'uploadDocument') {
 		const linkedinVisibility = ctx.node.getNodeParameter('linkedinVisibility', ctx.itemIndex, 'PUBLIC') as string;
 		formData.visibility = linkedinVisibility;
@@ -765,6 +770,13 @@ const applyUploadPlatformOptions = async (
 
 	if (platforms.includes('reddit')) {
 		applyRedditOptions(ctx, formData);
+	}
+
+	if (platforms.includes('bluesky') && operation === 'uploadText') {
+		const blueskyLink = ctx.node.getNodeParameter('blueskyLink', ctx.itemIndex, '') as string;
+		if (blueskyLink) {
+			formData.bluesky_link_url = blueskyLink;
+		}
 	}
 };
 
@@ -1923,6 +1935,32 @@ export class UploadPost implements INodeType {
 					show: {
 						operation: ['uploadText'],
 						platform: ['facebook', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'LinkedIn Link (Text)',
+				name: 'linkedinLink',
+				type: 'string',
+				default: '',
+				description: 'URL to attach to the LinkedIn text post as a link preview card. LinkedIn will display a rich preview with the page title, description, and thumbnail. Only for Upload Text.',
+				displayOptions: {
+					show: {
+						operation: ['uploadText'],
+						platform: ['linkedin', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'Bluesky Link (Text)',
+				name: 'blueskyLink',
+				type: 'string',
+				default: '',
+				description: 'URL to attach to the Bluesky text post as an external embed link preview card. Bluesky will display a rich preview with the page title, description, and thumbnail. Only for Upload Text.',
+				displayOptions: {
+					show: {
+						operation: ['uploadText'],
+						platform: ['bluesky', '__manual_platform__']
 					},
 				},
 			},
