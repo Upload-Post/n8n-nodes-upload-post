@@ -307,6 +307,10 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 	const addToQueue = ctx.node.getNodeParameter('addToQueue', ctx.itemIndex, false) as boolean;
 	if (addToQueue) {
 		formData.add_to_queue = 'true';
+		const maxPostsPerSlot = ctx.node.getNodeParameter('maxPostsPerSlot', ctx.itemIndex, 0) as number;
+		if (maxPostsPerSlot > 0) {
+			formData.max_posts_per_slot = String(maxPostsPerSlot);
+		}
 	}
 
 	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean;
@@ -1580,6 +1584,14 @@ export class UploadPost implements INodeType {
 				default: false,
 				description: 'Whether to add this post to your configured queue instead of posting immediately. The post will be automatically scheduled to your next available queue slot. Configure your queue settings in the Upload-Post dashboard.',
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'] } },
+			},
+			{
+				displayName: 'Max Posts Per Slot',
+				name: 'maxPostsPerSlot',
+				type: 'number',
+				default: 0,
+				description: 'Maximum number of posts allowed per queue slot. Overrides the profile setting. Set to 0 to use the profile default. Only used when Add to Queue is enabled.',
+				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'], addToQueue: [true] } },
 			},
 			{
 				displayName: 'Upload Asynchronously',
