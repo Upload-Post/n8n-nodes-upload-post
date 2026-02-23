@@ -1140,6 +1140,7 @@ const pollUploadStatus = async (
 			url: `${API_BASE_URL}/uploadposts/status`,
 			method: 'GET',
 			qs: { request_id: requestId },
+			headers: { 'X-Upload-Post-Source': 'n8n' },
 			json: true,
 		};
 		const statusData = await node.helpers.httpRequestWithAuthentication.call(node, 'uploadPostApi', statusOptions);
