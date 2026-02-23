@@ -166,9 +166,9 @@ const getBinaryFieldFromItem = async (
 };
 
 const PLATFORM_SUPPORT: Record<UploadOperation, string[]> = {
-	uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'reddit'],
-	uploadVideo: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
-	uploadText: ['bluesky', 'facebook', 'linkedin', 'reddit', 'threads', 'x'],
+	uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'reddit', 'google_business'],
+	uploadVideo: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube', 'google_business'],
+	uploadText: ['bluesky', 'facebook', 'linkedin', 'reddit', 'threads', 'x', 'google_business'],
 	uploadDocument: ['linkedin'],
 };
 
