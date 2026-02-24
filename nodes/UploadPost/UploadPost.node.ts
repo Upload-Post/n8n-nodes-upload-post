@@ -166,9 +166,9 @@ const getBinaryFieldFromItem = async (
 };
 
 const PLATFORM_SUPPORT: Record<UploadOperation, string[]> = {
-	uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'reddit'],
-	uploadVideo: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
-	uploadText: ['bluesky', 'facebook', 'linkedin', 'reddit', 'threads', 'x'],
+	uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'reddit', 'google_business'],
+	uploadVideo: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube', 'google_business'],
+	uploadText: ['bluesky', 'facebook', 'linkedin', 'reddit', 'threads', 'x', 'google_business'],
 	uploadDocument: ['linkedin'],
 };
 
@@ -280,9 +280,9 @@ const getUserForOperation = (ctx: ExecutionContext, needsUser: boolean): string 
 const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): UploadPreparation => {
 	const formData: IDataObject = {};
 	const user = getUserForOperation(ctx, true);
-	const title = ctx.node.getNodeParameter('title', ctx.itemIndex) as string;
+	const title = ctx.node.getNodeParameter('title', ctx.itemIndex, '') as string;
 	formData.user = user;
-	formData.title = title;
+	if (title) formData.title = title;
 
 	const firstComment = ctx.node.getNodeParameter('firstComment', ctx.itemIndex, '') as string;
 	if (firstComment) {
@@ -307,6 +307,10 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 	const addToQueue = ctx.node.getNodeParameter('addToQueue', ctx.itemIndex, false) as boolean;
 	if (addToQueue) {
 		formData.add_to_queue = 'true';
+		const maxPostsPerSlot = ctx.node.getNodeParameter('maxPostsPerSlot', ctx.itemIndex, 0) as number;
+		if (maxPostsPerSlot > 0) {
+			formData.max_posts_per_slot = String(maxPostsPerSlot);
+		}
 	}
 
 	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean;
@@ -397,6 +401,11 @@ const applyLinkedinOptions = (ctx: ExecutionContext, operation: UploadOperation,
 	} else if (operation === 'uploadVideo') {
 		const linkedinVisibility = ctx.node.getNodeParameter('linkedinVisibility', ctx.itemIndex, 'PUBLIC') as string;
 		formData.visibility = linkedinVisibility;
+	} else if (operation === 'uploadText') {
+		const linkedinLink = ctx.node.getNodeParameter('linkedinLink', ctx.itemIndex, '') as string;
+		if (linkedinLink) {
+			formData.linkedin_link_url = linkedinLink;
+		}
 	} else if (operation === 'uploadDocument') {
 		const linkedinVisibility = ctx.node.getNodeParameter('linkedinVisibility', ctx.itemIndex, 'PUBLIC') as string;
 		formData.visibility = linkedinVisibility;
@@ -766,6 +775,13 @@ const applyUploadPlatformOptions = async (
 	if (platforms.includes('reddit')) {
 		applyRedditOptions(ctx, formData);
 	}
+
+	if (platforms.includes('bluesky') && operation === 'uploadText') {
+		const blueskyLink = ctx.node.getNodeParameter('blueskyLink', ctx.itemIndex, '') as string;
+		if (blueskyLink) {
+			formData.bluesky_link_url = blueskyLink;
+		}
+	}
 };
 
 const buildUploadPhotosRequest = async (
@@ -1128,6 +1144,7 @@ const pollUploadStatus = async (
 			url: `${API_BASE_URL}/uploadposts/status`,
 			method: 'GET',
 			qs: { request_id: requestId },
+			headers: { 'X-Upload-Post-Source': 'n8n' },
 			json: true,
 		};
 		const statusData = await node.helpers.httpRequestWithAuthentication.call(node, 'uploadPostApi', statusOptions);
@@ -1271,9 +1288,9 @@ export class UploadPost implements INodeType {
 				displayName: 'Title / Main Content',
 				name: 'title',
 				type: 'string',
-				required: true,
+				required: false,
 				default: '',
-				description: 'Title of the post. For Upload Text, this is the main text content. For some video platforms, this acts as a fallback for description if a specific description is not provided.',
+				description: 'Title of the post. Required for YouTube, Reddit, and text posts. Optional for TikTok, Instagram, Facebook, LinkedIn, X, Threads, Bluesky, Pinterest. For Upload Text, this is the main text content.',
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'] } },
 			},
 			{
@@ -1322,7 +1339,7 @@ export class UploadPost implements INodeType {
 					name: 'tiktokTitle',
 					type: 'string',
 					default: '',
-					description: 'Optional override for TikTok title',
+					description: 'Optional override for TikTok title (max 90 chars for photos, 2200 for videos)',
 					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['tiktok', '__manual_platform__'] } },
 				},
 				{
@@ -1567,6 +1584,14 @@ export class UploadPost implements INodeType {
 				default: false,
 				description: 'Whether to add this post to your configured queue instead of posting immediately. The post will be automatically scheduled to your next available queue slot. Configure your queue settings in the Upload-Post dashboard.',
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'] } },
+			},
+			{
+				displayName: 'Max Posts Per Slot',
+				name: 'maxPostsPerSlot',
+				type: 'number',
+				default: 0,
+				description: 'Maximum number of posts allowed per queue slot. Overrides the profile setting. Set to 0 to use the profile default. Only used when Add to Queue is enabled.',
+				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'], addToQueue: [true] } },
 			},
 			{
 				displayName: 'Upload Asynchronously',
@@ -1923,6 +1948,32 @@ export class UploadPost implements INodeType {
 					show: {
 						operation: ['uploadText'],
 						platform: ['facebook', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'LinkedIn Link (Text)',
+				name: 'linkedinLink',
+				type: 'string',
+				default: '',
+				description: 'URL to attach to the LinkedIn text post as a link preview card. LinkedIn will display a rich preview with the page title, description, and thumbnail. Only for Upload Text.',
+				displayOptions: {
+					show: {
+						operation: ['uploadText'],
+						platform: ['linkedin', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'Bluesky Link (Text)',
+				name: 'blueskyLink',
+				type: 'string',
+				default: '',
+				description: 'URL to attach to the Bluesky text post as an external embed link preview card. Bluesky will display a rich preview with the page title, description, and thumbnail. Only for Upload Text.',
+				displayOptions: {
+					show: {
+						operation: ['uploadText'],
+						platform: ['bluesky', '__manual_platform__']
 					},
 				},
 			},

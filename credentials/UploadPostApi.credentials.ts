@@ -30,7 +30,8 @@ export class UploadPostApi implements ICredentialType {
 		type: 'generic',
 		properties: {
 			headers: {
-				'Authorization': '=Apikey {{$credentials.apiKey}}'
+				'Authorization': '=Apikey {{$credentials.apiKey}}',
+				'X-Upload-Post-Source': 'n8n',
 			}
 		},
 	};
@@ -44,6 +45,7 @@ export class UploadPostApi implements ICredentialType {
 			method: 'GET',
 			headers: {
 				'Authorization': '=Apikey {{ $credentials.apiKey }}',
+				'X-Upload-Post-Source': 'n8n',
 			},
 		},
 	};
