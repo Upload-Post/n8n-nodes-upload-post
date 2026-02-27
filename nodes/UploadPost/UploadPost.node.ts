@@ -48,6 +48,12 @@ const isBinaryFormField = (value: unknown): value is BinaryFormField => {
 	return typeof value === 'object' && value !== null && 'value' in (value as Record<string, unknown>);
 };
 
+const isUrlString = (value: unknown): boolean => {
+	if (typeof value !== 'string') return false;
+	const lower = value.toLowerCase();
+	return lower.startsWith('http://') || lower.startsWith('https://');
+};
+
 const normalizeFormField = (value: unknown): string | BinaryFormField | undefined => {
 	if (value === undefined || value === null) {
 		return undefined;
@@ -557,7 +563,7 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 	formData.publicStatsViewable = String(publicStatsViewable);
 
 	if (thumbnailInput) {
-		if (thumbnailInput.toLowerCase().startsWith('http://') || thumbnailInput.toLowerCase().startsWith('https://')) {
+		if (isUrlString(thumbnailInput)) {
 			formData.thumbnail_url = thumbnailInput;
 		} else {
 			const thumbnailBinary = await getBinaryFieldFromItem(ctx, thumbnailInput, 'Binary data for YouTube thumbnail property');
@@ -799,7 +805,7 @@ const buildUploadPhotosRequest = async (
 
 	const photoArray: Array<string | BinaryFormField> = [];
 	for (const photoItem of photosToProcess) {
-		if (photoItem.toLowerCase().startsWith('http://') || photoItem.toLowerCase().startsWith('https://')) {
+		if (isUrlString(photoItem)) {
 			photoArray.push(photoItem);
 			continue;
 		}
@@ -831,7 +837,7 @@ const buildUploadVideoRequest = async (
 	const videoInput = ctx.node.getNodeParameter('video', ctx.itemIndex, '') as string;
 
 	if (videoInput) {
-		if (videoInput.toLowerCase().startsWith('http://') || videoInput.toLowerCase().startsWith('https://')) {
+		if (isUrlString(videoInput)) {
 			prep.formData.video = videoInput;
 		} else {
 			const binaryField = await getBinaryFieldFromItem(ctx, videoInput, 'Binary data for video property');
@@ -877,7 +883,7 @@ const buildUploadDocumentRequest = async (
 	const documentInput = ctx.node.getNodeParameter('document', ctx.itemIndex, '') as string;
 
 	if (documentInput) {
-		if (documentInput.toLowerCase().startsWith('http://') || documentInput.toLowerCase().startsWith('https://')) {
+		if (isUrlString(documentInput)) {
 			prep.formData.document = documentInput;
 		} else {
 			const binaryField = await getBinaryFieldFromItem(ctx, documentInput, 'Binary data for document property');
@@ -1152,7 +1158,7 @@ const pollUploadStatus = async (
 		const statusValue = (statusData && (statusData as any).status) as string | undefined;
 		if (
 			(statusData && (statusData as any).success === true) ||
-			(statusValue && ['success', 'completed', 'failed', 'error'].includes(statusValue.toLowerCase()))
+			(typeof statusValue === 'string' && ['success', 'completed', 'failed', 'error'].includes(statusValue.toLowerCase()))
 		) {
 			break;
 		}
