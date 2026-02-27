@@ -723,12 +723,18 @@ const applyThreadsOptions = (ctx: ExecutionContext, formData: IDataObject) => {
 	}
 };
 
-const applyRedditOptions = (ctx: ExecutionContext, formData: IDataObject) => {
+const applyRedditOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
 	const subreddit = ctx.node.getNodeParameter('redditSubreddit', ctx.itemIndex) as string;
 	const flairId = ctx.node.getNodeParameter('redditFlairId', ctx.itemIndex, '') as string;
 	formData.subreddit = subreddit;
 	if (flairId) {
 		formData.flair_id = flairId;
+	}
+	if (operation === 'uploadText') {
+		const redditLink = ctx.node.getNodeParameter('redditLinkUrl', ctx.itemIndex, '') as string;
+		if (redditLink) {
+			formData.reddit_link_url = redditLink;
+		}
 	}
 };
 
@@ -773,7 +779,7 @@ const applyUploadPlatformOptions = async (
 	}
 
 	if (platforms.includes('reddit')) {
-		applyRedditOptions(ctx, formData);
+		applyRedditOptions(ctx, operation, formData);
 	}
 
 	if (platforms.includes('bluesky') && operation === 'uploadText') {
@@ -2415,6 +2421,14 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'ID of the flair template to apply to the post',
 				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Reddit Link URL',
+				name: 'redditLinkUrl',
+				type: 'string',
+				default: '',
+				description: 'URL for a Reddit link post. Creates a link post with URL preview card instead of a text post.',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['reddit', '__manual_platform__'] } },
 			},
 
 		// ----- YouTube Specific Parameters (Video Only) -----
