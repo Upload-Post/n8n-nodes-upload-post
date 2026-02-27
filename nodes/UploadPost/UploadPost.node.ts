@@ -726,9 +726,13 @@ const applyThreadsOptions = (ctx: ExecutionContext, formData: IDataObject) => {
 const applyRedditOptions = (ctx: ExecutionContext, formData: IDataObject) => {
 	const subreddit = ctx.node.getNodeParameter('redditSubreddit', ctx.itemIndex) as string;
 	const flairId = ctx.node.getNodeParameter('redditFlairId', ctx.itemIndex, '') as string;
+	const linkUrl = ctx.node.getNodeParameter('redditLinkUrl', ctx.itemIndex, '') as string;
 	formData.subreddit = subreddit;
 	if (flairId) {
 		formData.flair_id = flairId;
+	}
+	if (linkUrl) {
+		formData.reddit_link_url = linkUrl;
 	}
 };
 
@@ -2415,6 +2419,14 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'ID of the flair template to apply to the post',
 				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Reddit Link URL',
+				name: 'redditLinkUrl',
+				type: 'string',
+				default: '',
+				description: 'URL for a link post. Creates a Reddit link post (kind=link) instead of a self post.',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['reddit', '__manual_platform__'] } },
 			},
 
 		// ----- YouTube Specific Parameters (Video Only) -----
