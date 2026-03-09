@@ -926,6 +926,16 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 				waitForCompletion: false,
 			};
 		}
+		case 'getJobStatus': {
+			const jobId = ctx.node.getNodeParameter('jobId', ctx.itemIndex) as string;
+			return {
+				endpoint: '/uploadposts/status',
+				method: 'GET',
+				qs: { job_id: jobId },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
 		case 'getHistory': {
 			const page = ctx.node.getNodeParameter('historyPage', ctx.itemIndex, 1) as number;
 			const limit = ctx.node.getNodeParameter('historyLimit', ctx.itemIndex, 20) as number;
@@ -1231,6 +1241,7 @@ export class UploadPost implements INodeType {
 						{ name: 'Edit Scheduled Post', value: 'editScheduled', action: 'Edit scheduled post', description: 'Edit schedule details (like date/time) by job ID' },
 						{ name: 'Get Analytics', value: 'getAnalytics', action: 'Get analytics', description: 'Retrieve aggregated analytics for uploads' },
 					{ name: 'Get Upload History', value: 'getHistory', action: 'Get upload history', description: 'List past uploads with optional filters' },
+					{ name: 'Get Job Status', value: 'getJobStatus', action: 'Get job status', description: 'Check the status of a scheduled or queued post using the job_id' },
 					{ name: 'Get Upload Status', value: 'getStatus', action: 'Get upload status', description: 'Check the status of an upload using the request_id' },
 						{ name: 'List Scheduled Posts', value: 'listScheduled', action: 'List scheduled posts', description: 'List your scheduled (future) posts' },
 				],
@@ -1666,6 +1677,19 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['getStatus']
+					}
+				},
+			},
+			{
+				displayName: 'Job ID',
+				name: 'jobId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The job_id returned by a scheduled or queued post to query its status',
+				displayOptions: {
+					show: {
+						operation: ['getJobStatus']
 					}
 				},
 			},
