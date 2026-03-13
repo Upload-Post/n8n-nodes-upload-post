@@ -223,6 +223,7 @@ const FIRST_COMMENT_OVERRIDES: Array<{
 	{ platform: 'youtube', param: 'youtubeFirstComment', field: 'youtube_first_comment', operations: ['uploadVideo'] },
 	{ platform: 'reddit', param: 'redditFirstComment', field: 'reddit_first_comment' },
 	{ platform: 'bluesky', param: 'blueskyFirstComment', field: 'bluesky_first_comment' },
+	{ platform: 'linkedin', param: 'linkedinFirstComment', field: 'linkedin_first_comment' },
 ];
 
 const getFilteredPlatforms = (operation: UploadOperation, platforms: string[]): string[] => {
@@ -1514,6 +1515,14 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'Optional override for Bluesky first comment/reply. If provided, overrides the generic First Comment for Bluesky.',
 				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'LinkedIn First Comment (Override)',
+				name: 'linkedinFirstComment',
+				type: 'string',
+				default: '',
+				description: 'Optional override for LinkedIn first comment. If provided, overrides the generic First Comment for LinkedIn.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'], platform: ['linkedin', '__manual_platform__'] } },
 			},
 
 		// Fields for Upload Photo(s)
