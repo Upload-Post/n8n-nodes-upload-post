@@ -728,6 +728,11 @@ const applyThreadsOptions = (ctx: ExecutionContext, formData: IDataObject) => {
 			formData.threads_thread_media_layout = threadsThreadMediaLayout;
 		}
 	}
+
+	const threadsTopicTag = ctx.node.getNodeParameter('threadsTopicTag', ctx.itemIndex, '') as string;
+	if (threadsTopicTag) {
+		formData.threads_topic_tag = threadsTopicTag;
+	}
 };
 
 const applyGoogleBusinessOptions = (ctx: ExecutionContext, _operation: UploadOperation, formData: IDataObject) => {
@@ -2451,6 +2456,14 @@ export class UploadPost implements INodeType {
 						platform: ['threads', '__manual_platform__']
 					},
 				},
+			},
+			{
+				displayName: 'Threads Topic Tag',
+				name: 'threadsTopicTag',
+				type: 'string',
+				default: '',
+				description: 'A topic tag for the Threads post (1-50 characters, no periods or ampersands). Helps increase reach on Threads.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads', '__manual_platform__'] } },
 			},
 
 		// ----- Google Business Specific Parameters -----
