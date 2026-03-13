@@ -730,6 +730,11 @@ const applyThreadsOptions = (ctx: ExecutionContext, formData: IDataObject) => {
 	}
 };
 
+const applyGoogleBusinessOptions = (ctx: ExecutionContext, _operation: UploadOperation, formData: IDataObject) => {
+	const locationId = ctx.node.getNodeParameter('gbpLocationId', ctx.itemIndex, '') as string;
+	if (locationId) formData.gbp_location_id = locationId;
+};
+
 const applyRedditOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
 	const subreddit = ctx.node.getNodeParameter('redditSubreddit', ctx.itemIndex) as string;
 	const flairId = ctx.node.getNodeParameter('redditFlairId', ctx.itemIndex, '') as string;
@@ -787,6 +792,10 @@ const applyUploadPlatformOptions = async (
 
 	if (platforms.includes('reddit')) {
 		applyRedditOptions(ctx, operation, formData);
+	}
+
+	if (platforms.includes('google_business')) {
+		applyGoogleBusinessOptions(ctx, operation, formData);
 	}
 
 	if (platforms.includes('bluesky') && operation === 'uploadText') {
@@ -2442,6 +2451,16 @@ export class UploadPost implements INodeType {
 						platform: ['threads', '__manual_platform__']
 					},
 				},
+			},
+
+		// ----- Google Business Specific Parameters -----
+			{
+				displayName: 'Google Business Location ID',
+				name: 'gbpLocationId',
+				type: 'string',
+				default: '',
+				description: 'Location ID for accounts with multiple Google Business Profile locations (e.g., accounts/123/locations/456). If omitted, uses the default connected location.',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'] } },
 			},
 
 		// ----- Reddit Specific Parameters -----
