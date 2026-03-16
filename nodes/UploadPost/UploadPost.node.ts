@@ -223,6 +223,7 @@ const FIRST_COMMENT_OVERRIDES: Array<{
 	{ platform: 'youtube', param: 'youtubeFirstComment', field: 'youtube_first_comment', operations: ['uploadVideo'] },
 	{ platform: 'reddit', param: 'redditFirstComment', field: 'reddit_first_comment' },
 	{ platform: 'bluesky', param: 'blueskyFirstComment', field: 'bluesky_first_comment' },
+	{ platform: 'linkedin', param: 'linkedinFirstComment', field: 'linkedin_first_comment' },
 ];
 
 const getFilteredPlatforms = (operation: UploadOperation, platforms: string[]): string[] => {
@@ -727,6 +728,16 @@ const applyThreadsOptions = (ctx: ExecutionContext, formData: IDataObject) => {
 			formData.threads_thread_media_layout = threadsThreadMediaLayout;
 		}
 	}
+
+	const threadsTopicTag = ctx.node.getNodeParameter('threadsTopicTag', ctx.itemIndex, '') as string;
+	if (threadsTopicTag) {
+		formData.threads_topic_tag = threadsTopicTag;
+	}
+};
+
+const applyGoogleBusinessOptions = (ctx: ExecutionContext, _operation: UploadOperation, formData: IDataObject) => {
+	const locationId = ctx.node.getNodeParameter('gbpLocationId', ctx.itemIndex, '') as string;
+	if (locationId) formData.gbp_location_id = locationId;
 };
 
 const applyRedditOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
@@ -786,6 +797,10 @@ const applyUploadPlatformOptions = async (
 
 	if (platforms.includes('reddit')) {
 		applyRedditOptions(ctx, operation, formData);
+	}
+
+	if (platforms.includes('google_business')) {
+		applyGoogleBusinessOptions(ctx, operation, formData);
 	}
 
 	if (platforms.includes('bluesky') && operation === 'uploadText') {
@@ -922,6 +937,16 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 				endpoint: '/uploadposts/status',
 				method: 'GET',
 				qs: { request_id: requestId },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getJobStatus': {
+			const jobId = ctx.node.getNodeParameter('jobId', ctx.itemIndex) as string;
+			return {
+				endpoint: '/uploadposts/status',
+				method: 'GET',
+				qs: { job_id: jobId },
 				isUploadOperation: false,
 				waitForCompletion: false,
 			};
@@ -1231,6 +1256,7 @@ export class UploadPost implements INodeType {
 						{ name: 'Edit Scheduled Post', value: 'editScheduled', action: 'Edit scheduled post', description: 'Edit schedule details (like date/time) by job ID' },
 						{ name: 'Get Analytics', value: 'getAnalytics', action: 'Get analytics', description: 'Retrieve aggregated analytics for uploads' },
 					{ name: 'Get Upload History', value: 'getHistory', action: 'Get upload history', description: 'List past uploads with optional filters' },
+					{ name: 'Get Job Status', value: 'getJobStatus', action: 'Get job status', description: 'Check the status of a scheduled or queued post using the job_id' },
 					{ name: 'Get Upload Status', value: 'getStatus', action: 'Get upload status', description: 'Check the status of an upload using the request_id' },
 						{ name: 'List Scheduled Posts', value: 'listScheduled', action: 'List scheduled posts', description: 'List your scheduled (future) posts' },
 				],
@@ -1515,6 +1541,14 @@ export class UploadPost implements INodeType {
 				description: 'Optional override for Bluesky first comment/reply. If provided, overrides the generic First Comment for Bluesky.',
 				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky', '__manual_platform__'] } },
 			},
+			{
+				displayName: 'LinkedIn First Comment (Override)',
+				name: 'linkedinFirstComment',
+				type: 'string',
+				default: '',
+				description: 'Optional override for LinkedIn first comment. If provided, overrides the generic First Comment for LinkedIn.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'], platform: ['linkedin', '__manual_platform__'] } },
+			},
 
 		// Fields for Upload Photo(s)
 			{
@@ -1666,6 +1700,19 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['getStatus']
+					}
+				},
+			},
+			{
+				displayName: 'Job ID',
+				name: 'jobId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The job_id returned by a scheduled or queued post to query its status',
+				displayOptions: {
+					show: {
+						operation: ['getJobStatus']
 					}
 				},
 			},
@@ -2409,6 +2456,24 @@ export class UploadPost implements INodeType {
 						platform: ['threads', '__manual_platform__']
 					},
 				},
+			},
+			{
+				displayName: 'Threads Topic Tag',
+				name: 'threadsTopicTag',
+				type: 'string',
+				default: '',
+				description: 'A topic tag for the Threads post (1-50 characters, no periods or ampersands). Helps increase reach on Threads.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads', '__manual_platform__'] } },
+			},
+
+		// ----- Google Business Specific Parameters -----
+			{
+				displayName: 'Google Business Location ID',
+				name: 'gbpLocationId',
+				type: 'string',
+				default: '',
+				description: 'Location ID for accounts with multiple Google Business Profile locations (e.g., accounts/123/locations/456). If omitted, uses the default connected location.',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'] } },
 			},
 
 		// ----- Reddit Specific Parameters -----
