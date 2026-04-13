@@ -1189,7 +1189,7 @@ const pollUploadStatus = async (
 		const statusValue = (statusData && (statusData as any).status) as string | undefined;
 		if (
 			(statusData && (statusData as any).success === true) ||
-			(typeof statusValue === 'string' && ['success', 'completed', 'failed', 'error'].includes(statusValue.toLowerCase()))
+			(typeof statusValue === 'string' && ['success', 'completed', 'failed', 'error', 'scheduled', 'queued', 'pending'].includes(statusValue.toLowerCase()))
 		) {
 			break;
 		}
