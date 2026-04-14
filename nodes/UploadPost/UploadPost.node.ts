@@ -2114,7 +2114,7 @@ export class UploadPost implements INodeType {
 					{ name: 'Upload Completed', value: 'upload_completed', description: 'When a post upload finishes (success or failure)' },
 					{ name: 'Account Connected', value: 'social_account.connected', description: 'When a social account is connected or reconnected' },
 					{ name: 'Account Disconnected', value: 'social_account.disconnected', description: 'When a social account is disconnected' },
-					{ name: 'Re-auth Required', value: 'social_account.reauth_required', description: 'When a social account needs re-authentication' },
+					{ name: 'Re-Auth Required', value: 'social_account.reauth_required', description: 'When a social account needs re-authentication' },
 				],
 				default: ['upload_completed', 'social_account.connected', 'social_account.disconnected', 'social_account.reauth_required'],
 				description: 'Which webhook events to subscribe to',
