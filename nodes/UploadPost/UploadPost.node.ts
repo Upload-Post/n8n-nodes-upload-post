@@ -2385,7 +2385,7 @@ export class UploadPost implements INodeType {
 				name: 'instagramCoverUrl',
 				type: 'string',
 				default: '',
-				description: 'URL or binary property name for custom video cover on Instagram. If a URL (http/https) is provided, it is sent directly. If a binary property name is provided, the image is uploaded and converted to a public URL automatically. Must be JPEG, ≤ 8MB. Only for Upload Video.',
+				description: 'URL or binary property name for custom video cover on Instagram. Binary images are uploaded and converted to a public URL automatically. JPEG, ≤ 8MB.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
