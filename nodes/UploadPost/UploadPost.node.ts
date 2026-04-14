@@ -504,7 +504,7 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 	}
 };
 
-const applyInstagramOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
+const applyInstagramOptions = async (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
 	const providedMediaType = ctx.node.getNodeParameter('instagramMediaType', ctx.itemIndex, '') as string;
 	let finalMediaType = providedMediaType;
 	if (operation === 'uploadPhotos') {
@@ -541,7 +541,14 @@ const applyInstagramOptions = (ctx: ExecutionContext, operation: UploadOperation
 		if (shareMode && shareMode !== 'CUSTOM') {
 			formData.share_mode = shareMode;
 		}
-		if (coverUrl) formData.cover_url = coverUrl;
+		if (coverUrl) {
+			if (isUrlString(coverUrl)) {
+				formData.cover_url = coverUrl;
+			} else {
+				const coverBinary = await getBinaryFieldFromItem(ctx, coverUrl, 'Binary data for Instagram cover property');
+				formData.cover_image = coverBinary;
+			}
+		}
 		if (audioName) formData.audio_name = audioName;
 		if (thumbOffset) formData.thumb_offset = thumbOffset;
 	}
@@ -780,7 +787,7 @@ const applyUploadPlatformOptions = async (
 	}
 
 	if (platforms.includes('instagram')) {
-		applyInstagramOptions(ctx, operation, formData);
+		await applyInstagramOptions(ctx, operation, formData);
 	}
 
 	if (platforms.includes('youtube') && operation === 'uploadVideo') {
@@ -1088,8 +1095,84 @@ const buildUserRequest = (ctx: ExecutionContext): RequestConfig => {
 				waitForCompletion: false,
 			};
 		}
+		case 'getNotificationPrefs': {
+			return {
+				endpoint: '/uploadposts/users/notifications',
+				method: 'GET',
+				body: {},
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'updateNotificationPrefs': {
+			const webhookUrl = ctx.node.getNodeParameter('webhookUrl', ctx.itemIndex, '') as string;
+			const webhookEnabled = ctx.node.getNodeParameter('webhookEnabled', ctx.itemIndex, false) as boolean;
+			const webhookEventsRaw = ctx.node.getNodeParameter('webhookEvents', ctx.itemIndex, []) as string[];
+			const body: Record<string, unknown> = {
+				channels: { webhook: webhookEnabled },
+			};
+			if (webhookUrl) body.webhook_url = webhookUrl;
+			if (webhookEventsRaw.length > 0) body.webhook_events = webhookEventsRaw;
+			return {
+				endpoint: '/uploadposts/users/notifications',
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
 		default:
 			throw new NodeOperationError(ctx.node.getNode(), `Unsupported user operation: ${ctx.operation}`, {
+				itemIndex: ctx.itemIndex,
+			});
+	}
+};
+
+const buildInstagramRequest = (ctx: ExecutionContext): RequestConfig => {
+	switch (ctx.operation) {
+		case 'getPostComments': {
+			const user = ctx.node.getNodeParameter('instagramUser', ctx.itemIndex) as string;
+			const postId = ctx.node.getNodeParameter('instagramPostId', ctx.itemIndex) as string;
+			const qs: IDataObject = { platform: 'instagram', user };
+			if (postId.startsWith('http://') || postId.startsWith('https://')) {
+				qs.post_url = postId;
+			} else {
+				qs.post_id = postId;
+			}
+			return {
+				endpoint: '/uploadposts/comments',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'privateReplyToComment': {
+			const user = ctx.node.getNodeParameter('instagramUser', ctx.itemIndex) as string;
+			const commentId = ctx.node.getNodeParameter('instagramCommentId', ctx.itemIndex) as string;
+			const message = ctx.node.getNodeParameter('instagramReplyMessage', ctx.itemIndex) as string;
+			return {
+				endpoint: '/uploadposts/comments/reply',
+				method: 'POST',
+				body: { platform: 'instagram', user, comment_id: commentId, message },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'publicReplyToComment': {
+			const user = ctx.node.getNodeParameter('instagramUser', ctx.itemIndex) as string;
+			const commentId = ctx.node.getNodeParameter('instagramCommentId', ctx.itemIndex) as string;
+			const message = ctx.node.getNodeParameter('instagramReplyMessage', ctx.itemIndex) as string;
+			return {
+				endpoint: '/uploadposts/comments/public-reply',
+				method: 'POST',
+				body: { platform: 'instagram', user, comment_id: commentId, message },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		default:
+			throw new NodeOperationError(ctx.node.getNode(), `Unsupported Instagram operation: ${ctx.operation}`, {
 				itemIndex: ctx.itemIndex,
 			});
 	}
@@ -1110,6 +1193,9 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 	}
 
 	const resource = ctx.node.getNodeParameter('resource', ctx.itemIndex) as string;
+	if (resource === 'instagram') {
+		return buildInstagramRequest(ctx);
+	}
 	if (resource === 'monitoring') {
 		return buildMonitoringRequest(ctx);
 	}
@@ -1226,6 +1312,7 @@ export class UploadPost implements INodeType {
 				noDataExpression: true,
 				options: [
 					{ name: 'Upload', value: 'uploads' },
+					{ name: 'Instagram', value: 'instagram' },
 					{ name: 'Status & History', value: 'monitoring' },
 					{ name: 'User', value: 'users' },
 				],
@@ -1273,11 +1360,87 @@ export class UploadPost implements INodeType {
 					{ name: 'Create User', value: 'createUser', action: 'Create user', description: 'Create a new Upload-Post user (profile name)' },
 					{ name: 'Delete User', value: 'deleteUser', action: 'Delete user', description: 'Delete an existing Upload-Post user by profile name' },
 					{ name: 'Generate JWT (for Platform Integration)', value: 'generateJwt', action: 'Generate jwt for platform integration', description: 'Generate a connection URL (JWT) for a profile. Only needed when integrating Upload-Post into your own platform.' },
+					{ name: 'Get Notification Preferences', value: 'getNotificationPrefs', action: 'Get notification preferences', description: 'Get current webhook and notification settings' },
 					{ name: 'List Users', value: 'listUsers', action: 'List users', description: 'List Upload-Post users (profiles)' },
+					{ name: 'Update Notification Preferences', value: 'updateNotificationPrefs', action: 'Update notification preferences', description: 'Configure webhook URL and event types for real-time notifications (upload_completed, social_account.connected, social_account.disconnected, social_account.reauth_required)' },
 					{ name: 'Validate JWT (for Platform Integration)', value: 'validateJwt', action: 'Validate jwt for platform integration', description: 'Validate a connection token from your backend. Only needed for custom platform integration.' },
 				],
 				default: 'listUsers',
 				displayOptions: { show: { resource: ['users'] } },
+			},
+			// Operations for Instagram
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{ name: 'Get Post Comments', value: 'getPostComments', action: 'Get post comments', description: 'Retrieve all comments on a specific Instagram post' },
+					{ name: 'Private Reply to Comment', value: 'privateReplyToComment', action: 'Private reply to comment', description: 'Send a private reply (DM) to the author of a comment' },
+					{ name: 'Public Reply to Comment', value: 'publicReplyToComment', action: 'Public reply to comment', description: 'Post a public reply visible under the original comment' },
+				],
+				default: 'getPostComments',
+				displayOptions: { show: { resource: ['instagram'] } },
+			},
+			// Instagram operation parameters
+			{
+				displayName: 'User Identifier Name or ID',
+				name: 'instagramUser',
+				type: 'options',
+				noDataExpression: true,
+				required: true,
+				default: '',
+				description: 'Choose from your created profiles. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				typeOptions: { loadOptionsMethod: 'getUserProfiles' },
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['getPostComments', 'privateReplyToComment', 'publicReplyToComment'],
+					},
+				},
+			},
+			{
+				displayName: 'Post ID or URL',
+				name: 'instagramPostId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Numeric media ID or full Instagram post URL (e.g., https://www.instagram.com/p/ABC123/)',
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['getPostComments'],
+					},
+				},
+			},
+			{
+				displayName: 'Comment ID',
+				name: 'instagramCommentId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The ID of the comment to reply to (from Get Post Comments)',
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['privateReplyToComment', 'publicReplyToComment'],
+					},
+				},
+			},
+			{
+				displayName: 'Message',
+				name: 'instagramReplyMessage',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The reply message text',
+				typeOptions: { rows: 3 },
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['privateReplyToComment', 'publicReplyToComment'],
+					},
+				},
 			},
 
 		// Common Fields for all operations
@@ -1903,6 +2066,39 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { operation: ['validateJwt'] } },
 			},
 
+			// Update Notification Preferences
+			{
+				displayName: 'Webhook Enabled',
+				name: 'webhookEnabled',
+				type: 'boolean',
+				default: true,
+				description: 'Whether to enable webhook notifications',
+				displayOptions: { show: { operation: ['updateNotificationPrefs'] } },
+			},
+			{
+				displayName: 'Webhook URL',
+				name: 'webhookUrl',
+				type: 'string',
+				default: '',
+				placeholder: 'https://your-server.com/webhook',
+				description: 'URL to receive webhook POST requests',
+				displayOptions: { show: { operation: ['updateNotificationPrefs'] } },
+			},
+			{
+				displayName: 'Webhook Events',
+				name: 'webhookEvents',
+				type: 'multiOptions',
+				options: [
+					{ name: 'Upload Completed', value: 'upload_completed', description: 'When a post upload finishes (success or failure)' },
+					{ name: 'Account Connected', value: 'social_account.connected', description: 'When a social account is connected or reconnected' },
+					{ name: 'Account Disconnected', value: 'social_account.disconnected', description: 'When a social account is disconnected' },
+					{ name: 'Re-auth Required', value: 'social_account.reauth_required', description: 'When a social account needs re-authentication' },
+				],
+				default: ['upload_completed', 'social_account.connected', 'social_account.disconnected', 'social_account.reauth_required'],
+				description: 'Which webhook events to subscribe to',
+				displayOptions: { show: { operation: ['updateNotificationPrefs'] } },
+			},
+
 		// ----- LinkedIn Specific Parameters -----
 			{
 				displayName: 'LinkedIn Visibility',
@@ -2374,11 +2570,11 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'Instagram Cover URL (Video)',
+				displayName: 'Instagram Cover URL or Binary (Video)',
 				name: 'instagramCoverUrl',
 				type: 'string',
 				default: '',
-				description: 'URL for custom video cover on Instagram. Only for Upload Video.',
+				description: 'URL or binary property name for custom video cover on Instagram. Binary images are uploaded and converted to a public URL automatically. JPEG, ≤ 8MB.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
