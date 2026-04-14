@@ -504,7 +504,7 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 	}
 };
 
-const applyInstagramOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
+const applyInstagramOptions = async (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
 	const providedMediaType = ctx.node.getNodeParameter('instagramMediaType', ctx.itemIndex, '') as string;
 	let finalMediaType = providedMediaType;
 	if (operation === 'uploadPhotos') {
@@ -541,7 +541,14 @@ const applyInstagramOptions = (ctx: ExecutionContext, operation: UploadOperation
 		if (shareMode && shareMode !== 'CUSTOM') {
 			formData.share_mode = shareMode;
 		}
-		if (coverUrl) formData.cover_url = coverUrl;
+		if (coverUrl) {
+			if (isUrlString(coverUrl)) {
+				formData.cover_url = coverUrl;
+			} else {
+				const coverBinary = await getBinaryFieldFromItem(ctx, coverUrl, 'Binary data for Instagram cover property');
+				formData.cover_image = coverBinary;
+			}
+		}
 		if (audioName) formData.audio_name = audioName;
 		if (thumbOffset) formData.thumb_offset = thumbOffset;
 	}
@@ -780,7 +787,7 @@ const applyUploadPlatformOptions = async (
 	}
 
 	if (platforms.includes('instagram')) {
-		applyInstagramOptions(ctx, operation, formData);
+		await applyInstagramOptions(ctx, operation, formData);
 	}
 
 	if (platforms.includes('youtube') && operation === 'uploadVideo') {
@@ -2374,11 +2381,11 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'Instagram Cover URL (Video)',
+				displayName: 'Instagram Cover URL or Binary (Video)',
 				name: 'instagramCoverUrl',
 				type: 'string',
 				default: '',
-				description: 'URL for custom video cover on Instagram. Only for Upload Video.',
+				description: 'URL or binary property name for custom video cover on Instagram. Binary images are uploaded and converted to a public URL automatically. JPEG, ≤ 8MB.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
