@@ -1121,6 +1121,26 @@ const buildUserRequest = (ctx: ExecutionContext): RequestConfig => {
 				waitForCompletion: false,
 			};
 		}
+		case 'getUserPreferences': {
+			return {
+				endpoint: '/uploadposts/users/preferences',
+				method: 'GET',
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'updateUserPreferences': {
+			const weekStartDay = ctx.node.getNodeParameter('weekStartDay', ctx.itemIndex, '') as string;
+			const body: IDataObject = {};
+			if (weekStartDay !== '') body.week_start_day = parseInt(weekStartDay, 10);
+			return {
+				endpoint: '/uploadposts/users/preferences',
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
 		default:
 			throw new NodeOperationError(ctx.node.getNode(), `Unsupported user operation: ${ctx.operation}`, {
 				itemIndex: ctx.itemIndex,
@@ -1361,8 +1381,10 @@ export class UploadPost implements INodeType {
 					{ name: 'Delete User', value: 'deleteUser', action: 'Delete user', description: 'Delete an existing Upload-Post user by profile name' },
 					{ name: 'Generate JWT (for Platform Integration)', value: 'generateJwt', action: 'Generate jwt for platform integration', description: 'Generate a connection URL (JWT) for a profile. Only needed when integrating Upload-Post into your own platform.' },
 					{ name: 'Get Notification Preferences', value: 'getNotificationPrefs', action: 'Get notification preferences', description: 'Get current webhook and notification settings' },
+					{ name: 'Get User Preferences', value: 'getUserPreferences', action: 'Get user preferences', description: 'Get user preferences including calendar week start day' },
 					{ name: 'List Users', value: 'listUsers', action: 'List users', description: 'List Upload-Post users (profiles)' },
 					{ name: 'Update Notification Preferences', value: 'updateNotificationPrefs', action: 'Update notification preferences', description: 'Configure webhook URL and event types for real-time notifications (upload_completed, social_account.connected, social_account.disconnected, social_account.reauth_required)' },
+					{ name: 'Update User Preferences', value: 'updateUserPreferences', action: 'Update user preferences', description: 'Update user preferences including calendar week start day (0=Sunday, 1=Monday)' },
 					{ name: 'Validate JWT (for Platform Integration)', value: 'validateJwt', action: 'Validate jwt for platform integration', description: 'Validate a connection token from your backend. Only needed for custom platform integration.' },
 				],
 				default: 'listUsers',
@@ -2097,6 +2119,20 @@ export class UploadPost implements INodeType {
 				default: ['upload_completed', 'social_account.connected', 'social_account.disconnected', 'social_account.reauth_required'],
 				description: 'Which webhook events to subscribe to',
 				displayOptions: { show: { operation: ['updateNotificationPrefs'] } },
+			},
+
+			// Update User Preferences
+			{
+				displayName: 'Week Start Day',
+				name: 'weekStartDay',
+				type: 'options',
+				options: [
+					{ name: 'Sunday', value: '0' },
+					{ name: 'Monday', value: '1' },
+				],
+				default: '0',
+				description: 'Calendar week start day (0=Sunday, 1=Monday)',
+				displayOptions: { show: { operation: ['updateUserPreferences'] } },
 			},
 
 		// ----- LinkedIn Specific Parameters -----
