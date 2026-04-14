@@ -46,10 +46,6 @@ jobs:
             echo "🚀 New version detected: $REMOTE → $LOCAL"
           fi
 
-      - name: Update npm to latest
-        if: steps.version_check.outputs.new == 'true' || github.event_name == 'workflow_dispatch'
-        run: npm install -g npm@latest && npm --version
-
       - name: Install dependencies
         if: steps.version_check.outputs.new == 'true' || github.event_name == 'workflow_dispatch'
         run: npm ci
