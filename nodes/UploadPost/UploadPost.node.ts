@@ -1108,7 +1108,7 @@ const buildUserRequest = (ctx: ExecutionContext): RequestConfig => {
 			const webhookUrl = ctx.node.getNodeParameter('webhookUrl', ctx.itemIndex, '') as string;
 			const webhookEnabled = ctx.node.getNodeParameter('webhookEnabled', ctx.itemIndex, false) as boolean;
 			const webhookEventsRaw = ctx.node.getNodeParameter('webhookEvents', ctx.itemIndex, []) as string[];
-			const body: Record<string, unknown> = {
+			const body: IDataObject = {
 				channels: { webhook: webhookEnabled },
 			};
 			if (webhookUrl) body.webhook_url = webhookUrl;
