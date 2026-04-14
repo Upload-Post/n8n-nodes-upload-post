@@ -1095,6 +1095,56 @@ const buildUserRequest = (ctx: ExecutionContext): RequestConfig => {
 	}
 };
 
+const buildInstagramRequest = (ctx: ExecutionContext): RequestConfig => {
+	switch (ctx.operation) {
+		case 'getPostComments': {
+			const user = ctx.node.getNodeParameter('instagramUser', ctx.itemIndex) as string;
+			const postId = ctx.node.getNodeParameter('instagramPostId', ctx.itemIndex) as string;
+			const qs: IDataObject = { platform: 'instagram', user };
+			if (postId.startsWith('http://') || postId.startsWith('https://')) {
+				qs.post_url = postId;
+			} else {
+				qs.post_id = postId;
+			}
+			return {
+				endpoint: '/uploadposts/comments',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'privateReplyToComment': {
+			const user = ctx.node.getNodeParameter('instagramUser', ctx.itemIndex) as string;
+			const commentId = ctx.node.getNodeParameter('instagramCommentId', ctx.itemIndex) as string;
+			const message = ctx.node.getNodeParameter('instagramReplyMessage', ctx.itemIndex) as string;
+			return {
+				endpoint: '/uploadposts/comments/reply',
+				method: 'POST',
+				body: { platform: 'instagram', user, comment_id: commentId, message },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'publicReplyToComment': {
+			const user = ctx.node.getNodeParameter('instagramUser', ctx.itemIndex) as string;
+			const commentId = ctx.node.getNodeParameter('instagramCommentId', ctx.itemIndex) as string;
+			const message = ctx.node.getNodeParameter('instagramReplyMessage', ctx.itemIndex) as string;
+			return {
+				endpoint: '/uploadposts/comments/public-reply',
+				method: 'POST',
+				body: { platform: 'instagram', user, comment_id: commentId, message },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		default:
+			throw new NodeOperationError(ctx.node.getNode(), `Unsupported Instagram operation: ${ctx.operation}`, {
+				itemIndex: ctx.itemIndex,
+			});
+	}
+};
+
 const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig> => {
 	if (ctx.operation === 'uploadPhotos') {
 		return buildUploadPhotosRequest(ctx);
@@ -1110,6 +1160,9 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 	}
 
 	const resource = ctx.node.getNodeParameter('resource', ctx.itemIndex) as string;
+	if (resource === 'instagram') {
+		return buildInstagramRequest(ctx);
+	}
 	if (resource === 'monitoring') {
 		return buildMonitoringRequest(ctx);
 	}
@@ -1226,6 +1279,7 @@ export class UploadPost implements INodeType {
 				noDataExpression: true,
 				options: [
 					{ name: 'Upload', value: 'uploads' },
+					{ name: 'Instagram', value: 'instagram' },
 					{ name: 'Status & History', value: 'monitoring' },
 					{ name: 'User', value: 'users' },
 				],
@@ -1278,6 +1332,80 @@ export class UploadPost implements INodeType {
 				],
 				default: 'listUsers',
 				displayOptions: { show: { resource: ['users'] } },
+			},
+			// Operations for Instagram
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{ name: 'Get Post Comments', value: 'getPostComments', action: 'Get post comments', description: 'Retrieve all comments on a specific Instagram post' },
+					{ name: 'Private Reply to Comment', value: 'privateReplyToComment', action: 'Private reply to comment', description: 'Send a private reply (DM) to the author of a comment' },
+					{ name: 'Public Reply to Comment', value: 'publicReplyToComment', action: 'Public reply to comment', description: 'Post a public reply visible under the original comment' },
+				],
+				default: 'getPostComments',
+				displayOptions: { show: { resource: ['instagram'] } },
+			},
+			// Instagram operation parameters
+			{
+				displayName: 'User Identifier Name or ID',
+				name: 'instagramUser',
+				type: 'options',
+				noDataExpression: true,
+				required: true,
+				default: '',
+				description: 'Choose from your created profiles. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				typeOptions: { loadOptionsMethod: 'getUserProfiles' },
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['getPostComments', 'privateReplyToComment', 'publicReplyToComment'],
+					},
+				},
+			},
+			{
+				displayName: 'Post ID or URL',
+				name: 'instagramPostId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Numeric media ID or full Instagram post URL (e.g., https://www.instagram.com/p/ABC123/)',
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['getPostComments'],
+					},
+				},
+			},
+			{
+				displayName: 'Comment ID',
+				name: 'instagramCommentId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The ID of the comment to reply to (from Get Post Comments)',
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['privateReplyToComment', 'publicReplyToComment'],
+					},
+				},
+			},
+			{
+				displayName: 'Message',
+				name: 'instagramReplyMessage',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The reply message text',
+				typeOptions: { rows: 3 },
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['privateReplyToComment', 'publicReplyToComment'],
+					},
+				},
 			},
 
 		// Common Fields for all operations
