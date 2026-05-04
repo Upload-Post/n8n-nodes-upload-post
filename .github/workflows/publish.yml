@@ -56,8 +56,8 @@ jobs:
 
       - name: Publish to npm (dry-run)
         if: ${{ inputs.dry_run == true }}
-        run: npm publish --provenance --access public --dry-run
+        run: unset NODE_AUTH_TOKEN && npm publish --provenance --access public --dry-run
 
       - name: Publish to npm
         if: (steps.version_check.outputs.new == 'true' && inputs.dry_run != true) || github.event_name == 'release'
-        run: npm publish --provenance --access public
+        run: unset NODE_AUTH_TOKEN && npm publish --provenance --access public
