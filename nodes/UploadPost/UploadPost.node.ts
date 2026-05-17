@@ -587,6 +587,7 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 	const blockedCountries = ctx.node.getNodeParameter('youtubeBlockedCountries', ctx.itemIndex, '') as string;
 	const hasPaidProductPlacement = ctx.node.getNodeParameter('youtubeHasPaidProductPlacement', ctx.itemIndex, false) as boolean;
 	const recordingDate = ctx.node.getNodeParameter('youtubeRecordingDate', ctx.itemIndex, '') as string;
+	const playlistId = ctx.node.getNodeParameter('youtubePlaylistId', ctx.itemIndex, '') as string;
 
 	formData.selfDeclaredMadeForKids = String(selfDeclaredMadeForKids);
 	formData.containsSyntheticMedia = String(containsSyntheticMedia);
@@ -596,6 +597,7 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 	if (blockedCountries) formData.blockedCountries = blockedCountries;
 	formData.hasPaidProductPlacement = String(hasPaidProductPlacement);
 	if (recordingDate) formData.recordingDate = recordingDate;
+	if (playlistId && playlistId.trim()) formData.youtube_playlist_id = playlistId.trim();
 };
 
 const validateXPollConfiguration = (
@@ -2931,6 +2933,19 @@ export class UploadPost implements INodeType {
 				type: 'dateTime',
 				default: '',
 				description: 'Recording timestamp (ISO 8601 format). Only for Upload Video.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['youtube', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'YouTube Playlist ID',
+				name: 'youtubePlaylistId',
+				type: 'string',
+				default: '',
+				description: 'Optional YouTube playlist ID (e.g. PLxxxxxxxxxxxx) to add the uploaded video to after publishing. For multiple playlists, pass a comma-separated list of IDs. The playlist must belong to the same YouTube channel that owns the upload. Only for Upload Video.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
