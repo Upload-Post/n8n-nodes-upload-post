@@ -597,7 +597,7 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 	if (blockedCountries) formData.blockedCountries = blockedCountries;
 	formData.hasPaidProductPlacement = String(hasPaidProductPlacement);
 	if (recordingDate) formData.recordingDate = recordingDate;
-	if (playlistId && playlistId.trim()) formData.youtube_playlist_id = playlistId.trim();
+	if (playlistId) formData.youtube_playlist_id = playlistId;
 };
 
 const validateXPollConfiguration = (
