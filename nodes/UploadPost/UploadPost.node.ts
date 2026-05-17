@@ -3334,6 +3334,7 @@ export class UploadPost implements INodeType {
 				const allPlatforms = [
 					{ name: 'Bluesky', value: 'bluesky' },
 					{ name: 'Facebook', value: 'facebook' },
+					{ name: 'Google Business', value: 'google_business' },
 					{ name: 'Instagram', value: 'instagram' },
 					{ name: 'LinkedIn', value: 'linkedin' },
 					{ name: 'Pinterest', value: 'pinterest' },
@@ -3345,9 +3346,9 @@ export class UploadPost implements INodeType {
 				];
 
 				const platformSupport: Record<string, string[]> = {
-					uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'reddit'],
-					uploadVideo: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
-					uploadText: ['bluesky', 'facebook', 'linkedin', 'reddit', 'threads', 'x'],
+					uploadPhotos: ['bluesky', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'reddit'],
+					uploadVideo: ['bluesky', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
+					uploadText: ['bluesky', 'facebook', 'google_business', 'linkedin', 'reddit', 'threads', 'x'],
 				};
 
 				const supportedPlatforms = platformSupport[operation] || [];
