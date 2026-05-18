@@ -596,6 +596,31 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 	if (blockedCountries) formData.blockedCountries = blockedCountries;
 	formData.hasPaidProductPlacement = String(hasPaidProductPlacement);
 	if (recordingDate) formData.recordingDate = recordingDate;
+
+	// Subtitle files
+	const subtitleLanguages = ctx.node.getNodeParameter('youtubeSubtitleLanguages', ctx.itemIndex, '') as string;
+	const subtitleNames = ctx.node.getNodeParameter('youtubeSubtitleNames', ctx.itemIndex, '') as string;
+	const subtitleFiles = ctx.node.getNodeParameter('youtubeSubtitleFiles', ctx.itemIndex, '') as string;
+
+	if (subtitleLanguages && subtitleFiles) {
+		const languages = subtitleLanguages.split(',').map((s: string) => s.trim()).filter(Boolean);
+		const names = subtitleNames ? subtitleNames.split(',').map((s: string) => s.trim()) : [];
+		const fileRefs = subtitleFiles.split(',').map((s: string) => s.trim()).filter(Boolean);
+
+		for (let i = 0; i < Math.min(languages.length, fileRefs.length); i++) {
+			formData[`youtube_subtitle_language_${i}`] = languages[i];
+			if (names[i]) {
+				formData[`youtube_subtitle_name_${i}`] = names[i];
+			}
+			const fileRef = fileRefs[i];
+			if (isUrlString(fileRef)) {
+				formData[`youtube_subtitle_file_${i}`] = fileRef;
+			} else {
+				const subtitleBinary = await getBinaryFieldFromItem(ctx, fileRef, `Binary data for YouTube subtitle ${i}`);
+				formData[`youtube_subtitle_file_${i}`] = subtitleBinary;
+			}
+		}
+	}
 };
 
 const validateXPollConfiguration = (
@@ -2931,6 +2956,45 @@ export class UploadPost implements INodeType {
 				type: 'dateTime',
 				default: '',
 				description: 'Recording timestamp (ISO 8601 format). Only for Upload Video.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['youtube', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'YouTube Subtitle Languages',
+				name: 'youtubeSubtitleLanguages',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated BCP-47 language codes for subtitle tracks (e.g. "en,es,fr"). Each language maps to a corresponding subtitle file. Only for Upload Video.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['youtube', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'YouTube Subtitle Names',
+				name: 'youtubeSubtitleNames',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated display names for subtitle tracks (e.g. "English,Spanish,French"). Optional; defaults to language code if not provided. Only for Upload Video.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['youtube', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'YouTube Subtitle Files',
+				name: 'youtubeSubtitleFiles',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated binary property names or URLs for subtitle files (e.g. "data_en,data_es" or "https://example.com/en.srt,https://example.com/es.srt"). Supported formats: SRT, VTT, SBV, SUB, ASS, SSA, TTML. Only for Upload Video.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
