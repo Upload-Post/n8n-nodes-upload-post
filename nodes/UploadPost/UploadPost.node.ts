@@ -1092,6 +1092,7 @@ const buildUserRequest = (ctx: ExecutionContext): RequestConfig => {
 			const readonlyCalendar = ctx.node.getNodeParameter('readonlyCalendar', ctx.itemIndex, false) as boolean;
 			const connectTitle = ctx.node.getNodeParameter('connectTitle', ctx.itemIndex, '') as string;
 			const connectDescription = ctx.node.getNodeParameter('connectDescription', ctx.itemIndex, '') as string;
+			const language = ctx.node.getNodeParameter('language', ctx.itemIndex, '') as string;
 			const body: IDataObject = { username };
 			if (redirectUrl) body.redirect_url = redirectUrl;
 			if (logoImage) body.logo_image = logoImage;
@@ -1101,6 +1102,7 @@ const buildUserRequest = (ctx: ExecutionContext): RequestConfig => {
 			body.readonly_calendar = readonlyCalendar;
 			if (connectTitle) body.connect_title = connectTitle;
 			if (connectDescription) body.connect_description = connectDescription;
+			if (language) body.language = language;
 			return {
 				endpoint: '/uploadposts/users/generate-jwt',
 				method: 'POST',
@@ -2098,6 +2100,23 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional custom description for the connection page',
+				displayOptions: { show: { operation: ['generateJwt'] } },
+			},
+			{
+				displayName: 'Language',
+				name: 'language',
+				type: 'options',
+				default: '',
+				description:
+					'Force the connection page language for this profile. When set to Auto-Detect, the page detects the visitor browser language and falls back to English.',
+				options: [
+					{ name: 'Auto-Detect (Default)', value: '' },
+					{ name: 'English', value: 'en' },
+					{ name: 'French', value: 'fr' },
+					{ name: 'German', value: 'de' },
+					{ name: 'Portuguese', value: 'pt' },
+					{ name: 'Spanish', value: 'es' },
+				],
 				displayOptions: { show: { operation: ['generateJwt'] } },
 			},
 
