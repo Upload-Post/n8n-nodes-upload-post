@@ -36,7 +36,7 @@ The node provides the following operations grouped for clarity:
   - Supports file uploads and photo URLs (comma-separated list).
   - Common parameters: User Identifier, Platform Names or IDs, Title / Main Content, Description (optional), Photos (Files or URLs), Scheduled Date (optional).
   - Title/Description overrides per platform: `instagram_title`, `facebook_title`, `tiktok_title`, `linkedin_title`, `x_title`, `youtube_title`, `pinterest_title`, `threads_title`.
-  - Platform-specific parameters available for: Facebook, Instagram, LinkedIn, Pinterest, TikTok, X (Twitter).
+  - Platform-specific parameters available for: Discord, Facebook, Instagram, LinkedIn, Pinterest, Telegram, TikTok, X (Twitter).
   - **Pinterest**: Requires Board selection via dynamic selector.
   - **Instagram**: Media Type (Image/Stories), TikTok: Auto-add music, disable comments, brand content toggles.
   - **Facebook**: Page selection via dynamic selector.
@@ -47,7 +47,7 @@ The node provides the following operations grouped for clarity:
   - Supports file uploads and video URLs.
   - Common parameters: User Identifier, Platform Names or IDs, Title / Main Content, Description (optional), Video (File or URL), Scheduled Date (optional).
   - Title/Description overrides per platform: `instagram_title`, `facebook_title`, `tiktok_title`, `linkedin_title`, `x_title`, `youtube_title`, `pinterest_title`.
-  - Platform-specific parameters available for: Facebook, Instagram, LinkedIn, Pinterest, Threads, TikTok, X (Twitter), YouTube.
+  - Platform-specific parameters available for: Discord, Facebook, Instagram, LinkedIn, Pinterest, Telegram, Threads, TikTok, X (Twitter), YouTube.
   - **YouTube**: Custom thumbnail (URL/binary), tags, category, privacy, embeddable, license, public stats, made for kids, synthetic media declaration, geo-restrictions, paid product placement, recording date, default language/audio language.
   - **Facebook**: Page selection, video state (Published/Draft), media type (Reels/Stories).
   - **Instagram**: Media type (Reels/Stories), share to feed, collaborators, cover URL, audio name, user tags, location ID, thumb offset.
@@ -58,7 +58,7 @@ The node provides the following operations grouped for clarity:
 
 - **Upload Text**: Upload a text-based post to supported platforms.
   - Common parameters: User Identifier, Platform Names or IDs, Title / Main Content (used as post content), Scheduled Date (optional).
-  - Platform-specific parameters available for: Facebook, LinkedIn, Reddit, Threads, X (Twitter).
+  - Platform-specific parameters available for: Discord, Facebook, LinkedIn, Reddit, Telegram, Threads, X (Twitter).
   - **Facebook**: Page selection, link URL for preview.
   - **LinkedIn**: Page selection ("Me" for personal profile).
   - **X (Twitter)**: Reply settings, poll options (2-4 options, 5-10080 min duration), post URL, quote tweet ID, geo place ID, super followers exclusivity, community ID, sharing options, direct message deep link, card URI, long text handling.

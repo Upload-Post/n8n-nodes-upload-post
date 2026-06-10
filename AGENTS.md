@@ -14,6 +14,8 @@ The Upload Post node enables automated publishing to:
 - **Pinterest** (Photos, Videos, Boards)
 - **Threads** (Photos, Videos, Text)
 - **Reddit** (Text posts)
+- **Discord** (Photos, Videos, Text)
+- **Telegram** (Photos, Videos, Text)
 
 ## Agent Integration Capabilities
 
