@@ -172,9 +172,9 @@ const getBinaryFieldFromItem = async (
 };
 
 const PLATFORM_SUPPORT: Record<UploadOperation, string[]> = {
-	uploadPhotos: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'reddit', 'google_business'],
-	uploadVideo: ['bluesky', 'facebook', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube', 'google_business'],
-	uploadText: ['bluesky', 'facebook', 'linkedin', 'reddit', 'threads', 'x', 'google_business'],
+	uploadPhotos: ['bluesky', 'discord', 'facebook', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'reddit', 'google_business'],
+	uploadVideo: ['bluesky', 'discord', 'facebook', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'youtube', 'google_business'],
+	uploadText: ['bluesky', 'discord', 'facebook', 'linkedin', 'reddit', 'telegram', 'threads', 'x', 'google_business'],
 	uploadDocument: ['linkedin'],
 };
 
@@ -3416,12 +3416,14 @@ export class UploadPost implements INodeType {
 				const operation = this.getCurrentNodeParameter('operation') as string;
 				const allPlatforms = [
 					{ name: 'Bluesky', value: 'bluesky' },
+					{ name: 'Discord', value: 'discord' },
 					{ name: 'Facebook', value: 'facebook' },
 					{ name: 'Google Business', value: 'google_business' },
 					{ name: 'Instagram', value: 'instagram' },
 					{ name: 'LinkedIn', value: 'linkedin' },
 					{ name: 'Pinterest', value: 'pinterest' },
 					{ name: 'Reddit', value: 'reddit' },
+					{ name: 'Telegram', value: 'telegram' },
 					{ name: 'Threads', value: 'threads' },
 					{ name: 'TikTok', value: 'tiktok' },
 					{ name: 'X (Twitter)', value: 'x' },
@@ -3429,9 +3431,9 @@ export class UploadPost implements INodeType {
 				];
 
 				const platformSupport: Record<string, string[]> = {
-					uploadPhotos: ['bluesky', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'reddit'],
-					uploadVideo: ['bluesky', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'threads', 'tiktok', 'x', 'youtube'],
-					uploadText: ['bluesky', 'facebook', 'google_business', 'linkedin', 'reddit', 'threads', 'x'],
+					uploadPhotos: ['bluesky', 'discord', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'reddit'],
+					uploadVideo: ['bluesky', 'discord', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'youtube'],
+					uploadText: ['bluesky', 'discord', 'facebook', 'google_business', 'linkedin', 'reddit', 'telegram', 'threads', 'x'],
 				};
 
 				const supportedPlatforms = platformSupport[operation] || [];
