@@ -323,6 +323,12 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean;
 	formData.async_upload = String(uploadAsync);
 
+	// AI auto-generation of native per-platform copy from the media (fills blank fields)
+	const autogenerate = ctx.node.getNodeParameter('autogenerate', ctx.itemIndex, false) as boolean;
+	if (autogenerate) {
+		formData.autogenerate = 'true';
+	}
+
 	const rawPlatforms = ctx.node.getNodeParameter('platform', ctx.itemIndex) as string[];
 	const platforms = getFilteredPlatforms(operation, Array.isArray(rawPlatforms) ? rawPlatforms : []);
 	formData['platform[]'] = platforms;
@@ -1859,6 +1865,18 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument']
+					}
+				},
+			},
+			{
+				displayName: 'Autogenerate Copy With AI',
+				name: 'autogenerate',
+				type: 'boolean',
+				default: false,
+				description: 'Whether the server should use AI to generate native per-platform title/description from the media and fill any platform field left empty',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos','uploadVideo']
 					}
 				},
 			},
