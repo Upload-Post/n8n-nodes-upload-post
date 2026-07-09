@@ -27,14 +27,21 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      # Trusted publishing needs npm >= 11.5.1; Node 22 still ships npm 10.
-      - name: Upgrade npm
+      # Trusted publishing needs npm >= 11.5.1, which Node 24 already bundles.
+      # Do NOT `npm install -g npm@latest` here: upgrading npm in place leaves
+      # its own tree short of `sigstore`, and `--provenance` then dies on it.
+      - name: Check npm supports trusted publishing
         run: |
-          npm install -g npm@latest
-          npm --version
+          NPM_VERSION=$(npm --version)
+          echo "npm $NPM_VERSION"
+          MIN=11.5.1
+          if [ "$(printf '%s\n%s\n' "$MIN" "$NPM_VERSION" | sort -V | head -1)" != "$MIN" ]; then
+            echo "::error::npm $NPM_VERSION is older than $MIN, which trusted publishing requires"
+            exit 1
+          fi
 
       - name: Check if version is new
         id: version_check
