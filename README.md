@@ -70,8 +70,18 @@ The node provides the following operations grouped for clarity:
   - Parameters: Request ID.
 - **Get Upload History**: List past uploads.
   - Parameters: Page (default 1), Limit (default 20). Limit can be 20, 50, or 100.
-- **Get Analytics**: Retrieve aggregated analytics for uploads.
-  - Optional filters: From Date, To Date, User Filter, Platforms.
+- **Get Analytics**: Retrieve aggregated profile analytics.
+  - Parameters: Profile Username, Platforms (required — at least one).
+  - Supported: Facebook, Instagram, LinkedIn, Pinterest, Reddit, Threads, TikTok, X, YouTube. Analytics are not available for Bluesky, Discord, Google Business or Telegram.
+- **Get Post Analytics**: Per-post metrics for an upload, by `request_id`.
+  - Parameters: Request ID, Platform (optional filter).
+- **Get Post Analytics by Platform ID**: Per-post metrics for a post published outside Upload-Post.
+  - Parameters: Platform Post ID, Platform, Profile Username.
+- **Get Total Impressions**: Impressions aggregated across connected platforms.
+  - Parameters: Profile Username, Period or Start/End Date, Platforms, Breakdown.
+- **Get Platform Metrics**: Lists which metrics each platform exposes.
+- **Get Reddit Detailed Posts**: Detailed Reddit posts with full media information.
+  - Parameters: Profile Username.
 
 ### Scheduled Posts
 - **List Scheduled Posts**: Lists future scheduled jobs.
@@ -102,7 +112,9 @@ Refer to the [Upload Post API Documentation](https://docs.upload-post.com) for d
 
 Some uploads are processed asynchronously and the API returns immediately with a `request_id`. This happens when:
 - You enable "Upload Asynchronously" in the node, or
-- The upload takes longer than ~59 seconds and the API switches to async mode automatically.
+- The upload exceeds the server's synchronous wait window, in which case the API switches to async mode automatically.
+
+Leaving "Upload Asynchronously" enabled is recommended. Turning it off holds the HTTP connection open for the whole upload, which makes a proxy or execution timeout — and therefore a retry — more likely.
 
 You have two ways to handle this in n8n:
 
@@ -116,6 +128,14 @@ You have two ways to handle this in n8n:
 - Use the Upload operation, read `request_id` from its output.
 - Add a Wait node (e.g., 10s), then call "Get Upload Status" passing the `request_id`.
 - Loop with an IF node until the status is final (success/failed) or a max attempts limit is reached.
+
+### Duplicate posts and retries
+
+Every upload sends an `Idempotency-Key`. The API collapses two uploads carrying the same key within a 24-hour window into a single post, so a retried upload does not publish twice.
+
+The key is derived from the workflow execution, the node and the item index, so it stays the same when n8n's "Retry On Fail" re-runs the node, and changes when you genuinely start a new execution. Set the "Idempotency Key" field yourself only if you drive retries from outside n8n and need to control the key.
+
+If you saw duplicate posts on an older version of this node, upgrade: versions before 0.1.51 sent no key at all, and a node-level retry after a network timeout would publish the post a second time.
 
 ### Platform-Specific Options
 

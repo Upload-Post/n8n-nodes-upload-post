@@ -146,6 +146,21 @@ const ensureArrayFromCommaSeparated = (value: string): string[] => {
 		.filter(item => item.length > 0);
 };
 
+// Statuses after which /uploadposts/status will not change on its own. Anything
+// else (queued, pending, processing, in_progress) means the job is still moving.
+const TERMINAL_UPLOAD_STATUSES = ['completed', 'failed', 'error', 'retryable', 'scheduled', 'not_found'];
+
+// The API deduplicates an upload when the same idempotency key arrives twice within 24h.
+// The key must survive an n8n "Retry On Fail", otherwise a retried upload posts twice.
+// Execution id, node id and item index are all stable across a node-level retry.
+const buildIdempotencyKey = (ctx: ExecutionContext): string => {
+	const override = String(ctx.node.getNodeParameter('idempotencyKey', ctx.itemIndex, '') ?? '').trim();
+	if (override) {
+		return override;
+	}
+	return `n8n:${ctx.node.getExecutionId()}:${ctx.node.getNode().id}:${ctx.itemIndex}`;
+};
+
 const getBinaryFieldFromItem = async (
 	ctx: ExecutionContext,
 	propertyName: string,
@@ -1003,14 +1018,82 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 		case 'getAnalytics': {
 			const profileUsername = ctx.node.getNodeParameter('analyticsProfileUsername', ctx.itemIndex) as string;
 			const analyticsPlatforms = ctx.node.getNodeParameter('analyticsPlatforms', ctx.itemIndex, []) as string[];
-			const qs: IDataObject = {};
-			if (Array.isArray(analyticsPlatforms) && analyticsPlatforms.length > 0) {
-				qs.platforms = analyticsPlatforms.join(',');
+			if (!Array.isArray(analyticsPlatforms) || analyticsPlatforms.length === 0) {
+				throw new NodeOperationError(ctx.node.getNode(), 'Select at least one platform: the analytics API rejects a request without "platforms".', {
+					itemIndex: ctx.itemIndex,
+				});
 			}
+			const qs: IDataObject = { platforms: analyticsPlatforms.join(',') };
 			return {
 				endpoint: `/analytics/${encodeURIComponent(profileUsername)}`,
 				method: 'GET',
 				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getPostAnalytics': {
+			const requestId = ctx.node.getNodeParameter('postAnalyticsRequestId', ctx.itemIndex) as string;
+			const platform = ctx.node.getNodeParameter('postAnalyticsPlatform', ctx.itemIndex, '') as string;
+			const qs: IDataObject = {};
+			if (platform) {
+				qs.platform = platform;
+			}
+			return {
+				endpoint: `/uploadposts/post-analytics/${encodeURIComponent(requestId)}`,
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getPostAnalyticsByPlatformId': {
+			return {
+				endpoint: '/uploadposts/post-analytics',
+				method: 'GET',
+				qs: {
+					platform_post_id: ctx.node.getNodeParameter('platformPostId', ctx.itemIndex) as string,
+					platform: ctx.node.getNodeParameter('nativePostPlatform', ctx.itemIndex) as string,
+					user: ctx.node.getNodeParameter('nativePostProfileUsername', ctx.itemIndex) as string,
+				},
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getPlatformMetrics': {
+			return {
+				endpoint: '/uploadposts/platform-metrics',
+				method: 'GET',
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getTotalImpressions': {
+			const profileUsername = ctx.node.getNodeParameter('impressionsProfileUsername', ctx.itemIndex) as string;
+			const qs: IDataObject = {};
+			const period = ctx.node.getNodeParameter('impressionsPeriod', ctx.itemIndex, '') as string;
+			const startDate = ctx.node.getNodeParameter('impressionsStartDate', ctx.itemIndex, '') as string;
+			const endDate = ctx.node.getNodeParameter('impressionsEndDate', ctx.itemIndex, '') as string;
+			const platforms = ctx.node.getNodeParameter('impressionsPlatforms', ctx.itemIndex, []) as string[];
+			const breakdown = ctx.node.getNodeParameter('impressionsBreakdown', ctx.itemIndex, false) as boolean;
+			if (period) qs.period = period;
+			if (startDate) qs.start_date = startDate;
+			if (endDate) qs.end_date = endDate;
+			if (Array.isArray(platforms) && platforms.length > 0) qs.platform = platforms.join(',');
+			if (breakdown) qs.breakdown = 'true';
+			return {
+				endpoint: `/uploadposts/total-impressions/${encodeURIComponent(profileUsername)}`,
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getRedditDetailedPosts': {
+			return {
+				endpoint: '/uploadposts/reddit/detailed-posts/',
+				method: 'GET',
+				qs: { profile_username: ctx.node.getNodeParameter('redditProfileUsername', ctx.itemIndex) as string },
 				isUploadOperation: false,
 				waitForCompletion: false,
 			};
@@ -1326,10 +1409,7 @@ const pollUploadStatus = async (
 		const statusData = await node.helpers.httpRequestWithAuthentication.call(node, 'uploadPostApi', statusOptions);
 		finalData = statusData;
 		const statusValue = (statusData && (statusData as any).status) as string | undefined;
-		if (
-			(statusData && (statusData as any).success === true) ||
-			(typeof statusValue === 'string' && ['success', 'completed', 'failed', 'error', 'scheduled', 'queued', 'pending'].includes(statusValue.toLowerCase()))
-		) {
+		if (typeof statusValue === 'string' && TERMINAL_UPLOAD_STATUSES.includes(statusValue.toLowerCase())) {
 			break;
 		}
 	}
@@ -1396,6 +1476,11 @@ export class UploadPost implements INodeType {
 					{ name: 'Edit Scheduled Post', value: 'editScheduled', action: 'Edit scheduled post', description: 'Edit schedule details (like date/time) by job ID' },
 					{ name: 'Get Analytics', value: 'getAnalytics', action: 'Get analytics', description: 'Retrieve aggregated analytics for uploads' },
 					{ name: 'Get Job Status', value: 'getJobStatus', action: 'Get job status', description: 'Check the status of a scheduled or queued post using the job_id' },
+					{ name: 'Get Platform Metrics', value: 'getPlatformMetrics', action: 'Get platform metrics', description: 'List the analytics metrics available for each platform' },
+					{ name: 'Get Post Analytics', value: 'getPostAnalytics', action: 'Get post analytics', description: 'Retrieve per-post analytics for an upload using its request_id' },
+					{ name: 'Get Post Analytics by Platform ID', value: 'getPostAnalyticsByPlatformId', action: 'Get post analytics by platform id', description: 'Retrieve per-post analytics using the native platform post ID, for posts not published through Upload-Post' },
+					{ name: 'Get Reddit Detailed Posts', value: 'getRedditDetailedPosts', action: 'Get reddit detailed posts', description: 'Retrieve detailed Reddit posts with full media information' },
+					{ name: 'Get Total Impressions', value: 'getTotalImpressions', action: 'Get total impressions', description: 'Retrieve impressions aggregated across connected platforms for a date range' },
 					{ name: 'Get Upload History', value: 'getHistory', action: 'Get upload history', description: 'List past uploads with optional filters' },
 					{ name: 'Get Upload Status', value: 'getStatus', action: 'Get upload status', description: 'Check the status of an upload using the request_id' },
 					{ name: 'List Scheduled Posts', value: 'listScheduled', action: 'List scheduled posts', description: 'List your scheduled (future) posts' },
@@ -1861,7 +1946,19 @@ export class UploadPost implements INodeType {
 				name: 'uploadAsync',
 				type: 'boolean',
 				default: true,
-				description: 'Whether to process the upload asynchronously and return immediately. If you set to false but the upload takes longer than 59 seconds, it will automatically switch to asynchronous processing to avoid timeouts. In that case, use the request_id with the Upload Status endpoint to check the upload status and result.',
+				description: 'Whether to process the upload asynchronously and return immediately. Recommended: leaving this off holds the HTTP connection open, and if it exceeds the server\'s synchronous wait window the upload switches to asynchronous processing anyway. In that case, use the request_id with the Upload Status endpoint to check the upload status and result.',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument']
+					}
+				},
+			},
+			{
+				displayName: 'Idempotency Key',
+				name: 'idempotencyKey',
+				type: 'string',
+				default: '',
+				description: 'Key the API uses to collapse duplicate uploads within 24 hours. Leave empty to derive one automatically from the execution, node and item, which is what prevents a retried upload from posting twice. Set it explicitly only when you drive retries yourself.',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument']
@@ -2006,19 +2103,179 @@ export class UploadPost implements INodeType {
 					displayOptions: { show: { operation: ["editScheduled"] } },
 				},
 				{
-					displayName: 'Platforms (Optional)',
+					displayName: 'Platforms',
 					name: 'analyticsPlatforms',
 					type: 'multiOptions',
+					required: true,
 					options: [
+						{ name: 'Facebook', value: 'facebook' },
 						{ name: 'Instagram', value: 'instagram' },
 						{ name: 'LinkedIn', value: 'linkedin' },
-						{ name: 'Facebook', value: 'facebook' },
+						{ name: 'Pinterest', value: 'pinterest' },
+						{ name: 'Reddit', value: 'reddit' },
+						{ name: 'Threads', value: 'threads' },
+						{ name: 'TikTok', value: 'tiktok' },
 						{ name: 'X (Twitter)', value: 'x' },
+						{ name: 'YouTube', value: 'youtube' },
 					],
 					default: [],
-					description: 'Platforms to fetch analytics for (comma-joined in request)',
+					description: 'Platforms to fetch analytics for. Analytics are not available for Bluesky, Discord, Google Business or Telegram.',
 					displayOptions: { show: { operation: ['getAnalytics'] } },
 				},
+
+			// Post analytics by request ID
+			{
+				displayName: 'Request ID',
+				name: 'postAnalyticsRequestId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The request_id returned by the upload you want metrics for',
+				displayOptions: { show: { operation: ['getPostAnalytics'] } },
+			},
+			{
+				displayName: 'Platform',
+				name: 'postAnalyticsPlatform',
+				type: 'options',
+				options: [
+					{ name: 'All Platforms', value: '' },
+					{ name: 'Facebook', value: 'facebook' },
+					{ name: 'Instagram', value: 'instagram' },
+					{ name: 'LinkedIn', value: 'linkedin' },
+					{ name: 'Pinterest', value: 'pinterest' },
+					{ name: 'Reddit', value: 'reddit' },
+					{ name: 'Threads', value: 'threads' },
+					{ name: 'TikTok', value: 'tiktok' },
+					{ name: 'X (Twitter)', value: 'x' },
+					{ name: 'YouTube', value: 'youtube' },
+				],
+				default: '',
+				description: 'Restrict the result to a single platform',
+				displayOptions: { show: { operation: ['getPostAnalytics'] } },
+			},
+
+			// Post analytics by native platform post ID
+			{
+				displayName: 'Platform Post ID',
+				name: 'platformPostId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The post ID as assigned by the social platform itself',
+				displayOptions: { show: { operation: ['getPostAnalyticsByPlatformId'] } },
+			},
+			{
+				displayName: 'Platform',
+				name: 'nativePostPlatform',
+				type: 'options',
+				required: true,
+				options: [
+					{ name: 'Facebook', value: 'facebook' },
+					{ name: 'Instagram', value: 'instagram' },
+					{ name: 'LinkedIn', value: 'linkedin' },
+					{ name: 'Pinterest', value: 'pinterest' },
+					{ name: 'Reddit', value: 'reddit' },
+					{ name: 'Threads', value: 'threads' },
+					{ name: 'TikTok', value: 'tiktok' },
+					{ name: 'X (Twitter)', value: 'x' },
+					{ name: 'YouTube', value: 'youtube' },
+				],
+				default: 'instagram',
+				description: 'Platform the post lives on',
+				displayOptions: { show: { operation: ['getPostAnalyticsByPlatformId'] } },
+			},
+			{
+				displayName: 'Profile Username',
+				name: 'nativePostProfileUsername',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Upload-Post profile that owns the connected account',
+				displayOptions: { show: { operation: ['getPostAnalyticsByPlatformId'] } },
+			},
+
+			// Total impressions
+			{
+				displayName: 'Profile Username',
+				name: 'impressionsProfileUsername',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Profile username to aggregate impressions for',
+				displayOptions: { show: { operation: ['getTotalImpressions'] } },
+			},
+			{
+				displayName: 'Period',
+				name: 'impressionsPeriod',
+				type: 'options',
+				options: [
+					{ name: 'Custom Range (Use Start/End Date)', value: '' },
+					{ name: 'Last 3 Months', value: 'last_3months' },
+					{ name: 'Last Day', value: 'last_day' },
+					{ name: 'Last Month', value: 'last_month' },
+					{ name: 'Last Week', value: 'last_week' },
+					{ name: 'Last Year', value: 'last_year' },
+				],
+				default: '',
+				description: 'Preset range. Leave on custom range to use Start and End Date instead. Defaults to the last 30 days when nothing is set.',
+				displayOptions: { show: { operation: ['getTotalImpressions'] } },
+			},
+			{
+				displayName: 'Start Date',
+				name: 'impressionsStartDate',
+				type: 'string',
+				default: '',
+				placeholder: 'YYYY-MM-DD',
+				description: 'Start of a custom date range. Ignored when Period is set.',
+				displayOptions: { show: { operation: ['getTotalImpressions'] } },
+			},
+			{
+				displayName: 'End Date',
+				name: 'impressionsEndDate',
+				type: 'string',
+				default: '',
+				placeholder: 'YYYY-MM-DD',
+				description: 'End of a custom date range. Ignored when Period is set.',
+				displayOptions: { show: { operation: ['getTotalImpressions'] } },
+			},
+			{
+				displayName: 'Platforms',
+				name: 'impressionsPlatforms',
+				type: 'multiOptions',
+				options: [
+					{ name: 'Facebook', value: 'facebook' },
+					{ name: 'Instagram', value: 'instagram' },
+					{ name: 'LinkedIn', value: 'linkedin' },
+					{ name: 'Pinterest', value: 'pinterest' },
+					{ name: 'Reddit', value: 'reddit' },
+					{ name: 'Threads', value: 'threads' },
+					{ name: 'TikTok', value: 'tiktok' },
+					{ name: 'X (Twitter)', value: 'x' },
+					{ name: 'YouTube', value: 'youtube' },
+				],
+				default: [],
+				description: 'Restrict the aggregate to these platforms. Leave empty for all.',
+				displayOptions: { show: { operation: ['getTotalImpressions'] } },
+			},
+			{
+				displayName: 'Breakdown',
+				name: 'impressionsBreakdown',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to return impressions broken down per platform instead of a single total',
+				displayOptions: { show: { operation: ['getTotalImpressions'] } },
+			},
+
+			// Reddit detailed posts
+			{
+				displayName: 'Profile Username',
+				name: 'redditProfileUsername',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Profile username whose Reddit posts you want',
+				displayOptions: { show: { operation: ['getRedditDetailedPosts'] } },
+			},
 
 			// Create user
 			{
@@ -3604,6 +3861,13 @@ export class UploadPost implements INodeType {
 
 			if (config.headers) {
 				requestOptions.headers = config.headers;
+			}
+			if (config.isUploadOperation) {
+				requestOptions.headers = {
+					...(requestOptions.headers ?? {}),
+					'Idempotency-Key': buildIdempotencyKey(ctx),
+					'X-Upload-Post-Source': 'n8n',
+				};
 			}
 			if (config.qs) {
 				requestOptions.qs = config.qs;
