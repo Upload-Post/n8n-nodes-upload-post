@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+      id-token: write   # mints the OIDC token npm trades for publish rights
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,11 +30,11 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
-      # npm masks auth failures on publish as a 404 on the PUT. Fail loudly here instead.
-      - name: Verify npm authentication
-        run: npm whoami
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Trusted publishing needs npm >= 11.5.1; Node 22 still ships npm 10.
+      - name: Upgrade npm
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - name: Check if version is new
         id: version_check
@@ -60,14 +60,12 @@ jobs:
         if: steps.version_check.outputs.new == 'true' || github.event_name == 'workflow_dispatch'
         run: npm run build --if-present
 
+      # No NODE_AUTH_TOKEN: npm authenticates via the OIDC token, and the
+      # trusted publisher is configured on npmjs.com against this repo+workflow.
       - name: Publish to npm (dry-run)
         if: ${{ inputs.dry_run == true }}
         run: npm publish --provenance --access public --dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish to npm
         if: (steps.version_check.outputs.new == 'true' && inputs.dry_run != true) || github.event_name == 'release'
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
