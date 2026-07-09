@@ -30,6 +30,12 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
+      # npm masks auth failures on publish as a 404 on the PUT. Fail loudly here instead.
+      - name: Verify npm authentication
+        run: npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Check if version is new
         id: version_check
         run: |
