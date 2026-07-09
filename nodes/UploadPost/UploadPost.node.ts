@@ -103,7 +103,7 @@ const API_BASE_URL = 'https://api.upload-post.com/api';
 
 type UploadOperation = 'uploadPhotos' | 'uploadVideo' | 'uploadText' | 'uploadDocument';
 
-type RequestMethod = 'GET' | 'POST' | 'DELETE';
+type RequestMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
 type RequestConfig = {
 	endpoint: string;
@@ -116,6 +116,9 @@ type RequestConfig = {
 	waitForCompletion: boolean;
 	pollInterval?: number;
 	pollTimeout?: number;
+	// Validate JWT authenticates with the profile token, not the API key, so the
+	// credential's Authorization header must not overwrite it.
+	skipCredentialAuth?: boolean;
 };
 
 type ExecutionContext = {
@@ -153,6 +156,22 @@ const TERMINAL_UPLOAD_STATUSES = ['completed', 'failed', 'error', 'retryable', '
 // The API deduplicates an upload when the same idempotency key arrives twice within 24h.
 // The key must survive an n8n "Retry On Fail", otherwise a retried upload posts twice.
 // Execution id, node id and item index are all stable across a node-level retry.
+// The API shallow-merges the notification payload, so toggling the webhook
+// channel would drop telegram/slack/whatsapp unless we resend them.
+const fetchNotificationChannels = async (ctx: ExecutionContext): Promise<IDataObject> => {
+	try {
+		const current = await ctx.node.helpers.httpRequestWithAuthentication.call(ctx.node, 'uploadPostApi', {
+			url: `${API_BASE_URL}/uploadposts/users/notifications`,
+			method: 'GET',
+			json: true,
+		});
+		const channels = ((current as IDataObject)?.notifications as IDataObject)?.channels;
+		return (channels as IDataObject) ?? {};
+	} catch {
+		return {};
+	}
+};
+
 const buildIdempotencyKey = (ctx: ExecutionContext): string => {
 	const override = String(ctx.node.getNodeParameter('idempotencyKey', ctx.itemIndex, '') ?? '').trim();
 	if (override) {
@@ -188,7 +207,7 @@ const getBinaryFieldFromItem = async (
 
 const PLATFORM_SUPPORT: Record<UploadOperation, string[]> = {
 	uploadPhotos: ['bluesky', 'discord', 'facebook', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'reddit', 'google_business'],
-	uploadVideo: ['bluesky', 'discord', 'facebook', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'youtube', 'google_business'],
+	uploadVideo: ['bluesky', 'discord', 'facebook', 'instagram', 'linkedin', 'pinterest', 'reddit', 'telegram', 'threads', 'tiktok', 'x', 'youtube', 'google_business'],
 	uploadText: ['bluesky', 'discord', 'facebook', 'linkedin', 'reddit', 'telegram', 'threads', 'x', 'google_business'],
 	uploadDocument: ['linkedin'],
 };
@@ -791,6 +810,41 @@ const applyThreadsOptions = (ctx: ExecutionContext, formData: IDataObject) => {
 const applyGoogleBusinessOptions = (ctx: ExecutionContext, _operation: UploadOperation, formData: IDataObject) => {
 	const locationId = ctx.node.getNodeParameter('gbpLocationId', ctx.itemIndex, '') as string;
 	if (locationId) formData.gbp_location_id = locationId;
+
+	const topicType = ctx.node.getNodeParameter('gbpTopicType', ctx.itemIndex, '') as string;
+	if (topicType) formData.gbp_topic_type = topicType;
+
+	const mediaUrl = ctx.node.getNodeParameter('gbpMediaUrl', ctx.itemIndex, '') as string;
+	if (mediaUrl) formData.gbp_media_url = mediaUrl;
+	const mediaFormat = ctx.node.getNodeParameter('gbpMediaFormat', ctx.itemIndex, '') as string;
+	if (mediaFormat) formData.gbp_media_format = mediaFormat;
+
+	const ctaType = ctx.node.getNodeParameter('gbpCtaType', ctx.itemIndex, '') as string;
+	if (ctaType) formData.gbp_cta_type = ctaType;
+	const ctaUrl = ctx.node.getNodeParameter('gbpCtaUrl', ctx.itemIndex, '') as string;
+	if (ctaUrl) formData.gbp_cta_url = ctaUrl;
+
+	if (topicType === 'EVENT') {
+		const eventTitle = ctx.node.getNodeParameter('gbpEventTitle', ctx.itemIndex, '') as string;
+		if (eventTitle) formData.gbp_event_title = eventTitle;
+		const startDate = ctx.node.getNodeParameter('gbpEventStartDate', ctx.itemIndex, '') as string;
+		if (startDate) formData.gbp_event_start_date = startDate;
+		const startTime = ctx.node.getNodeParameter('gbpEventStartTime', ctx.itemIndex, '') as string;
+		if (startTime) formData.gbp_event_start_time = startTime;
+		const endDate = ctx.node.getNodeParameter('gbpEventEndDate', ctx.itemIndex, '') as string;
+		if (endDate) formData.gbp_event_end_date = endDate;
+		const endTime = ctx.node.getNodeParameter('gbpEventEndTime', ctx.itemIndex, '') as string;
+		if (endTime) formData.gbp_event_end_time = endTime;
+	}
+
+	if (topicType === 'OFFER') {
+		const coupon = ctx.node.getNodeParameter('gbpOfferCoupon', ctx.itemIndex, '') as string;
+		if (coupon) formData.gbp_offer_coupon = coupon;
+		const redeemUrl = ctx.node.getNodeParameter('gbpOfferRedeemUrl', ctx.itemIndex, '') as string;
+		if (redeemUrl) formData.gbp_offer_redeem_url = redeemUrl;
+		const terms = ctx.node.getNodeParameter('gbpOfferTerms', ctx.itemIndex, '') as string;
+		if (terms) formData.gbp_offer_terms = terms;
+	}
 };
 
 const applyRedditOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
@@ -1024,6 +1078,13 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 				});
 			}
 			const qs: IDataObject = { platforms: analyticsPlatforms.join(',') };
+			const analyticsPageId = ctx.node.getNodeParameter('analyticsPageId', ctx.itemIndex, '') as string;
+			if (analyticsPlatforms.includes('facebook') && !analyticsPageId) {
+				throw new NodeOperationError(ctx.node.getNode(), 'Facebook analytics require a Page ID.', { itemIndex: ctx.itemIndex });
+			}
+			if (analyticsPageId) qs.page_id = analyticsPageId;
+			const analyticsPageUrn = ctx.node.getNodeParameter('analyticsPageUrn', ctx.itemIndex, '') as string;
+			if (analyticsPageUrn) qs.page_urn = analyticsPageUrn;
 			return {
 				endpoint: `/analytics/${encodeURIComponent(profileUsername)}`,
 				method: 'GET',
@@ -1122,14 +1183,14 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 			const body: IDataObject = {};
 			if (normalizedDate) {
 				body.scheduled_date = normalizedDate;
-			const newTimezone = ctx.node.getNodeParameter("newTimezone", ctx.itemIndex, "") as string;
+			}
+			const newTimezone = ctx.node.getNodeParameter('newTimezone', ctx.itemIndex, '') as string;
 			if (newTimezone) {
 				body.timezone = newTimezone;
 			}
-			}
 			return {
 				endpoint: `/uploadposts/schedule/${jobId}`,
-				method: 'POST',
+				method: 'PATCH',
 				body,
 				isUploadOperation: false,
 				waitForCompletion: false,
@@ -1142,7 +1203,7 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 	}
 };
 
-const buildUserRequest = (ctx: ExecutionContext): RequestConfig => {
+const buildUserRequest = async (ctx: ExecutionContext): Promise<RequestConfig> => {
 	switch (ctx.operation) {
 		case 'listUsers':
 			return {
@@ -1204,9 +1265,9 @@ const buildUserRequest = (ctx: ExecutionContext): RequestConfig => {
 			const jwt = ctx.node.getNodeParameter('jwtToken', ctx.itemIndex) as string;
 			return {
 				endpoint: '/uploadposts/users/validate-jwt',
-				method: 'POST',
-				body: { jwt },
+				method: 'GET',
 				headers: { Authorization: `Bearer ${jwt}` },
+				skipCredentialAuth: true,
 				isUploadOperation: false,
 				waitForCompletion: false,
 			};
@@ -1224,11 +1285,14 @@ const buildUserRequest = (ctx: ExecutionContext): RequestConfig => {
 			const webhookUrl = ctx.node.getNodeParameter('webhookUrl', ctx.itemIndex, '') as string;
 			const webhookEnabled = ctx.node.getNodeParameter('webhookEnabled', ctx.itemIndex, false) as boolean;
 			const webhookEventsRaw = ctx.node.getNodeParameter('webhookEvents', ctx.itemIndex, []) as string[];
+			const existingChannels = await fetchNotificationChannels(ctx);
 			const body: IDataObject = {
-				channels: { webhook: webhookEnabled },
+				channels: { ...existingChannels, webhook: webhookEnabled },
 			};
 			if (webhookUrl) body.webhook_url = webhookUrl;
-			if (webhookEventsRaw.length > 0) body.webhook_events = webhookEventsRaw;
+			if (webhookEventsRaw.length > 0) {
+				body.webhook_events = Object.fromEntries(webhookEventsRaw.map(event => [event, true]));
+			}
 			return {
 				endpoint: '/uploadposts/users/notifications',
 				method: 'POST',
@@ -1248,7 +1312,7 @@ const buildUserRequest = (ctx: ExecutionContext): RequestConfig => {
 		case 'updateUserPreferences': {
 			const weekStartDay = ctx.node.getNodeParameter('weekStartDay', ctx.itemIndex, '') as string;
 			const body: IDataObject = {};
-			if (weekStartDay !== '') body.week_start_day = parseInt(weekStartDay, 10);
+			if (weekStartDay !== '') body.weekStartDay = parseInt(weekStartDay, 10);
 			return {
 				endpoint: '/uploadposts/users/preferences',
 				method: 'POST',
@@ -1336,7 +1400,7 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 		return buildMonitoringRequest(ctx);
 	}
 	if (resource === 'users') {
-		return buildUserRequest(ctx);
+		return await buildUserRequest(ctx);
 	}
 
 	throw new NodeOperationError(ctx.node.getNode(), `Unsupported operation: ${ctx.operation}`, {
@@ -2120,6 +2184,22 @@ export class UploadPost implements INodeType {
 					],
 					default: [],
 					description: 'Platforms to fetch analytics for. Analytics are not available for Bluesky, Discord, Google Business or Telegram.',
+					displayOptions: { show: { operation: ['getAnalytics'] } },
+				},
+				{
+					displayName: 'Facebook Page ID',
+					name: 'analyticsPageId',
+					type: 'string',
+					default: '',
+					description: 'Required when Facebook is among the selected platforms',
+					displayOptions: { show: { operation: ['getAnalytics'] } },
+				},
+				{
+					displayName: 'LinkedIn Page URN',
+					name: 'analyticsPageUrn',
+					type: 'string',
+					default: '',
+					description: 'LinkedIn organization page to report on. Defaults to the personal profile.',
 					displayOptions: { show: { operation: ['getAnalytics'] } },
 				},
 
@@ -3027,6 +3107,133 @@ export class UploadPost implements INodeType {
 				description: 'Location ID for accounts with multiple Google Business Profile locations (e.g., accounts/123/locations/456). If omitted, uses the default connected location.',
 				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'] } },
 			},
+			{
+				displayName: 'Google Business Post Type',
+				name: 'gbpTopicType',
+				type: 'options',
+				options: [
+					{ name: 'Standard', value: 'STANDARD' },
+					{ name: 'Event', value: 'EVENT' },
+					{ name: 'Offer', value: 'OFFER' },
+				],
+				default: 'STANDARD',
+				description: 'Kind of Google Business post to publish',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Google Business Media URL',
+				name: 'gbpMediaUrl',
+				type: 'string',
+				default: '',
+				description: 'URL of the media attached to the Google Business post',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Google Business Media Format',
+				name: 'gbpMediaFormat',
+				type: 'options',
+				options: [
+					{ name: 'Not Set', value: '' },
+					{ name: 'Photo', value: 'PHOTO' },
+					{ name: 'Video', value: 'VIDEO' },
+				],
+				default: '',
+				description: 'Format of the attached media',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Google Business Call to Action',
+				name: 'gbpCtaType',
+				type: 'options',
+				options: [
+					{ name: 'Book', value: 'BOOK' },
+					{ name: 'Call', value: 'CALL' },
+					{ name: 'Learn More', value: 'LEARN_MORE' },
+					{ name: 'None', value: '' },
+					{ name: 'Order', value: 'ORDER' },
+					{ name: 'Shop', value: 'SHOP' },
+					{ name: 'Sign Up', value: 'SIGN_UP' },
+				],
+				default: '',
+				description: 'Button shown under the Google Business post',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Google Business Call to Action URL',
+				name: 'gbpCtaUrl',
+				type: 'string',
+				default: '',
+				description: 'URL the call-to-action button opens',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Google Business Event Title',
+				name: 'gbpEventTitle',
+				type: 'string',
+				default: '',
+				description: 'Title of the event',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'], gbpTopicType: ['EVENT'] } },
+			},
+			{
+				displayName: 'Google Business Event Start Date',
+				name: 'gbpEventStartDate',
+				type: 'string',
+				default: '',
+				placeholder: 'YYYY-MM-DD',
+				description: 'Date the event starts',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'], gbpTopicType: ['EVENT'] } },
+			},
+			{
+				displayName: 'Google Business Event Start Time',
+				name: 'gbpEventStartTime',
+				type: 'string',
+				default: '',
+				placeholder: 'HH:MM',
+				description: 'Time the event starts',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'], gbpTopicType: ['EVENT'] } },
+			},
+			{
+				displayName: 'Google Business Event End Date',
+				name: 'gbpEventEndDate',
+				type: 'string',
+				default: '',
+				placeholder: 'YYYY-MM-DD',
+				description: 'Date the event ends',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'], gbpTopicType: ['EVENT'] } },
+			},
+			{
+				displayName: 'Google Business Event End Time',
+				name: 'gbpEventEndTime',
+				type: 'string',
+				default: '',
+				placeholder: 'HH:MM',
+				description: 'Time the event ends',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'], gbpTopicType: ['EVENT'] } },
+			},
+			{
+				displayName: 'Google Business Offer Coupon',
+				name: 'gbpOfferCoupon',
+				type: 'string',
+				default: '',
+				description: 'Coupon code for the offer',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'], gbpTopicType: ['OFFER'] } },
+			},
+			{
+				displayName: 'Google Business Offer Redeem URL',
+				name: 'gbpOfferRedeemUrl',
+				type: 'string',
+				default: '',
+				description: 'URL where the offer is redeemed',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'], gbpTopicType: ['OFFER'] } },
+			},
+			{
+				displayName: 'Google Business Offer Terms',
+				name: 'gbpOfferTerms',
+				type: 'string',
+				default: '',
+				description: 'Terms and conditions of the offer',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'], gbpTopicType: ['OFFER'] } },
+			},
 
 		// ----- Reddit Specific Parameters -----
 			{
@@ -3709,8 +3916,9 @@ export class UploadPost implements INodeType {
 
 				const platformSupport: Record<string, string[]> = {
 					uploadPhotos: ['bluesky', 'discord', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'reddit'],
-					uploadVideo: ['bluesky', 'discord', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'youtube'],
+					uploadVideo: ['bluesky', 'discord', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'reddit', 'telegram', 'threads', 'tiktok', 'x', 'youtube'],
 					uploadText: ['bluesky', 'discord', 'facebook', 'google_business', 'linkedin', 'reddit', 'telegram', 'threads', 'x'],
+					uploadDocument: ['linkedin'],
 				};
 
 				const supportedPlatforms = platformSupport[operation] || [];
@@ -3887,11 +4095,13 @@ export class UploadPost implements INodeType {
 				requestOptions.json = true;
 			}
 
-			const rawResponse = await this.helpers.httpRequestWithAuthentication.call(
-				this,
-				'uploadPostApi',
-				requestOptions,
-			);
+			const rawResponse = config.skipCredentialAuth
+				? await this.helpers.httpRequest(requestOptions)
+				: await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'uploadPostApi',
+					requestOptions,
+				);
 
 			const responseData = parseJsonIfNeeded(rawResponse);
 

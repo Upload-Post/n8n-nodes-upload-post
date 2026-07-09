@@ -71,7 +71,7 @@ The node provides the following operations grouped for clarity:
 - **Get Upload History**: List past uploads.
   - Parameters: Page (default 1), Limit (default 20). Limit can be 20, 50, or 100.
 - **Get Analytics**: Retrieve aggregated profile analytics.
-  - Parameters: Profile Username, Platforms (required — at least one).
+  - Parameters: Profile Username, Platforms (required — at least one), Facebook Page ID (required when Facebook is selected), LinkedIn Page URN (optional).
   - Supported: Facebook, Instagram, LinkedIn, Pinterest, Reddit, Threads, TikTok, X, YouTube. Analytics are not available for Bluesky, Discord, Google Business or Telegram.
 - **Get Post Analytics**: Per-post metrics for an upload, by `request_id`.
   - Parameters: Request ID, Platform (optional filter).
