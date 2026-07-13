@@ -206,9 +206,9 @@ const getBinaryFieldFromItem = async (
 };
 
 const PLATFORM_SUPPORT: Record<UploadOperation, string[]> = {
-	uploadPhotos: ['bluesky', 'discord', 'facebook', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'reddit', 'google_business'],
-	uploadVideo: ['bluesky', 'discord', 'facebook', 'instagram', 'linkedin', 'pinterest', 'reddit', 'telegram', 'threads', 'tiktok', 'x', 'youtube', 'google_business'],
-	uploadText: ['bluesky', 'discord', 'facebook', 'linkedin', 'reddit', 'telegram', 'threads', 'x', 'google_business'],
+	uploadPhotos: ['bluesky', 'discord', 'facebook', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'reddit', 'google_business', 'mastodon', 'lemmy', 'wordpress'],
+	uploadVideo: ['bluesky', 'discord', 'facebook', 'instagram', 'linkedin', 'pinterest', 'reddit', 'telegram', 'threads', 'tiktok', 'x', 'youtube', 'google_business', 'mastodon', 'wordpress'],
+	uploadText: ['bluesky', 'discord', 'facebook', 'linkedin', 'reddit', 'telegram', 'threads', 'x', 'google_business', 'slack', 'mastodon', 'nostr', 'lemmy', 'devto', 'hashnode', 'wordpress', 'whop', 'listmonk'],
 	uploadDocument: ['linkedin'],
 };
 
@@ -229,6 +229,15 @@ const TITLE_OVERRIDES: Array<{
 	{ platform: 'youtube', param: 'youtubeTitle', field: 'youtube_title', operations: ['uploadVideo'] },
 	{ platform: 'pinterest', param: 'pinterestTitle', field: 'pinterest_title' },
 	{ platform: 'threads', param: 'threadsTitle', field: 'threads_title' },
+	{ platform: 'slack', param: 'slackTitle', field: 'slack_title' },
+	{ platform: 'mastodon', param: 'mastodonTitle', field: 'mastodon_title' },
+	{ platform: 'nostr', param: 'nostrTitle', field: 'nostr_title' },
+	{ platform: 'lemmy', param: 'lemmyTitle', field: 'lemmy_title' },
+	{ platform: 'devto', param: 'devtoTitle', field: 'devto_title' },
+	{ platform: 'hashnode', param: 'hashnodeTitle', field: 'hashnode_title' },
+	{ platform: 'wordpress', param: 'wordpressTitle', field: 'wordpress_title' },
+	{ platform: 'whop', param: 'whopTitle', field: 'whop_title' },
+	{ platform: 'listmonk', param: 'listmonkTitle', field: 'listmonk_title' },
 ];
 
 const DESCRIPTION_OVERRIDES: Array<{
@@ -3912,12 +3921,21 @@ export class UploadPost implements INodeType {
 					{ name: 'TikTok', value: 'tiktok' },
 					{ name: 'X (Twitter)', value: 'x' },
 					{ name: 'YouTube', value: 'youtube' },
+					{ name: 'Slack', value: 'slack' },
+					{ name: 'Mastodon', value: 'mastodon' },
+					{ name: 'Nostr', value: 'nostr' },
+					{ name: 'Lemmy', value: 'lemmy' },
+					{ name: 'Dev.to', value: 'devto' },
+					{ name: 'Hashnode', value: 'hashnode' },
+					{ name: 'WordPress', value: 'wordpress' },
+					{ name: 'Whop', value: 'whop' },
+					{ name: 'Listmonk', value: 'listmonk' },
 				];
 
 				const platformSupport: Record<string, string[]> = {
-					uploadPhotos: ['bluesky', 'discord', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'reddit'],
-					uploadVideo: ['bluesky', 'discord', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'reddit', 'telegram', 'threads', 'tiktok', 'x', 'youtube'],
-					uploadText: ['bluesky', 'discord', 'facebook', 'google_business', 'linkedin', 'reddit', 'telegram', 'threads', 'x'],
+					uploadPhotos: ['bluesky', 'discord', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'reddit', 'mastodon', 'lemmy', 'wordpress'],
+					uploadVideo: ['bluesky', 'discord', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'reddit', 'telegram', 'threads', 'tiktok', 'x', 'youtube', 'mastodon', 'wordpress'],
+					uploadText: ['bluesky', 'discord', 'facebook', 'google_business', 'linkedin', 'reddit', 'telegram', 'threads', 'x', 'slack', 'mastodon', 'nostr', 'lemmy', 'devto', 'hashnode', 'wordpress', 'whop', 'listmonk'],
 					uploadDocument: ['linkedin'],
 				};
 
