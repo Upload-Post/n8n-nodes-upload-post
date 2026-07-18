@@ -2280,7 +2280,7 @@ export class UploadPost implements INodeType {
 					name: 'analyticsPageUrn',
 					type: 'string',
 					default: '',
-					description: 'LinkedIn organization page to report on. Defaults to the personal profile.',
+					description: 'LinkedIn organization/company page (URN or numeric ID) to report on. LinkedIn analytics are only available for pages you administer — personal profiles are not supported. Leave empty to use the first administered page.',
 					displayOptions: { show: { operation: ['getAnalytics'] } },
 				},
 
