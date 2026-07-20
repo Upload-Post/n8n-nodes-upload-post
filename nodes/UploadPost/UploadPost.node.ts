@@ -366,12 +366,6 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean;
 	formData.async_upload = String(uploadAsync);
 
-	// AI auto-generation of native per-platform copy from the media (fills blank fields)
-	const autogenerate = ctx.node.getNodeParameter('autogenerate', ctx.itemIndex, false) as boolean;
-	if (autogenerate) {
-		formData.autogenerate = 'true';
-	}
-
 	const rawPlatforms = ctx.node.getNodeParameter('platform', ctx.itemIndex) as string[];
 	const platforms = getFilteredPlatforms(operation, Array.isArray(rawPlatforms) ? rawPlatforms : []);
 	formData['platform[]'] = platforms;
