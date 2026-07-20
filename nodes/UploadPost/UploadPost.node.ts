@@ -2111,18 +2111,7 @@ export class UploadPost implements INodeType {
 						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument']
 					}
 				},
-			},
-			{
-				displayName: 'Autogenerate Copy With AI',
-				name: 'autogenerate',
-				type: 'boolean',
-				default: false,
-				description: 'Whether the server should use AI to generate native per-platform title/description from the media and fill any platform field left empty',
-				displayOptions: {
-					show: {
-						operation: ['uploadPhotos','uploadVideo']
-					}
-				},
+			}
 			},
 			{
 				displayName: 'Wait for Completion',
