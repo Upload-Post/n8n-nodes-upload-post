@@ -2105,7 +2105,6 @@ export class UploadPost implements INodeType {
 						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument']
 					}
 				},
-			}
 			},
 			{
 				displayName: 'Wait for Completion',
