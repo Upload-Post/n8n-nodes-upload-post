@@ -824,6 +824,13 @@ const applyGoogleBusinessOptions = (ctx: ExecutionContext, _operation: UploadOpe
 	const mediaFormat = ctx.node.getNodeParameter('gbpMediaFormat', ctx.itemIndex, '') as string;
 	if (mediaFormat) formData.gbp_media_format = mediaFormat;
 
+	const postType = ctx.node.getNodeParameter('gbpPostType', ctx.itemIndex, '') as string;
+	if (postType) {
+		formData.gbp_post_type = postType;
+		const mediaCategory = ctx.node.getNodeParameter('gbpMediaCategory', ctx.itemIndex, '') as string;
+		if (mediaCategory) formData.gbp_media_category = mediaCategory;
+	}
+
 	const ctaType = ctx.node.getNodeParameter('gbpCtaType', ctx.itemIndex, '') as string;
 	if (ctaType) formData.gbp_cta_type = ctaType;
 	const ctaUrl = ctx.node.getNodeParameter('gbpCtaUrl', ctx.itemIndex, '') as string;
@@ -1126,6 +1133,28 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 				waitForCompletion: false,
 			};
 		}
+		case 'getCachedPostAnalytics': {
+			const qs: IDataObject = {
+				user: ctx.node.getNodeParameter('cachedAnalyticsProfileUsername', ctx.itemIndex) as string,
+			};
+			const platform = ctx.node.getNodeParameter('cachedAnalyticsPlatform', ctx.itemIndex, '') as string;
+			if (platform) qs.platform = platform;
+			const limit = ctx.node.getNodeParameter('cachedAnalyticsLimit', ctx.itemIndex, 50) as number;
+			if (limit) qs.limit = limit;
+			const cursor = ctx.node.getNodeParameter('cachedAnalyticsCursor', ctx.itemIndex, '') as string;
+			if (cursor) qs.cursor = cursor;
+			const since = ctx.node.getNodeParameter('cachedAnalyticsSince', ctx.itemIndex, '') as string;
+			if (since) qs.since = since;
+			const until = ctx.node.getNodeParameter('cachedAnalyticsUntil', ctx.itemIndex, '') as string;
+			if (until) qs.until = until;
+			return {
+				endpoint: '/uploadposts/post-analytics/cached',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
 		case 'getPlatformMetrics': {
 			return {
 				endpoint: '/uploadposts/platform-metrics',
@@ -1208,6 +1237,18 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 	}
 };
 
+const collectUiLabels = (ctx: ExecutionContext): IDataObject => {
+	const raw = ctx.node.getNodeParameter('uiLabels', ctx.itemIndex, {}) as IDataObject;
+	const entries = Array.isArray(raw.label) ? (raw.label as IDataObject[]) : [];
+	const uiLabels: IDataObject = {};
+	for (const entry of entries) {
+		const key = String(entry.key ?? '').trim();
+		if (!key) continue;
+		uiLabels[key] = String(entry.value ?? '');
+	}
+	return uiLabels;
+};
+
 const buildUserRequest = async (ctx: ExecutionContext): Promise<RequestConfig> => {
 	switch (ctx.operation) {
 		case 'listUsers':
@@ -1258,6 +1299,8 @@ const buildUserRequest = async (ctx: ExecutionContext): Promise<RequestConfig> =
 			if (connectTitle) body.connect_title = connectTitle;
 			if (connectDescription) body.connect_description = connectDescription;
 			if (language) body.language = language;
+			const uiLabels = collectUiLabels(ctx);
+			if (Object.keys(uiLabels).length > 0) body.ui_labels = uiLabels;
 			return {
 				endpoint: '/uploadposts/users/generate-jwt',
 				method: 'POST',
@@ -1544,6 +1587,7 @@ export class UploadPost implements INodeType {
 					{ name: 'Cancel Scheduled Post', value: 'cancelScheduled', action: 'Cancel scheduled post', description: 'Cancel a scheduled post by its job ID' },
 					{ name: 'Edit Scheduled Post', value: 'editScheduled', action: 'Edit scheduled post', description: 'Edit schedule details (like date/time) by job ID' },
 					{ name: 'Get Analytics', value: 'getAnalytics', action: 'Get analytics', description: 'Retrieve aggregated analytics for uploads' },
+					{ name: 'Get Cached Post Analytics', value: 'getCachedPostAnalytics', action: 'Get cached post analytics', description: 'Replay per-post metrics already fetched for a profile instead of querying the platforms again, so it is not subject to the live analytics rate limit (100 requests / 5 minutes). Only contains posts previously fetched through Get Post Analytics; there is no background refresh, so captured_at is the last time that post was read live. Use Get Post Analytics to refresh a post, and this operation for bulk re-reads.' },
 					{ name: 'Get Job Status', value: 'getJobStatus', action: 'Get job status', description: 'Check the status of a scheduled or queued post using the job_id' },
 					{ name: 'Get Platform Metrics', value: 'getPlatformMetrics', action: 'Get platform metrics', description: 'List the analytics metrics available for each platform' },
 					{ name: 'Get Post Analytics', value: 'getPostAnalytics', action: 'Get post analytics', description: 'Retrieve per-post analytics for an upload using its request_id' },
@@ -2339,6 +2383,71 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { operation: ['getPostAnalyticsByPlatformId'] } },
 			},
 
+			// Cached post analytics (write-through cache, filled by live reads)
+			{
+				displayName: 'Profile Username',
+				name: 'cachedAnalyticsProfileUsername',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Profile username whose cached post metrics you want',
+				displayOptions: { show: { operation: ['getCachedPostAnalytics'] } },
+			},
+			{
+				displayName: 'Platform',
+				name: 'cachedAnalyticsPlatform',
+				type: 'options',
+				options: [
+					{ name: 'All Platforms', value: '' },
+					{ name: 'Facebook', value: 'facebook' },
+					{ name: 'Instagram', value: 'instagram' },
+					{ name: 'LinkedIn', value: 'linkedin' },
+					{ name: 'Pinterest', value: 'pinterest' },
+					{ name: 'Reddit', value: 'reddit' },
+					{ name: 'Threads', value: 'threads' },
+					{ name: 'TikTok', value: 'tiktok' },
+					{ name: 'YouTube', value: 'youtube' },
+				],
+				default: '',
+				description: 'Restrict the result to a single platform. X (Twitter) is not available: the snapshot cache does not store it.',
+				displayOptions: { show: { operation: ['getCachedPostAnalytics'] } },
+			},
+			{
+				displayName: 'Limit',
+				name: 'cachedAnalyticsLimit',
+				type: 'number',
+				typeOptions: { minValue: 1, maxValue: 200 },
+				default: 50,
+				description: 'Max number of results to return',
+				displayOptions: { show: { operation: ['getCachedPostAnalytics'] } },
+			},
+			{
+				displayName: 'Cursor',
+				name: 'cachedAnalyticsCursor',
+				type: 'string',
+				default: '',
+				description: 'Opaque pagination cursor. Pass the next_cursor returned by the previous call to fetch the following page.',
+				displayOptions: { show: { operation: ['getCachedPostAnalytics'] } },
+			},
+			{
+				displayName: 'Since',
+				name: 'cachedAnalyticsSince',
+				type: 'string',
+				default: '',
+				placeholder: 'YYYY-MM-DD',
+				description: 'Start of the snapshot date range. Defaults to 30 days ago.',
+				displayOptions: { show: { operation: ['getCachedPostAnalytics'] } },
+			},
+			{
+				displayName: 'Until',
+				name: 'cachedAnalyticsUntil',
+				type: 'string',
+				default: '',
+				placeholder: 'YYYY-MM-DD',
+				description: 'End of the snapshot date range. Defaults to today.',
+				displayOptions: { show: { operation: ['getCachedPostAnalytics'] } },
+			},
+
 			// Total impressions
 			{
 				displayName: 'Profile Username',
@@ -2536,8 +2645,44 @@ export class UploadPost implements INodeType {
 					{ name: 'English', value: 'en' },
 					{ name: 'French', value: 'fr' },
 					{ name: 'German', value: 'de' },
+					{ name: 'Polish', value: 'pl' },
 					{ name: 'Portuguese', value: 'pt' },
 					{ name: 'Spanish', value: 'es' },
+					{ name: 'Turkish', value: 'tr' },
+				],
+				displayOptions: { show: { operation: ['generateJwt'] } },
+			},
+			{
+				displayName: 'UI Labels',
+				name: 'uiLabels',
+				type: 'fixedCollection',
+				typeOptions: { multipleValues: true },
+				placeholder: 'Add UI Label',
+				default: {},
+				description:
+					'Override individual texts of the connection page, for white-label integrations. Each entry is an i18n dot-path key (for example connect.connectButton) plus the replacement string, and is sent as ui_labels. The API accepts at most 100 entries, keys matching ^[a-zA-Z0-9_.]+$ and values of up to 300 characters, and returns an error otherwise.',
+				options: [
+					{
+						displayName: 'Label',
+						name: 'label',
+						values: [
+							{
+								displayName: 'Key',
+								name: 'key',
+								type: 'string',
+								default: '',
+								placeholder: 'connect.connectButton',
+								description: 'I18n dot-path key of the connection page text to override',
+							},
+							{
+								displayName: 'Value',
+								name: 'value',
+								type: 'string',
+								default: '',
+								description: 'Replacement text shown on the connection page',
+							},
+						],
+					},
 				],
 				displayOptions: { show: { operation: ['generateJwt'] } },
 			},
@@ -3205,6 +3350,44 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'Format of the attached media',
 				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Google Business Publish As',
+				name: 'gbpPostType',
+				type: 'options',
+				options: [
+					{ name: 'Gallery', value: 'GALLERY' },
+					{ name: 'Local Post (Default)', value: '' },
+					{ name: 'Media', value: 'MEDIA' },
+					{ name: 'Photo', value: 'PHOTO' },
+				],
+				default: '',
+				description:
+					'Where the upload lands on the Google Business Profile. Local Post keeps the default behaviour and creates a post on the timeline. Media, Photo and Gallery all publish the image to the location Media/Gallery tab instead, without creating a Local Post.',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Google Business Media Category',
+				name: 'gbpMediaCategory',
+				type: 'options',
+				options: [
+					{ name: 'Additional', value: 'ADDITIONAL' },
+					{ name: 'At Work', value: 'AT_WORK' },
+					{ name: 'Common Area', value: 'COMMON_AREA' },
+					{ name: 'Cover', value: 'COVER' },
+					{ name: 'Exterior', value: 'EXTERIOR' },
+					{ name: 'Food and Drink', value: 'FOOD_AND_DRINK' },
+					{ name: 'Interior', value: 'INTERIOR' },
+					{ name: 'Logo', value: 'LOGO' },
+					{ name: 'Menu', value: 'MENU' },
+					{ name: 'Product', value: 'PRODUCT' },
+					{ name: 'Profile', value: 'PROFILE' },
+					{ name: 'Rooms', value: 'ROOMS' },
+					{ name: 'Teams', value: 'TEAMS' },
+				],
+				default: 'ADDITIONAL',
+				description: 'Category the photo is filed under in the Media/Gallery tab. Only used when Publish As is Media, Photo or Gallery.',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'], gbpPostType: ['GALLERY', 'MEDIA', 'PHOTO'] } },
 			},
 			{
 				displayName: 'Google Business Call to Action',

@@ -77,6 +77,11 @@ The node provides the following operations grouped for clarity:
   - Parameters: Request ID, Platform (optional filter).
 - **Get Post Analytics by Platform ID**: Per-post metrics for a post published outside Upload-Post.
   - Parameters: Platform Post ID, Platform, Profile Username.
+- **Get Cached Post Analytics**: Replays per-post metrics already fetched, instead of querying the platforms again, so it is not subject to the live analytics rate limit (100 requests / 5 minutes). Only contains posts previously fetched through a live per-post endpoint; there is no background refresh, so captured_at is the last time that post was read live.
+  - Parameters: Profile Username (required), Platform (optional filter), Limit (default 50, max 200), Cursor, Since / Until (`YYYY-MM-DD`, defaults to the last 30 days).
+  - Values are only as fresh as your last live read — check `captured_at` on each post. Use **Get Post Analytics** for a just-published post and this operation for bulk or historical reads.
+  - Paginate by passing the `next_cursor` from the previous response as `Cursor` while `has_more` is true.
+  - Supported: Facebook, Instagram, LinkedIn, Pinterest, Reddit, Threads, TikTok, YouTube. X (Twitter) is not cached.
 - **Get Total Impressions**: Impressions aggregated across connected platforms.
   - Parameters: Profile Username, Period or Start/End Date, Platforms, Breakdown.
 - **Get Platform Metrics**: Lists which metrics each platform exposes.
@@ -102,9 +107,12 @@ The node provides the following operations grouped for clarity:
 - **Delete User**: Delete an existing user profile.
   - Parameters: Username to delete.
 - **Generate JWT (for platform integration)**: Generate a connection URL (JWT) for a given profile so the user can link social accounts.
-  - Parameters: User Identifier, optional redirect URL, logo image URL, redirect button text, platform restrictions.
+  - Parameters: User Identifier, optional redirect URL, logo image URL, redirect button text, platform restrictions, calendar options, connect title/description, language, UI labels.
+  - **Language**: forces the connection page language. Supported: English, Spanish, German, French, Portuguese, Polish, Turkish. Leave on Auto-Detect to use the visitor's browser language (falls back to English).
+  - **UI Labels**: white-label overrides for individual connection page texts, as key/value pairs (sent as `ui_labels`). The key is an i18n dot-path such as `connect.connectButton`, the value the replacement string. The API accepts up to 100 entries, keys matching `^[a-zA-Z0-9_.]+$` and values of up to 300 characters, and rejects the request otherwise.
 - **Validate JWT (for platform integration)**: Validate a connection token from your backend.
   - Parameters: JWT token (password field).
+  - The API response is returned as-is; its `profile` object also carries the `ui_labels` map configured for that profile.
 
 Refer to the [Upload Post API Documentation](https://docs.upload-post.com) for detailed information on parameters and platform requirements.
 
