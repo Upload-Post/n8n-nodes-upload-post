@@ -366,12 +366,6 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean;
 	formData.async_upload = String(uploadAsync);
 
-	// AI auto-generation of native per-platform copy from the media (fills blank fields)
-	const autogenerate = ctx.node.getNodeParameter('autogenerate', ctx.itemIndex, false) as boolean;
-	if (autogenerate) {
-		formData.autogenerate = 'true';
-	}
-
 	const rawPlatforms = ctx.node.getNodeParameter('platform', ctx.itemIndex) as string[];
 	const platforms = getFilteredPlatforms(operation, Array.isArray(rawPlatforms) ? rawPlatforms : []);
 	formData['platform[]'] = platforms;
@@ -636,6 +630,7 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 	const blockedCountries = ctx.node.getNodeParameter('youtubeBlockedCountries', ctx.itemIndex, '') as string;
 	const hasPaidProductPlacement = ctx.node.getNodeParameter('youtubeHasPaidProductPlacement', ctx.itemIndex, false) as boolean;
 	const recordingDate = ctx.node.getNodeParameter('youtubeRecordingDate', ctx.itemIndex, '') as string;
+	const playlistId = ctx.node.getNodeParameter('youtubePlaylistId', ctx.itemIndex, '') as string;
 
 	formData.selfDeclaredMadeForKids = String(selfDeclaredMadeForKids);
 	formData.containsSyntheticMedia = String(containsSyntheticMedia);
@@ -645,6 +640,7 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 	if (blockedCountries) formData.blockedCountries = blockedCountries;
 	formData.hasPaidProductPlacement = String(hasPaidProductPlacement);
 	if (recordingDate) formData.recordingDate = recordingDate;
+	if (playlistId) formData.youtube_playlist_id = playlistId;
 
 	// Subtitle files
 	const subtitleLanguages = ctx.node.getNodeParameter('youtubeSubtitleLanguages', ctx.itemIndex, '') as string;
@@ -2111,18 +2107,6 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'Autogenerate Copy With AI',
-				name: 'autogenerate',
-				type: 'boolean',
-				default: false,
-				description: 'Whether the server should use AI to generate native per-platform title/description from the media and fill any platform field left empty',
-				displayOptions: {
-					show: {
-						operation: ['uploadPhotos','uploadVideo']
-					}
-				},
-			},
-			{
 				displayName: 'Wait for Completion',
 				name: 'waitForCompletion',
 				type: 'boolean',
@@ -2280,7 +2264,7 @@ export class UploadPost implements INodeType {
 					name: 'analyticsPageUrn',
 					type: 'string',
 					default: '',
-					description: 'LinkedIn organization page to report on. Defaults to the personal profile.',
+					description: 'LinkedIn organization/company page (URN or numeric ID) to report on. LinkedIn analytics are only available for pages you administer — personal profiles are not supported. Leave empty to use the first administered page.',
 					displayOptions: { show: { operation: ['getAnalytics'] } },
 				},
 
@@ -3587,7 +3571,21 @@ export class UploadPost implements INodeType {
 				},
 			},
 
-			// ----- Pinterest Specific Parameters (Video Only) -----
+			{
+					displayName: 'YouTube Playlist ID',
+					name: 'youtubePlaylistId',
+					type: 'string',
+					default: '',
+					description: 'Optional YouTube playlist ID (e.g. PLxxxxxxxxxxxx) to add the uploaded video to after publishing. For multiple playlists, pass a comma-separated list of IDs. The playlist must belong to the same YouTube channel that owns the upload. Only for Upload Video.',
+					displayOptions: {
+						show: {
+							operation: ['uploadVideo'],
+							platform: ['youtube', '__manual_platform__']
+						},
+					},
+				},
+
+				// ----- Pinterest Specific Parameters (Video Only) -----
 
 			{
 				displayName: 'Pinterest Board Name or ID',
