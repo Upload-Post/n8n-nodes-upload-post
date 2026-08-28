@@ -168,6 +168,21 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 - **Video Options**: Privacy level (Public/Mutual Friends/Followers/Self), disable duet/stitch/comments, cover timestamp (ms), brand content toggles, AI-generated content flag, post mode (Direct Post/Media Upload).
 - **Brand Content**: Separate toggles for paid partnerships and own business promotion.
 
+#### TikTok Business
+
+> **Requires a TikTok Business account.** These video options only work for
+> profiles whose TikTok account is connected through the TikTok Business flow.
+> On a standard TikTok connection the API ignores them and returns a warning, so
+> the post still publishes. They are only sent when actually filled in, so
+> leaving them at their defaults keeps the previous behaviour.
+
+- **Music**: TikTok Music ID (Commercial Music Library track), music volume (0-100), music start/end offsets in ms.
+- **Original Sound Volume**: Volume (0-100) of the video's own audio when music is added. Keep it above 0 so the original audio is not muted. Music volume and original sound volume are only sent when a Music ID is set.
+- **Location**: TikTok Location ID plus TikTok Location Name — TikTok requires both together.
+- **Cover Image URL**: Custom cover image, takes priority over the cover timestamp.
+- **Is AI Generated**: AI-generated content disclosure.
+- **Upload to Draft**: Sends the video to TikTok drafts instead of publishing; TikTok then ignores the rest of the post settings.
+
 #### YouTube
 - **Video Metadata**: Tags (comma-separated), category ID, privacy status (public/unlisted/private), embeddable, license, public stats viewable.
 - **Compliance**: Made for kids declaration, self-declared made for kids (COPPA), contains synthetic media (AI transparency), has paid product placement (FTC).

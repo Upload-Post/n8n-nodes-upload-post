@@ -544,6 +544,38 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 		formData.brand_organic_toggle = String(brandOrganicToggle);
 		formData.is_aigc = String(isAigc);
 		if (postMode) formData.post_mode = postMode;
+
+		// TikTok Business options. Only sent when actually configured: a standard
+		// TikTok connection ignores them (with a warning), and sending the defaults
+		// unconditionally would attach music/covers nobody asked for.
+		const musicId = ctx.node.getNodeParameter('tiktokMusicId', ctx.itemIndex, '') as string;
+		if (musicId) {
+			formData.tiktok_music_id = musicId;
+			formData.tiktok_music_volume = ctx.node.getNodeParameter('tiktokMusicVolume', ctx.itemIndex, 50) as number;
+			formData.tiktok_original_sound_volume = ctx.node.getNodeParameter('tiktokOriginalSoundVolume', ctx.itemIndex, 50) as number;
+
+			const musicStart = ctx.node.getNodeParameter('tiktokMusicStart', ctx.itemIndex, 0) as number;
+			const musicEnd = ctx.node.getNodeParameter('tiktokMusicEnd', ctx.itemIndex, 0) as number;
+			if (musicStart > 0) formData.tiktok_music_start = musicStart;
+			if (musicEnd > 0) formData.tiktok_music_end = musicEnd;
+		}
+
+		const locationId = ctx.node.getNodeParameter('tiktokLocationId', ctx.itemIndex, '') as string;
+		const locationName = ctx.node.getNodeParameter('tiktokLocationName', ctx.itemIndex, '') as string;
+		if (locationId) {
+			formData.tiktok_location_id = locationId;
+			// TikTok rejects a location id without its name.
+			if (locationName) formData.tiktok_location_name = locationName;
+		}
+
+		const coverImageUrl = ctx.node.getNodeParameter('tiktokCoverImageUrl', ctx.itemIndex, '') as string;
+		if (coverImageUrl) formData.tiktok_cover_image_url = coverImageUrl;
+
+		const isAiGenerated = ctx.node.getNodeParameter('tiktokIsAiGenerated', ctx.itemIndex, false) as boolean;
+		if (isAiGenerated) formData.tiktok_is_ai_generated = 'true';
+
+		const uploadToDraft = ctx.node.getNodeParameter('tiktokUploadToDraft', ctx.itemIndex, false) as boolean;
+		if (uploadToDraft) formData.tiktok_upload_to_draft = 'true';
 	}
 };
 
@@ -3145,6 +3177,146 @@ export class UploadPost implements INodeType {
 				],
 				default: 'DIRECT_POST',
 				description: 'Choose TikTok posting mode for video',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+
+		// ----- TikTok Business Options -----
+		// These require a TikTok Business account connected through the TikTok Business
+		// flow. On a standard TikTok connection the API ignores them and returns a
+		// warning, so the post still publishes. They are only sent when actually
+		// filled in, so leaving them at their defaults keeps the current behaviour.
+			{
+				displayName: 'TikTok Music ID (Business)',
+				name: 'tiktokMusicId',
+				type: 'string',
+				default: '',
+				description: 'Commercial Music Library track ID to add to the video. Requires a TikTok Business account. Leave empty to skip.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Music Volume (Business)',
+				name: 'tiktokMusicVolume',
+				type: 'number',
+				default: 50,
+				typeOptions: { minValue: 0, maxValue: 100 },
+				description: 'Volume (0-100) of the Commercial Music Library track. Only sent when a TikTok Music ID is set.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Music Start (Ms, Business)',
+				name: 'tiktokMusicStart',
+				type: 'number',
+				default: 0,
+				typeOptions: { minValue: 0 },
+				description: 'Start offset (ms) of the music track. Only sent when a TikTok Music ID is set and this is above 0.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Music End (Ms, Business)',
+				name: 'tiktokMusicEnd',
+				type: 'number',
+				default: 0,
+				typeOptions: { minValue: 0 },
+				description: 'End offset (ms) of the music track. Only sent when a TikTok Music ID is set and this is above 0.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Original Sound Volume (Business)',
+				name: 'tiktokOriginalSoundVolume',
+				type: 'number',
+				default: 50,
+				typeOptions: { minValue: 0, maxValue: 100 },
+				description: 'Volume (0-100) of the original video audio when music is added. Only sent when a TikTok Music ID is set. Keep it above 0 so the original audio is not muted.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Location ID (Business)',
+				name: 'tiktokLocationId',
+				type: 'string',
+				default: '',
+				description: 'Location ID to tag on the video. Requires a TikTok Business account and a TikTok Location Name. Leave empty to skip.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Location Name (Business)',
+				name: 'tiktokLocationName',
+				type: 'string',
+				default: '',
+				description: 'Location name matching the TikTok Location ID. TikTok requires both together.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Cover Image URL (Business)',
+				name: 'tiktokCoverImageUrl',
+				type: 'string',
+				default: '',
+				description: 'Custom cover image URL for the video. Requires a TikTok Business account. Takes priority over TikTok Cover Timestamp.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Is AI Generated (Business)',
+				name: 'tiktokIsAiGenerated',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to disclose the video as AI-generated on TikTok Business. Only sent when enabled.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Upload to Draft (Business)',
+				name: 'tiktokUploadToDraft',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to send the video to TikTok drafts instead of publishing it. When enabled TikTok ignores the rest of the post settings. Only sent when enabled.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
