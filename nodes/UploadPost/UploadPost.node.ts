@@ -545,9 +545,10 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 		formData.is_aigc = String(isAigc);
 		if (postMode) formData.post_mode = postMode;
 
-		// TikTok Business options. Only sent when actually configured: a standard
-		// TikTok connection ignores them (with a warning), and sending the defaults
-		// unconditionally would attach music/covers nobody asked for.
+		// Capability-gated TikTok options. Only sent when actually configured: a
+		// connection without the matching capability ignores them (with a warning),
+		// and sending the defaults unconditionally would attach music/covers nobody
+		// asked for.
 		const musicId = ctx.node.getNodeParameter('tiktokMusicId', ctx.itemIndex, '') as string;
 		if (musicId) {
 			formData.tiktok_music_id = musicId;
@@ -3081,7 +3082,7 @@ export class UploadPost implements INodeType {
 					{ name: 'Self Only', value: 'SELF_ONLY' },
 				],
 				default: 'PUBLIC_TO_EVERYONE',
-				description: 'Privacy setting for TikTok video (PUBLIC_TO_EVERYONE, MUTUAL_FOLLOW_FRIENDS, etc.). Only for Upload Video.',
+				description: 'Privacy setting requested for the TikTok video. TikTok does not apply a privacy level to video uploads: the video publishes public, or lands in drafts when TikTok Upload to Draft is enabled. Privacy levels are honoured on TikTok photo posts. Only for Upload Video.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -3185,17 +3186,19 @@ export class UploadPost implements INodeType {
 				},
 			},
 
-		// ----- TikTok Business Options -----
-		// These require a TikTok Business account connected through the TikTok Business
-		// flow. On a standard TikTok connection the API ignores them and returns a
-		// warning, so the post still publishes. They are only sent when actually
-		// filled in, so leaving them at their defaults keeps the current behaviour.
+		// ----- TikTok Capability-Gated Options -----
+		// Each of these depends on a capability declared by the TikTok connection
+		// (see the `capabilities` array on the TikTok account in the user-profiles
+		// response). When the connection lacks the capability the API ignores the
+		// field and returns a per-field warning, so the post still publishes. They
+		// are only sent when actually filled in, so leaving them at their defaults
+		// keeps the current behaviour.
 			{
-				displayName: 'TikTok Music ID (Business)',
+				displayName: 'TikTok Music ID',
 				name: 'tiktokMusicId',
 				type: 'string',
 				default: '',
-				description: 'Commercial Music Library track ID to add to the video. Requires a TikTok Business account. Leave empty to skip.',
+				description: 'Commercial Music Library track ID to add to the video. Needs the music capability on the TikTok connection (see capabilities in the user-profiles response); without it the field is ignored with a warning and the post still publishes. Leave empty to skip.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -3204,7 +3207,7 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'TikTok Music Volume (Business)',
+				displayName: 'TikTok Music Volume',
 				name: 'tiktokMusicVolume',
 				type: 'number',
 				default: 50,
@@ -3218,7 +3221,7 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'TikTok Music Start (Ms, Business)',
+				displayName: 'TikTok Music Start (Ms)',
 				name: 'tiktokMusicStart',
 				type: 'number',
 				default: 0,
@@ -3232,7 +3235,7 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'TikTok Music End (Ms, Business)',
+				displayName: 'TikTok Music End (Ms)',
 				name: 'tiktokMusicEnd',
 				type: 'number',
 				default: 0,
@@ -3246,7 +3249,7 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'TikTok Original Sound Volume (Business)',
+				displayName: 'TikTok Original Sound Volume',
 				name: 'tiktokOriginalSoundVolume',
 				type: 'number',
 				default: 50,
@@ -3260,11 +3263,11 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'TikTok Location ID (Business)',
+				displayName: 'TikTok Location ID',
 				name: 'tiktokLocationId',
 				type: 'string',
 				default: '',
-				description: 'Location ID to tag on the video. Requires a TikTok Business account and a TikTok Location Name. Leave empty to skip.',
+				description: 'Location ID to tag on the video. Needs the location capability on the TikTok connection (see capabilities in the user-profiles response) plus a TikTok Location Name; without it the field is ignored with a warning and the post still publishes. Leave empty to skip.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -3273,7 +3276,7 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'TikTok Location Name (Business)',
+				displayName: 'TikTok Location Name',
 				name: 'tiktokLocationName',
 				type: 'string',
 				default: '',
@@ -3286,11 +3289,11 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'TikTok Cover Image URL (Business)',
+				displayName: 'TikTok Cover Image URL',
 				name: 'tiktokCoverImageUrl',
 				type: 'string',
 				default: '',
-				description: 'Custom cover image URL for the video. Requires a TikTok Business account. Takes priority over TikTok Cover Timestamp.',
+				description: 'Custom cover image URL for the video. Needs the cover_image capability on the TikTok connection (see capabilities in the user-profiles response); without it the field is ignored with a warning and the post still publishes. Takes priority over TikTok Cover Timestamp.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -3299,11 +3302,11 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'TikTok Is AI Generated (Business)',
+				displayName: 'TikTok Is AI Generated',
 				name: 'tiktokIsAiGenerated',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to disclose the video as AI-generated on TikTok Business. Only sent when enabled.',
+				description: 'Whether to disclose the video as AI-generated on TikTok. Only sent when enabled.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -3312,11 +3315,11 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
-				displayName: 'TikTok Upload to Draft (Business)',
+				displayName: 'TikTok Upload to Draft',
 				name: 'tiktokUploadToDraft',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to send the video to TikTok drafts instead of publishing it. When enabled TikTok ignores the rest of the post settings. Only sent when enabled.',
+				description: 'Whether to send the video to TikTok drafts instead of publishing it. Needs the draft capability on the TikTok connection (see capabilities in the user-profiles response); without it the field is ignored with a warning and the post still publishes. When enabled TikTok ignores the rest of the post settings.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],

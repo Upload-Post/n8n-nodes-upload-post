@@ -144,8 +144,10 @@ Agent → Content Generation → Upload Post Node → Multiple Platforms
 - **Best Practice**: Use high-quality, vertical videos for Reels
 
 ### TikTok
-- **Photo Options**: Auto-add music, disable comments
-- **Video Options**: Privacy levels, duet/stitch controls
+- **Photo Options**: Auto-add music, disable comments, privacy level
+- **Video Options**: Duet/stitch controls, cover timestamp, post mode
+- **Privacy Level**: TikTok does not accept it on video uploads (the video publishes public, or goes to drafts with Upload to Draft); photo posts do accept it
+- **Advanced Options**: Music, location, cover image and draft depend on the `capabilities` array returned for the TikTok account by `GET /api/uploadposts/users`. Missing capability = field ignored, post still publishes, response carries a per-field warning
 - **AI Content**: Declare AI-generated content when applicable
 
 ### YouTube
