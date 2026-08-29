@@ -563,10 +563,11 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 
 		const locationId = ctx.node.getNodeParameter('tiktokLocationId', ctx.itemIndex, '') as string;
 		const locationName = ctx.node.getNodeParameter('tiktokLocationName', ctx.itemIndex, '') as string;
-		if (locationId) {
+		// TikTok rejects a location id without its name, and the API answers with a
+		// hard error instead of dropping the tag — so send the pair or neither.
+		if (locationId && locationName) {
 			formData.tiktok_location_id = locationId;
-			// TikTok rejects a location id without its name.
-			if (locationName) formData.tiktok_location_name = locationName;
+			formData.tiktok_location_name = locationName;
 		}
 
 		const coverImageUrl = ctx.node.getNodeParameter('tiktokCoverImageUrl', ctx.itemIndex, '') as string;
@@ -3198,7 +3199,7 @@ export class UploadPost implements INodeType {
 				name: 'tiktokMusicId',
 				type: 'string',
 				default: '',
-				description: 'Commercial Music Library track ID to add to the video. Needs the music capability on the TikTok connection (see capabilities in the user-profiles response); without it the field is ignored with a warning and the post still publishes. Leave empty to skip.',
+				description: 'Commercial Music Library track ID to add to the video: the ID field returned by the TikTok trending-music endpoint, not its commercial_music_id. Needs the music capability on the TikTok connection (see capabilities in the user-profiles response); without it the field is ignored with a warning and the post still publishes. Leave empty to skip.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -3267,7 +3268,7 @@ export class UploadPost implements INodeType {
 				name: 'tiktokLocationId',
 				type: 'string',
 				default: '',
-				description: 'Location ID to tag on the video. Needs the location capability on the TikTok connection (see capabilities in the user-profiles response) plus a TikTok Location Name; without it the field is ignored with a warning and the post still publishes. Leave empty to skip.',
+				description: 'Location ID to tag on the video. Needs the location capability on the TikTok connection (see capabilities in the user-profiles response) and a TikTok Location Name — the tag is only sent when both are filled in. Without the capability the field is ignored with a warning and the post still publishes. Leave empty to skip.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -3280,7 +3281,7 @@ export class UploadPost implements INodeType {
 				name: 'tiktokLocationName',
 				type: 'string',
 				default: '',
-				description: 'Location name matching the TikTok Location ID. TikTok requires both together.',
+				description: 'Location name matching the TikTok Location ID. TikTok requires both together, so the location tag is only sent when this and the ID are both filled in.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],

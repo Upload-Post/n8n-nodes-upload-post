@@ -171,14 +171,15 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 #### TikTok Advanced Video Options
 
 > **Capability-gated.** `GET /api/uploadposts/users` returns a `capabilities`
-> array on each TikTok account (`music`, `location`, `cover_image`, `draft`,
-> `privacy_levels`). If the connection does not declare the capability an option
+> array on each TikTok account (`music`, `location`, `cover_image`,
+> `cover_timestamp`, `draft`, `photo_privacy`, `video_privacy`,
+> `inbox_fallback`, `comments`, `profile_analytics`). If the connection does not declare the capability an option
 > needs, the API ignores that field, the post still publishes and the response
 > includes a per-field warning — reconnect the TikTok account to enable it.
 > These options are only sent when actually filled in, so leaving them at their
 > defaults keeps the previous behaviour.
 
-- **Music** (`music`): TikTok Music ID (Commercial Music Library track), music volume (0-100), music start/end offsets in ms.
+- **Music** (`music`): TikTok Music ID — the `id` of a track returned by `GET /api/uploadposts/tiktok/music/trending` (not its `commercial_music_id`) — plus music volume (0-100) and music start/end offsets in ms.
 - **Original Sound Volume**: Volume (0-100) of the video's own audio when music is added. Keep it above 0 so the original audio is not muted. Music volume and original sound volume are only sent when a Music ID is set.
 - **Location** (`location`): TikTok Location ID plus TikTok Location Name — TikTok requires both together.
 - **Cover Image URL** (`cover_image`): Custom cover image, takes priority over the cover timestamp.
@@ -188,8 +189,8 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 > **Privacy level on TikTok.** This is a TikTok particularity, not an account
 > difference: TikTok does **not** accept a `privacy_level` on video uploads — the
 > video is published public, or lands in drafts when Upload to Draft is enabled.
-> TikTok **photo** posts do accept `privacy_level`; the `privacy_levels`
-> capability lists the values the connection allows.
+> TikTok **photo** posts do accept `privacy_level` (capability `photo_privacy`).
+> Connections that still declare `video_privacy` keep accepting it on video.
 
 #### YouTube
 - **Video Metadata**: Tags (comma-separated), category ID, privacy status (public/unlisted/private), embeddable, license, public stats viewable.
