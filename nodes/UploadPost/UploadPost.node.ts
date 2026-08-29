@@ -524,6 +524,23 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 		if (photoDescription && formData.description === undefined) {
 			formData.description = photoDescription;
 		}
+
+		// TikTok photo posts accept the music track id, the location pair and the
+		// AI disclosure. The volume/trim, cover-image and draft fields do NOT apply
+		// here: TikTok's photo contract takes the track id alone.
+		const photoMusicId = ctx.node.getNodeParameter('tiktokMusicId', ctx.itemIndex, '') as string;
+		if (photoMusicId) formData.tiktok_music_id = photoMusicId;
+
+		const photoLocationId = ctx.node.getNodeParameter('tiktokLocationId', ctx.itemIndex, '') as string;
+		const photoLocationName = ctx.node.getNodeParameter('tiktokLocationName', ctx.itemIndex, '') as string;
+		// TikTok rejects a location id without its name, so send the pair or neither.
+		if (photoLocationId && photoLocationName) {
+			formData.tiktok_location_id = photoLocationId;
+			formData.tiktok_location_name = photoLocationName;
+		}
+
+		const photoIsAiGenerated = ctx.node.getNodeParameter('tiktokIsAiGenerated', ctx.itemIndex, false) as boolean;
+		if (photoIsAiGenerated) formData.tiktok_is_ai_generated = 'true';
 	} else if (operation === 'uploadVideo') {
 		const privacyLevel = ctx.node.getNodeParameter('tiktokPrivacyLevel', ctx.itemIndex, '') as string;
 		const disableDuet = ctx.node.getNodeParameter('tiktokDisableDuet', ctx.itemIndex, false) as boolean;
@@ -3077,13 +3094,14 @@ export class UploadPost implements INodeType {
 				name: 'tiktokPrivacyLevel',
 				type: 'options',
 				options: [
-					{ name: 'Public to Everyone', value: 'PUBLIC_TO_EVERYONE' },
-					{ name: 'Mutual Follow Friends', value: 'MUTUAL_FOLLOW_FRIENDS' },
+					{ name: 'Account Default', value: '' },
 					{ name: 'Follower of Creator', value: 'FOLLOWER_OF_CREATOR' },
+					{ name: 'Mutual Follow Friends', value: 'MUTUAL_FOLLOW_FRIENDS' },
+					{ name: 'Public to Everyone', value: 'PUBLIC_TO_EVERYONE' },
 					{ name: 'Self Only', value: 'SELF_ONLY' },
 				],
-				default: 'PUBLIC_TO_EVERYONE',
-				description: 'Privacy setting for the TikTok video. TikTok decides per account which levels are available: a private account has no Public to Everyone, and asking for one the account does not have fails with tiktok_privacy_unavailable listing the allowed ones. Only for Upload Video.',
+				default: '',
+				description: 'Privacy setting for the TikTok video. TikTok decides per account which levels are available: a private account has no Public to Everyone, and asking for one the account does not have fails with tiktok_privacy_unavailable listing the allowed ones. Account Default sends nothing and lets TikTok apply the account\'s own setting, which is the only value guaranteed to work on every account. Only for Upload Video.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -3199,10 +3217,10 @@ export class UploadPost implements INodeType {
 				name: 'tiktokMusicId',
 				type: 'string',
 				default: '',
-				description: 'Commercial Music Library track ID to add to the video: the ID field returned by the TikTok trending-music or music-search endpoint, not its commercial_music_id. To find a track by song or artist, call GET /api/uploadposts/tiktok/music/search from an HTTP Request node first. Needs the music capability on the TikTok connection (see capabilities in the user-profiles response); without it the field is ignored with a warning and the post still publishes. Leave empty to skip.',
+				description: 'Commercial Music Library track ID to add to the post: the ID field returned by the TikTok trending-music or music-search endpoint, not its commercial_music_id. To find a track by song or artist, call GET /api/uploadposts/tiktok/music/search from an HTTP Request node first. Works on video and photo posts alike, but a photo post takes the ID alone: the volume and trim options below are video-only. Needs the music capability on the TikTok connection (see capabilities in the user-profiles response); without it the field is ignored with a warning and the post still publishes. Leave empty to skip.',
 				displayOptions: {
 					show: {
-						operation: ['uploadVideo'],
+						operation: ['uploadVideo', 'uploadPhotos'],
 						platform: ['tiktok', '__manual_platform__']
 					}
 				},
@@ -3268,10 +3286,10 @@ export class UploadPost implements INodeType {
 				name: 'tiktokLocationId',
 				type: 'string',
 				default: '',
-				description: 'Location ID to tag on the video. Needs the location capability on the TikTok connection (see capabilities in the user-profiles response) and a TikTok Location Name — the tag is only sent when both are filled in. Without the capability the field is ignored with a warning and the post still publishes. Leave empty to skip.',
+				description: 'Location ID to tag on the post (video or photos). Needs the location capability on the TikTok connection (see capabilities in the user-profiles response) and a TikTok Location Name — the tag is only sent when both are filled in. Without the capability the field is ignored with a warning and the post still publishes. Leave empty to skip.',
 				displayOptions: {
 					show: {
-						operation: ['uploadVideo'],
+						operation: ['uploadVideo', 'uploadPhotos'],
 						platform: ['tiktok', '__manual_platform__']
 					}
 				},
@@ -3284,7 +3302,7 @@ export class UploadPost implements INodeType {
 				description: 'Location name matching the TikTok Location ID. TikTok requires both together, so the location tag is only sent when this and the ID are both filled in.',
 				displayOptions: {
 					show: {
-						operation: ['uploadVideo'],
+						operation: ['uploadVideo', 'uploadPhotos'],
 						platform: ['tiktok', '__manual_platform__']
 					}
 				},
@@ -3307,10 +3325,10 @@ export class UploadPost implements INodeType {
 				name: 'tiktokIsAiGenerated',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to disclose the video as AI-generated on TikTok. Only sent when enabled.',
+				description: 'Whether to disclose the post as AI-generated on TikTok. Works on video and photo posts. Only sent when enabled.',
 				displayOptions: {
 					show: {
-						operation: ['uploadVideo'],
+						operation: ['uploadVideo', 'uploadPhotos'],
 						platform: ['tiktok', '__manual_platform__']
 					}
 				},

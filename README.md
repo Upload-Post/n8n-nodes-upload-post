@@ -179,7 +179,7 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 > These options are only sent when actually filled in, so leaving them at their
 > defaults keeps the previous behaviour.
 
-- **Music** (`music`): TikTok Music ID — the `id` of a track returned by `GET /api/uploadposts/tiktok/music/trending` or `GET /api/uploadposts/tiktok/music/search` (not its `commercial_music_id`) — plus music volume (0-100) and music start/end offsets in ms.
+- **Music** (`music`): TikTok Music ID — the `id` of a track returned by `GET /api/uploadposts/tiktok/music/trending` or `GET /api/uploadposts/tiktok/music/search` (not its `commercial_music_id`) — plus music volume (0-100) and music start/end offsets in ms. The Music ID works on **video and photo** posts; the volume and the offsets are video-only, because TikTok's photo contract takes the track id alone.
 
   To pick a track by name inside a workflow, put an **HTTP Request** node before
   this one calling
@@ -190,18 +190,22 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
   runs over the trending charts Upload-Post caches per genre/country/period, so
   it finds trending tracks, not TikTok's entire catalogue.
 - **Original Sound Volume**: Volume (0-100) of the video's own audio when music is added. Keep it above 0 so the original audio is not muted. Music volume and original sound volume are only sent when a Music ID is set.
-- **Location** (`location`): TikTok Location ID plus TikTok Location Name — TikTok requires both together.
-- **Cover Image URL** (`cover_image`): Custom cover image, takes priority over the cover timestamp.
-- **Is AI Generated**: AI-generated content disclosure.
-- **Upload to Draft** (`draft`): Sends the video to TikTok drafts instead of publishing; TikTok then ignores the rest of the post settings.
+- **Location** (`location`): TikTok Location ID plus TikTok Location Name — TikTok requires both together. Works on video and photo posts.
+- **Cover Image URL** (`cover_image`): Custom cover image, takes priority over the cover timestamp. Video only.
+- **Is AI Generated**: AI-generated content disclosure. Works on video and photo posts.
+- **Upload to Draft** (`draft`): Sends the video to TikTok drafts instead of publishing; TikTok then ignores the rest of the post settings. Video only.
 
 > **Privacy level on TikTok.** `privacy_level` is accepted on video and photo
 > uploads alike (capabilities `video_privacy` / `photo_privacy`), but **TikTok
 > decides per account which values are available**: a private account is offered
 > Followers / Mutual Friends / Self Only and has no Public. Asking for one the
 > account does not have fails with `tiktok_privacy_unavailable`, and the error
-> lists the ones it does have. Leave it empty on video to keep the account's own
-> default; photo posts default to Public.
+> lists the ones it does have. The **Account Default** option on the TikTok
+> Privacy Level (Video) field sends nothing and lets TikTok apply the account's
+> own setting — the only choice guaranteed to work on every account, and the
+> default for new nodes. Photo posts default to Public. To pick a value up front,
+> query `GET /api/uploadposts/tiktok/settings?profile=<profile>` from an HTTP
+> Request node and read `privacy_level_options`.
 
 #### YouTube
 - **Video Metadata**: Tags (comma-separated), category ID, privacy status (public/unlisted/private), embeddable, license, public stats viewable.
