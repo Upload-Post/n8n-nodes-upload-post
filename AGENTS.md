@@ -147,7 +147,7 @@ Agent → Content Generation → Upload Post Node → Multiple Platforms
 - **Photo Options**: Auto-add music, disable comments, privacy level
 - **Video Options**: Duet/stitch controls, cover timestamp, post mode
 - **Privacy Level**: accepted on video and photo uploads alike, but TikTok decides per account which levels are available (a private account has no Public); an unavailable one fails with `tiktok_privacy_unavailable`
-- **Advanced Options**: Music, location, cover image and draft depend on the `capabilities` array returned for the TikTok account by `GET /api/uploadposts/users` (`music`, `location`, `cover_image`, `cover_timestamp`, `draft`, `photo_privacy`, `video_privacy`, `inbox_fallback`, `comments`, `profile_analytics`). Missing capability = field ignored, post still publishes, response carries a per-field warning
+- **Advanced Options**: Music, location, cover image and draft depend on the `capabilities` array returned for the TikTok account by `GET /api/uploadposts/users` (`music`, `location`, `cover_image`, `cover_timestamp`, `draft`, `photo_privacy`, `video_privacy`, `inbox_fallback`, `profile_analytics`). Missing capability = field ignored, post still publishes, response carries a per-field warning
 - **AI Content**: Declare AI-generated content when applicable
 
 ### YouTube

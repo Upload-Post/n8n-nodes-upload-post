@@ -173,7 +173,7 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 > **Capability-gated.** `GET /api/uploadposts/users` returns a `capabilities`
 > array on each TikTok account (`music`, `location`, `cover_image`,
 > `cover_timestamp`, `draft`, `photo_privacy`, `video_privacy`,
-> `inbox_fallback`, `comments`, `profile_analytics`). If the connection does not declare the capability an option
+> `inbox_fallback`, `profile_analytics`). If the connection does not declare the capability an option
 > needs, the API ignores that field, the post still publishes and the response
 > includes a per-field warning — reconnect the TikTok account to enable it.
 > These options are only sent when actually filled in, so leaving them at their
