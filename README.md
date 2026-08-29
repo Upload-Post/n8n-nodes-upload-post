@@ -179,7 +179,16 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 > These options are only sent when actually filled in, so leaving them at their
 > defaults keeps the previous behaviour.
 
-- **Music** (`music`): TikTok Music ID — the `id` of a track returned by `GET /api/uploadposts/tiktok/music/trending` (not its `commercial_music_id`) — plus music volume (0-100) and music start/end offsets in ms.
+- **Music** (`music`): TikTok Music ID — the `id` of a track returned by `GET /api/uploadposts/tiktok/music/trending` or `GET /api/uploadposts/tiktok/music/search` (not its `commercial_music_id`) — plus music volume (0-100) and music start/end offsets in ms.
+
+  To pick a track by name inside a workflow, put an **HTTP Request** node before
+  this one calling
+  `GET https://api.upload-post.com/api/uploadposts/tiktok/music/search?profile=<profile>&q=<song or artist>`
+  with the header `Authorization: Apikey <your key>`, and feed `tracks[0].id`
+  into TikTok Music ID. It also accepts `genre`, `country_code`, `date_range`
+  and `limit`. Note that TikTok has **no music search endpoint**: the search
+  runs over the trending charts Upload-Post caches per genre/country/period, so
+  it finds trending tracks, not TikTok's entire catalogue.
 - **Original Sound Volume**: Volume (0-100) of the video's own audio when music is added. Keep it above 0 so the original audio is not muted. Music volume and original sound volume are only sent when a Music ID is set.
 - **Location** (`location`): TikTok Location ID plus TikTok Location Name — TikTok requires both together.
 - **Cover Image URL** (`cover_image`): Custom cover image, takes priority over the cover timestamp.

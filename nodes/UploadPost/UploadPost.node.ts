@@ -3199,7 +3199,7 @@ export class UploadPost implements INodeType {
 				name: 'tiktokMusicId',
 				type: 'string',
 				default: '',
-				description: 'Commercial Music Library track ID to add to the video: the ID field returned by the TikTok trending-music endpoint, not its commercial_music_id. Needs the music capability on the TikTok connection (see capabilities in the user-profiles response); without it the field is ignored with a warning and the post still publishes. Leave empty to skip.',
+				description: 'Commercial Music Library track ID to add to the video: the ID field returned by the TikTok trending-music or music-search endpoint, not its commercial_music_id. To find a track by song or artist, call GET /api/uploadposts/tiktok/music/search from an HTTP Request node first. Needs the music capability on the TikTok connection (see capabilities in the user-profiles response); without it the field is ignored with a warning and the post still publishes. Leave empty to skip.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
