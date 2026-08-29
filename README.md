@@ -186,11 +186,13 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 - **Is AI Generated**: AI-generated content disclosure.
 - **Upload to Draft** (`draft`): Sends the video to TikTok drafts instead of publishing; TikTok then ignores the rest of the post settings.
 
-> **Privacy level on TikTok.** This is a TikTok particularity, not an account
-> difference: TikTok does **not** accept a `privacy_level` on video uploads — the
-> video is published public, or lands in drafts when Upload to Draft is enabled.
-> TikTok **photo** posts do accept `privacy_level` (capability `photo_privacy`).
-> Connections that still declare `video_privacy` keep accepting it on video.
+> **Privacy level on TikTok.** `privacy_level` is accepted on video and photo
+> uploads alike (capabilities `video_privacy` / `photo_privacy`), but **TikTok
+> decides per account which values are available**: a private account is offered
+> Followers / Mutual Friends / Self Only and has no Public. Asking for one the
+> account does not have fails with `tiktok_privacy_unavailable`, and the error
+> lists the ones it does have. Leave it empty on video to keep the account's own
+> default; photo posts default to Public.
 
 #### YouTube
 - **Video Metadata**: Tags (comma-separated), category ID, privacy status (public/unlisted/private), embeddable, license, public stats viewable.

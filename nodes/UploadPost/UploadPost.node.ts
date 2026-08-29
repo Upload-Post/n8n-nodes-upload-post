@@ -3083,7 +3083,7 @@ export class UploadPost implements INodeType {
 					{ name: 'Self Only', value: 'SELF_ONLY' },
 				],
 				default: 'PUBLIC_TO_EVERYONE',
-				description: 'Privacy setting requested for the TikTok video. TikTok does not apply a privacy level to video uploads: the video publishes public, or lands in drafts when TikTok Upload to Draft is enabled. Privacy levels are honoured on TikTok photo posts. Only for Upload Video.',
+				description: 'Privacy setting for the TikTok video. TikTok decides per account which levels are available: a private account has no Public to Everyone, and asking for one the account does not have fails with tiktok_privacy_unavailable listing the allowed ones. Only for Upload Video.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
