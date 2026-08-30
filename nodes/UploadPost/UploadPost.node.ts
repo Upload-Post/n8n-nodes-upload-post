@@ -507,6 +507,27 @@ const applyFacebookOptions = (ctx: ExecutionContext, operation: UploadOperation,
 	}
 };
 
+// TikTok fields shared by video and photo posts: the track id, the location pair
+// and the AI disclosure. Only these three — the volume/trim, cover-image and
+// draft fields are video-only, because TikTok's photo contract takes the track
+// id alone.
+const applySharedTiktokFields = (ctx: ExecutionContext, formData: IDataObject) => {
+	const musicId = ctx.node.getNodeParameter('tiktokMusicId', ctx.itemIndex, '') as string;
+	if (musicId) formData.tiktok_music_id = musicId;
+
+	const locationId = ctx.node.getNodeParameter('tiktokLocationId', ctx.itemIndex, '') as string;
+	const locationName = ctx.node.getNodeParameter('tiktokLocationName', ctx.itemIndex, '') as string;
+	// TikTok rejects a location id without its name, and answers with a hard error
+	// instead of dropping the tag — so send the pair or neither.
+	if (locationId && locationName) {
+		formData.tiktok_location_id = locationId;
+		formData.tiktok_location_name = locationName;
+	}
+
+	const isAiGenerated = ctx.node.getNodeParameter('tiktokIsAiGenerated', ctx.itemIndex, false) as boolean;
+	if (isAiGenerated) formData.tiktok_is_ai_generated = 'true';
+};
+
 const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
 	if (operation === 'uploadPhotos') {
 		const autoAddMusic = ctx.node.getNodeParameter('tiktokAutoAddMusic', ctx.itemIndex, false) as boolean;
@@ -525,22 +546,7 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 			formData.description = photoDescription;
 		}
 
-		// TikTok photo posts accept the music track id, the location pair and the
-		// AI disclosure. The volume/trim, cover-image and draft fields do NOT apply
-		// here: TikTok's photo contract takes the track id alone.
-		const photoMusicId = ctx.node.getNodeParameter('tiktokMusicId', ctx.itemIndex, '') as string;
-		if (photoMusicId) formData.tiktok_music_id = photoMusicId;
-
-		const photoLocationId = ctx.node.getNodeParameter('tiktokLocationId', ctx.itemIndex, '') as string;
-		const photoLocationName = ctx.node.getNodeParameter('tiktokLocationName', ctx.itemIndex, '') as string;
-		// TikTok rejects a location id without its name, so send the pair or neither.
-		if (photoLocationId && photoLocationName) {
-			formData.tiktok_location_id = photoLocationId;
-			formData.tiktok_location_name = photoLocationName;
-		}
-
-		const photoIsAiGenerated = ctx.node.getNodeParameter('tiktokIsAiGenerated', ctx.itemIndex, false) as boolean;
-		if (photoIsAiGenerated) formData.tiktok_is_ai_generated = 'true';
+		applySharedTiktokFields(ctx, formData);
 	} else if (operation === 'uploadVideo') {
 		const privacyLevel = ctx.node.getNodeParameter('tiktokPrivacyLevel', ctx.itemIndex, '') as string;
 		const disableDuet = ctx.node.getNodeParameter('tiktokDisableDuet', ctx.itemIndex, false) as boolean;
@@ -566,9 +572,10 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 		// connection without the matching capability ignores them (with a warning),
 		// and sending the defaults unconditionally would attach music/covers nobody
 		// asked for.
-		const musicId = ctx.node.getNodeParameter('tiktokMusicId', ctx.itemIndex, '') as string;
-		if (musicId) {
-			formData.tiktok_music_id = musicId;
+		applySharedTiktokFields(ctx, formData);
+
+		// Video-only mixing controls, meaningless without a track.
+		if (formData.tiktok_music_id) {
 			formData.tiktok_music_volume = ctx.node.getNodeParameter('tiktokMusicVolume', ctx.itemIndex, 50) as number;
 			formData.tiktok_original_sound_volume = ctx.node.getNodeParameter('tiktokOriginalSoundVolume', ctx.itemIndex, 50) as number;
 
@@ -578,20 +585,8 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 			if (musicEnd > 0) formData.tiktok_music_end = musicEnd;
 		}
 
-		const locationId = ctx.node.getNodeParameter('tiktokLocationId', ctx.itemIndex, '') as string;
-		const locationName = ctx.node.getNodeParameter('tiktokLocationName', ctx.itemIndex, '') as string;
-		// TikTok rejects a location id without its name, and the API answers with a
-		// hard error instead of dropping the tag — so send the pair or neither.
-		if (locationId && locationName) {
-			formData.tiktok_location_id = locationId;
-			formData.tiktok_location_name = locationName;
-		}
-
 		const coverImageUrl = ctx.node.getNodeParameter('tiktokCoverImageUrl', ctx.itemIndex, '') as string;
 		if (coverImageUrl) formData.tiktok_cover_image_url = coverImageUrl;
-
-		const isAiGenerated = ctx.node.getNodeParameter('tiktokIsAiGenerated', ctx.itemIndex, false) as boolean;
-		if (isAiGenerated) formData.tiktok_is_ai_generated = 'true';
 
 		const uploadToDraft = ctx.node.getNodeParameter('tiktokUploadToDraft', ctx.itemIndex, false) as boolean;
 		if (uploadToDraft) formData.tiktok_upload_to_draft = 'true';
