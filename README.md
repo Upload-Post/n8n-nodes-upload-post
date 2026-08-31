@@ -114,6 +114,30 @@ The node provides the following operations grouped for clarity:
   - Parameters: JWT token (password field).
   - The API response is returned as-is; its `profile` object also carries the `ui_labels` map configured for that profile.
 
+### Comment Actions
+- **Get Post Comments**: Comments on a post from Instagram, Facebook, YouTube, LinkedIn or TikTok.
+  - Parameters: User Identifier, Platform, Post ID or URL.
+  - Instagram and Facebook accept the media ID or the post URL, YouTube the video ID, LinkedIn the post URN, TikTok the video ID. TikTok has no URL lookup, so pasting a URL fails with a descriptive error instead of an upstream one.
+- **Private Reply to Comment**: DM the author of a comment. Instagram only.
+- **Public Reply to Comment**: Public reply under the comment. Instagram only.
+
+### TikTok Actions
+All of them read the `capabilities` array on the profile's TikTok account, which **List Users** returns. `comments` and `trend_search` are granted when the user connects TikTok, so an account connected before they existed has to reconnect first; `profile_analytics` comes with any recent connection.
+- **Get Comment Replies**: Replies hanging off one comment. Needs `comments`.
+  - Parameters: User Identifier, Video ID, Comment ID, Limit (1-50), Cursor.
+- **Manage Comment**: Hide, like or pin a comment on one of the profile's own videos, and undo any of the three. Needs `comments`.
+  - Parameters: User Identifier, Comment ID, Type (hide / like / pin), Action (HIDE·UNHIDE / LIKE·UNLIKE / PIN·UNPIN), Video ID (required for hide and pin, unused for like).
+- **Search Keywords**: What people search on TikTok around a word. Needs `trend_search`.
+  - Parameters: User Identifier, Query.
+- **Search Hashtags**: Related hashtags with their view count. Needs `profile_analytics`.
+  - Parameters: User Identifier, Query, Country Code, Language.
+- **Get Profile Insights**: Audience demographics (countries, cities, ages, genders), followers online per hour, daily followers, profile actions and bio. Needs `profile_analytics`.
+  - Parameters: User Identifier, Start Date, End Date. The window is at most 60 days and End Date must be before today; both are checked before the request leaves the node.
+- **Get Video Insights**: Per-video retention curve, impression sources, follower vs non-follower audience, new followers and watch times. Needs `profile_analytics`.
+  - Parameters: User Identifier, Limit (1-20), Cursor. Paginate with `pagination.next_cursor`.
+- **Get Category Benchmark**: Without a category, the 25 valid categories; with one, that category's averages. Needs `profile_analytics`.
+  - Parameters: User Identifier, Category (optional).
+
 Refer to the [Upload Post API Documentation](https://docs.upload-post.com) for detailed information on parameters and platform requirements.
 
 ### Waiting for asynchronous uploads
@@ -229,6 +253,10 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 - **`Description (Optional)`**: Generic description used for LinkedIn, Facebook, YouTube, Pinterest, TikTok when supported.
 - **Platform Description Overrides**: `[platform]_description` (e.g., `youtube_description`, `linkedin_description`).
   - Available for: facebook, tiktok, linkedin, youtube, pinterest
+- **`First Comment`**: Generic first comment posted right after publishing.
+- **Platform First Comment Overrides**: `[platform]_first_comment` (e.g., `instagram_first_comment`, `tiktok_first_comment`).
+  - Available for: instagram, facebook, x, threads, youtube (video only), reddit, bluesky, linkedin, tiktok (media only).
+  - TikTok needs the `comments` capability on the profile's TikTok account.
 
 **⚠️ Runtime Validations**: The node performs automatic validations at runtime including poll constraints, mutually exclusive field checks, and platform-specific requirements. Invalid configurations will throw descriptive error messages.
 

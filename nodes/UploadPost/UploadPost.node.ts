@@ -267,6 +267,8 @@ const FIRST_COMMENT_OVERRIDES: Array<{
 	{ platform: 'reddit', param: 'redditFirstComment', field: 'reddit_first_comment' },
 	{ platform: 'bluesky', param: 'blueskyFirstComment', field: 'bluesky_first_comment' },
 	{ platform: 'linkedin', param: 'linkedinFirstComment', field: 'linkedin_first_comment' },
+	// TikTok has no text posts, so the override only makes sense on media uploads.
+	{ platform: 'tiktok', param: 'tiktokFirstComment', field: 'tiktok_first_comment', operations: ['uploadPhotos', 'uploadVideo'] },
 ];
 
 const getFilteredPlatforms = (operation: UploadOperation, platforms: string[]): string[] => {
@@ -1380,9 +1382,17 @@ const buildInstagramRequest = (ctx: ExecutionContext): RequestConfig => {
 	switch (ctx.operation) {
 		case 'getPostComments': {
 			const user = ctx.node.getNodeParameter('instagramUser', ctx.itemIndex) as string;
+			const platform = ctx.node.getNodeParameter('commentPlatform', ctx.itemIndex, 'instagram') as string;
 			const postId = ctx.node.getNodeParameter('instagramPostId', ctx.itemIndex) as string;
-			const qs: IDataObject = { platform: 'instagram', user };
+			const qs: IDataObject = { platform, user };
 			if (postId.startsWith('http://') || postId.startsWith('https://')) {
+				// TikTok resolves comments by video ID only; sending a URL would
+				// reach the API and come back as an opaque upstream error.
+				if (platform === 'tiktok') {
+					throw new NodeOperationError(ctx.node.getNode(), 'TikTok comments are looked up by video ID, not by URL. Paste the numeric video ID instead.', {
+						itemIndex: ctx.itemIndex,
+					});
+				}
 				qs.post_url = postId;
 			} else {
 				qs.post_id = postId;
@@ -1426,6 +1436,164 @@ const buildInstagramRequest = (ctx: ExecutionContext): RequestConfig => {
 	}
 };
 
+// hide/pin act on a comment inside a video, so TikTok wants the video ID too;
+// like does not take one. The three toggles differ only in the enum they accept.
+const TIKTOK_COMMENT_ACTIONS: Record<string, { allowed: string[]; needsPost: boolean }> = {
+	hide: { allowed: ['HIDE', 'UNHIDE'], needsPost: true },
+	like: { allowed: ['LIKE', 'UNLIKE'], needsPost: false },
+	pin: { allowed: ['PIN', 'UNPIN'], needsPost: true },
+};
+
+const TIKTOK_INSIGHTS_MAX_WINDOW_DAYS = 60;
+
+const parseTiktokDate = (ctx: ExecutionContext, value: string, field: string): number => {
+	const day = value.slice(0, 10);
+	const ms = /^\d{4}-\d{2}-\d{2}$/.test(day) ? Date.parse(`${day}T00:00:00Z`) : NaN;
+	if (Number.isNaN(ms)) {
+		throw new NodeOperationError(ctx.node.getNode(), `${field} must be an ISO date such as 2026-08-01.`, {
+			itemIndex: ctx.itemIndex,
+		});
+	}
+	return ms;
+};
+
+const buildTiktokRequest = (ctx: ExecutionContext): RequestConfig => {
+	const profile = ctx.node.getNodeParameter('tiktokProfile', ctx.itemIndex) as string;
+
+	switch (ctx.operation) {
+		case 'getTiktokCommentReplies': {
+			const qs: IDataObject = {
+				profile,
+				post_id: ctx.node.getNodeParameter('tiktokPostId', ctx.itemIndex) as string,
+				comment_id: ctx.node.getNodeParameter('tiktokCommentId', ctx.itemIndex) as string,
+			};
+			const limit = ctx.node.getNodeParameter('tiktokRepliesLimit', ctx.itemIndex, 20) as number;
+			if (limit) qs.limit = limit;
+			const cursor = ctx.node.getNodeParameter('tiktokCursor', ctx.itemIndex, '') as string;
+			if (cursor) qs.cursor = cursor;
+			return {
+				endpoint: '/uploadposts/tiktok/comments/replies',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'manageTiktokComment': {
+			const type = ctx.node.getNodeParameter('tiktokCommentActionType', ctx.itemIndex) as string;
+			const action = ctx.node.getNodeParameter('tiktokCommentAction', ctx.itemIndex) as string;
+			const rules = TIKTOK_COMMENT_ACTIONS[type];
+			if (!rules.allowed.includes(action)) {
+				throw new NodeOperationError(ctx.node.getNode(), `Action must be ${rules.allowed.join(' or ')} when the type is "${type}".`, {
+					itemIndex: ctx.itemIndex,
+				});
+			}
+			const postId = ctx.node.getNodeParameter('tiktokPostId', ctx.itemIndex, '') as string;
+			if (rules.needsPost && !postId) {
+				throw new NodeOperationError(ctx.node.getNode(), `A Video ID is required to ${type} a comment.`, {
+					itemIndex: ctx.itemIndex,
+				});
+			}
+			const body: IDataObject = {
+				profile,
+				type,
+				action,
+				comment_id: ctx.node.getNodeParameter('tiktokCommentId', ctx.itemIndex) as string,
+			};
+			// TikTok's like endpoint takes no video, so don't send one.
+			if (rules.needsPost) body.post_id = postId;
+			return {
+				endpoint: '/uploadposts/tiktok/comments/action',
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'searchTiktokKeywords': {
+			return {
+				endpoint: '/uploadposts/tiktok/search/keywords',
+				method: 'GET',
+				qs: { profile, q: ctx.node.getNodeParameter('tiktokQuery', ctx.itemIndex) as string },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'searchTiktokHashtags': {
+			const qs: IDataObject = { profile, q: ctx.node.getNodeParameter('tiktokQuery', ctx.itemIndex) as string };
+			const countryCode = ctx.node.getNodeParameter('tiktokCountryCode', ctx.itemIndex, '') as string;
+			if (countryCode) qs.country_code = countryCode;
+			const language = ctx.node.getNodeParameter('tiktokLanguage', ctx.itemIndex, '') as string;
+			if (language) qs.language = language;
+			return {
+				endpoint: '/uploadposts/tiktok/hashtags',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getTiktokProfileInsights': {
+			const startDate = ctx.node.getNodeParameter('tiktokStartDate', ctx.itemIndex) as string;
+			const endDate = ctx.node.getNodeParameter('tiktokEndDate', ctx.itemIndex) as string;
+			const start = parseTiktokDate(ctx, startDate, 'Start Date');
+			const end = parseTiktokDate(ctx, endDate, 'End Date');
+			if (end < start) {
+				throw new NodeOperationError(ctx.node.getNode(), 'End Date must be on or after Start Date.', { itemIndex: ctx.itemIndex });
+			}
+			const days = Math.round((end - start) / 86400000) + 1;
+			if (days > TIKTOK_INSIGHTS_MAX_WINDOW_DAYS) {
+				throw new NodeOperationError(ctx.node.getNode(), `The window is ${days} days; TikTok returns at most ${TIKTOK_INSIGHTS_MAX_WINDOW_DAYS}. Split the range into shorter calls.`, {
+					itemIndex: ctx.itemIndex,
+				});
+			}
+			if (end >= parseTiktokDate(ctx, new Date().toISOString(), 'Today')) {
+				throw new NodeOperationError(ctx.node.getNode(), 'End Date must be before today: TikTok has no insights for the current day.', {
+					itemIndex: ctx.itemIndex,
+				});
+			}
+			return {
+				endpoint: '/uploadposts/tiktok/insights',
+				method: 'GET',
+				qs: { profile, start_date: startDate.slice(0, 10), end_date: endDate.slice(0, 10) },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getTiktokVideoInsights': {
+			const qs: IDataObject = { profile };
+			const limit = ctx.node.getNodeParameter('tiktokVideoLimit', ctx.itemIndex, 20) as number;
+			if (limit) qs.limit = limit;
+			const cursor = ctx.node.getNodeParameter('tiktokCursor', ctx.itemIndex, '') as string;
+			if (cursor) qs.cursor = cursor;
+			return {
+				endpoint: '/uploadposts/tiktok/videos/insights',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getTiktokBenchmark': {
+			const qs: IDataObject = { profile };
+			// Without a category the endpoint answers with the valid categories.
+			const category = ctx.node.getNodeParameter('tiktokBenchmarkCategory', ctx.itemIndex, '') as string;
+			if (category) qs.category = category;
+			return {
+				endpoint: '/uploadposts/tiktok/benchmark',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		default:
+			throw new NodeOperationError(ctx.node.getNode(), `Unsupported TikTok operation: ${ctx.operation}`, {
+				itemIndex: ctx.itemIndex,
+			});
+	}
+};
+
 const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig> => {
 	if (ctx.operation === 'uploadPhotos') {
 		return buildUploadPhotosRequest(ctx);
@@ -1443,6 +1611,9 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 	const resource = ctx.node.getNodeParameter('resource', ctx.itemIndex) as string;
 	if (resource === 'instagram') {
 		return buildInstagramRequest(ctx);
+	}
+	if (resource === 'tiktok') {
+		return buildTiktokRequest(ctx);
 	}
 	if (resource === 'monitoring') {
 		return buildMonitoringRequest(ctx);
@@ -1556,9 +1727,12 @@ export class UploadPost implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				options: [
-					{ name: 'Upload', value: 'uploads' },
-					{ name: 'Instagram', value: 'instagram' },
+					// Value kept as 'instagram' so saved workflows keep working; the
+					// listing operation is no longer Instagram-only, hence the label.
+					{ name: 'Comment', value: 'instagram' },
 					{ name: 'Status & History', value: 'monitoring' },
+					{ name: 'TikTok', value: 'tiktok' },
+					{ name: 'Upload', value: 'uploads' },
 					{ name: 'User', value: 'users' },
 				],
 				default: 'uploads',
@@ -1628,9 +1802,9 @@ export class UploadPost implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				options: [
-					{ name: 'Get Post Comments', value: 'getPostComments', action: 'Get post comments', description: 'Retrieve all comments on a specific Instagram post' },
-					{ name: 'Private Reply to Comment', value: 'privateReplyToComment', action: 'Private reply to comment', description: 'Send a private reply (DM) to the author of a comment' },
-					{ name: 'Public Reply to Comment', value: 'publicReplyToComment', action: 'Public reply to comment', description: 'Post a public reply visible under the original comment' },
+					{ name: 'Get Post Comments', value: 'getPostComments', action: 'Get post comments', description: 'Retrieve the comments on a post from Instagram, Facebook, YouTube, LinkedIn or TikTok' },
+					{ name: 'Private Reply to Comment', value: 'privateReplyToComment', action: 'Private reply to comment', description: 'Send a private reply (DM) to the author of a comment. Instagram only.' },
+					{ name: 'Public Reply to Comment', value: 'publicReplyToComment', action: 'Public reply to comment', description: 'Post a public reply visible under the original comment. Instagram only.' },
 				],
 				default: 'getPostComments',
 				displayOptions: { show: { resource: ['instagram'] } },
@@ -1653,12 +1827,32 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
+				displayName: 'Platform',
+				name: 'commentPlatform',
+				type: 'options',
+				options: [
+					{ name: 'Facebook', value: 'facebook' },
+					{ name: 'Instagram', value: 'instagram' },
+					{ name: 'LinkedIn', value: 'linkedin' },
+					{ name: 'TikTok', value: 'tiktok' },
+					{ name: 'YouTube', value: 'youtube' },
+				],
+				default: 'instagram',
+				description: 'Network the post lives on. TikTok needs the "comments" capability on the profile (see the capabilities array returned by List Users); an account connected before that capability existed has to reconnect TikTok.',
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['getPostComments'],
+					},
+				},
+			},
+			{
 				displayName: 'Post ID or URL',
 				name: 'instagramPostId',
 				type: 'string',
 				required: true,
 				default: '',
-				description: 'Numeric media ID or full Instagram post URL (e.g., https://www.instagram.com/p/ABC123/)',
+				description: 'Post identifier. Instagram and Facebook accept the numeric media ID or the post URL, YouTube the video ID, LinkedIn the post URN, TikTok the video ID (TikTok has no URL lookup).',
 				displayOptions: {
 					show: {
 						resource: ['instagram'],
@@ -1694,6 +1888,180 @@ export class UploadPost implements INodeType {
 						operation: ['privateReplyToComment', 'publicReplyToComment'],
 					},
 				},
+			},
+
+			// Operations for TikTok
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{ name: 'Get Category Benchmark', value: 'getTiktokBenchmark', action: 'Get category benchmark', description: 'Compare the account against its niche. Without a category it returns the 25 valid categories; with one, that category averages. The profile needs the "profile_analytics" capability on its TikTok account (see the capabilities array returned by List Users).' },
+					{ name: 'Get Comment Replies', value: 'getTiktokCommentReplies', action: 'Get comment replies', description: 'List the replies hanging off one TikTok comment. The profile needs the "comments" capability on its TikTok account (see the capabilities array returned by List Users) It is granted when the user connects TikTok, so an account connected earlier has to reconnect first.' },
+					{ name: 'Get Profile Insights', value: 'getTiktokProfileInsights', action: 'Get profile insights', description: 'Audience demographics (countries, cities, ages, genders), followers online per hour, daily followers, profile actions and bio, for a window of up to 60 days ending before today. The profile needs the "profile_analytics" capability on its TikTok account (see the capabilities array returned by List Users).' },
+					{ name: 'Get Video Insights', value: 'getTiktokVideoInsights', action: 'Get video insights', description: 'Per-video retention curve, impression sources, follower vs non-follower audience, new followers and watch times. The profile needs the "profile_analytics" capability on its TikTok account (see the capabilities array returned by List Users).' },
+					{ name: 'Manage Comment', value: 'manageTiktokComment', action: 'Manage comment', description: 'Hide, like or pin a comment on one of the profile own videos, or undo any of the three. The profile needs the "comments" capability on its TikTok account (see the capabilities array returned by List Users) It is granted when the user connects TikTok, so an account connected earlier has to reconnect first.' },
+					{ name: 'Search Hashtags', value: 'searchTiktokHashtags', action: 'Search hashtags', description: 'Find hashtags related to a word, each with its view count. The profile needs the "profile_analytics" capability on its TikTok account (see the capabilities array returned by List Users).' },
+					{ name: 'Search Keywords', value: 'searchTiktokKeywords', action: 'Search keywords', description: 'Discover what people search on TikTok around a word. The profile needs the "trend_search" capability on its TikTok account (see the capabilities array returned by List Users) It is granted when the user connects TikTok, so an account connected earlier has to reconnect first.' },
+				],
+				default: 'getTiktokProfileInsights',
+				displayOptions: { show: { resource: ['tiktok'] } },
+			},
+			// TikTok operation parameters
+			{
+				displayName: 'User Identifier Name or ID',
+				name: 'tiktokProfile',
+				type: 'options',
+				noDataExpression: true,
+				required: true,
+				default: '',
+				description: 'Upload-Post profile whose connected TikTok account answers the request. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				typeOptions: { loadOptionsMethod: 'getUserProfiles' },
+				displayOptions: { show: { resource: ['tiktok'] } },
+			},
+			{
+				displayName: 'Video ID',
+				name: 'tiktokPostId',
+				type: 'string',
+				default: '',
+				description: 'TikTok video the comment belongs to. Required for Get Comment Replies, and for Manage Comment when hiding or pinning; ignored when liking.',
+				displayOptions: {
+					show: {
+						resource: ['tiktok'],
+						operation: ['getTiktokCommentReplies', 'manageTiktokComment'],
+					},
+				},
+			},
+			{
+				displayName: 'Comment ID',
+				name: 'tiktokCommentId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Comment to act on, as returned by Get Post Comments or Get Comment Replies',
+				displayOptions: {
+					show: {
+						resource: ['tiktok'],
+						operation: ['getTiktokCommentReplies', 'manageTiktokComment'],
+					},
+				},
+			},
+			{
+				displayName: 'Type',
+				name: 'tiktokCommentActionType',
+				type: 'options',
+				options: [
+					{ name: 'Hide', value: 'hide' },
+					{ name: 'Like', value: 'like' },
+					{ name: 'Pin', value: 'pin' },
+				],
+				default: 'hide',
+				description: 'What to do with the comment: change its visibility, react to it as the account, or move it to the top of the thread',
+				displayOptions: { show: { resource: ['tiktok'], operation: ['manageTiktokComment'] } },
+			},
+			{
+				displayName: 'Action',
+				name: 'tiktokCommentAction',
+				type: 'options',
+				options: [
+					{ name: 'Hide', value: 'HIDE' },
+					{ name: 'Like', value: 'LIKE' },
+					{ name: 'Pin', value: 'PIN' },
+					{ name: 'Unhide', value: 'UNHIDE' },
+					{ name: 'Unlike', value: 'UNLIKE' },
+					{ name: 'Unpin', value: 'UNPIN' },
+				],
+				default: 'HIDE',
+				description: 'Direction of the action. It has to match the type: Hide uses HIDE/UNHIDE, Like uses LIKE/UNLIKE and Pin uses PIN/UNPIN.',
+				displayOptions: { show: { resource: ['tiktok'], operation: ['manageTiktokComment'] } },
+			},
+			{
+				displayName: 'Limit',
+				name: 'tiktokRepliesLimit',
+				type: 'number',
+				typeOptions: { minValue: 1, maxValue: 50 },
+				default: 20,
+				description: 'Max number of results to return',
+				displayOptions: { show: { resource: ['tiktok'], operation: ['getTiktokCommentReplies'] } },
+			},
+			{
+				displayName: 'Limit',
+				name: 'tiktokVideoLimit',
+				type: 'number',
+				typeOptions: { minValue: 1, maxValue: 20 },
+				default: 20,
+				description: 'Max number of results to return',
+				displayOptions: { show: { resource: ['tiktok'], operation: ['getTiktokVideoInsights'] } },
+			},
+			{
+				displayName: 'Cursor',
+				name: 'tiktokCursor',
+				type: 'string',
+				default: '',
+				description: 'Pagination cursor: pass back the pagination.next_cursor of a previous call',
+				displayOptions: {
+					show: {
+						resource: ['tiktok'],
+						operation: ['getTiktokCommentReplies', 'getTiktokVideoInsights'],
+					},
+				},
+			},
+			{
+				displayName: 'Query',
+				name: 'tiktokQuery',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Seed word to explore, without the "#" for hashtags',
+				displayOptions: {
+					show: {
+						resource: ['tiktok'],
+						operation: ['searchTiktokKeywords', 'searchTiktokHashtags'],
+					},
+				},
+			},
+			{
+				displayName: 'Country Code',
+				name: 'tiktokCountryCode',
+				type: 'string',
+				default: '',
+				description: 'ISO 3166-1 alpha-2 country to rank the hashtags for, e.g. ES or US',
+				displayOptions: { show: { resource: ['tiktok'], operation: ['searchTiktokHashtags'] } },
+			},
+			{
+				displayName: 'Language',
+				name: 'tiktokLanguage',
+				type: 'string',
+				default: '',
+				description: 'Language code for the results, e.g. es or en',
+				displayOptions: { show: { resource: ['tiktok'], operation: ['searchTiktokHashtags'] } },
+			},
+			{
+				displayName: 'Start Date',
+				name: 'tiktokStartDate',
+				type: 'dateTime',
+				required: true,
+				default: '',
+				description: 'First day of the window. The range cannot exceed 60 days.',
+				displayOptions: { show: { resource: ['tiktok'], operation: ['getTiktokProfileInsights'] } },
+			},
+			{
+				displayName: 'End Date',
+				name: 'tiktokEndDate',
+				type: 'dateTime',
+				required: true,
+				default: '',
+				description: 'Last day of the window. Must be before today: TikTok has no insights for the current day.',
+				displayOptions: { show: { resource: ['tiktok'], operation: ['getTiktokProfileInsights'] } },
+			},
+			{
+				displayName: 'Category',
+				name: 'tiktokBenchmarkCategory',
+				type: 'string',
+				default: '',
+				description: 'Category to benchmark the account against. Leave empty to get the list of 25 categories the API accepts.',
+				displayOptions: { show: { resource: ['tiktok'], operation: ['getTiktokBenchmark'] } },
 			},
 
 		// Common Fields for all operations
@@ -1751,7 +2119,7 @@ export class UploadPost implements INodeType {
 				name: 'firstComment',
 				type: 'string',
 				default: '',
-				description: 'Text to post as the first comment (or reply) immediately after publishing. Supported on Instagram, Facebook, X, Threads, YouTube, Reddit, Bluesky.',
+				description: 'Text to post as the first comment (or reply) immediately after publishing. Supported on Instagram, Facebook, X, Threads, YouTube, Reddit, Bluesky, LinkedIn and TikTok. On TikTok the profile needs the "comments" capability (see the capabilities array returned by List Users).',
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
 			},
 			{
@@ -2035,6 +2403,14 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'Optional override for LinkedIn first comment. If provided, overrides the generic First Comment for LinkedIn.',
 				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'], platform: ['linkedin', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'TikTok First Comment (Override)',
+				name: 'tiktokFirstComment',
+				type: 'string',
+				default: '',
+				description: 'Optional override for the TikTok first comment. If provided, overrides the generic First Comment for TikTok. The profile needs the "comments" capability (see the capabilities array returned by List Users); an account connected before that capability existed has to reconnect TikTok.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['tiktok', '__manual_platform__'] } },
 			},
 
 		// Fields for Upload Photo(s)
