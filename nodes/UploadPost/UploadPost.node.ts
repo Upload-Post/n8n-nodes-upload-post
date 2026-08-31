@@ -509,6 +509,27 @@ const applyFacebookOptions = (ctx: ExecutionContext, operation: UploadOperation,
 	}
 };
 
+// TikTok fields shared by video and photo posts: the track id, the location pair
+// and the AI disclosure. Only these three — the volume/trim, cover-image and
+// draft fields are video-only, because TikTok's photo contract takes the track
+// id alone.
+const applySharedTiktokFields = (ctx: ExecutionContext, formData: IDataObject) => {
+	const musicId = ctx.node.getNodeParameter('tiktokMusicId', ctx.itemIndex, '') as string;
+	if (musicId) formData.tiktok_music_id = musicId;
+
+	const locationId = ctx.node.getNodeParameter('tiktokLocationId', ctx.itemIndex, '') as string;
+	const locationName = ctx.node.getNodeParameter('tiktokLocationName', ctx.itemIndex, '') as string;
+	// TikTok rejects a location id without its name, and answers with a hard error
+	// instead of dropping the tag — so send the pair or neither.
+	if (locationId && locationName) {
+		formData.tiktok_location_id = locationId;
+		formData.tiktok_location_name = locationName;
+	}
+
+	const isAiGenerated = ctx.node.getNodeParameter('tiktokIsAiGenerated', ctx.itemIndex, false) as boolean;
+	if (isAiGenerated) formData.tiktok_is_ai_generated = 'true';
+};
+
 const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
 	if (operation === 'uploadPhotos') {
 		const autoAddMusic = ctx.node.getNodeParameter('tiktokAutoAddMusic', ctx.itemIndex, false) as boolean;
@@ -526,6 +547,8 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 		if (photoDescription && formData.description === undefined) {
 			formData.description = photoDescription;
 		}
+
+		applySharedTiktokFields(ctx, formData);
 	} else if (operation === 'uploadVideo') {
 		const privacyLevel = ctx.node.getNodeParameter('tiktokPrivacyLevel', ctx.itemIndex, '') as string;
 		const disableDuet = ctx.node.getNodeParameter('tiktokDisableDuet', ctx.itemIndex, false) as boolean;
@@ -546,6 +569,29 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 		formData.brand_organic_toggle = String(brandOrganicToggle);
 		formData.is_aigc = String(isAigc);
 		if (postMode) formData.post_mode = postMode;
+
+		// Capability-gated TikTok options. Only sent when actually configured: a
+		// connection without the matching capability ignores them (with a warning),
+		// and sending the defaults unconditionally would attach music/covers nobody
+		// asked for.
+		applySharedTiktokFields(ctx, formData);
+
+		// Video-only mixing controls, meaningless without a track.
+		if (formData.tiktok_music_id) {
+			formData.tiktok_music_volume = ctx.node.getNodeParameter('tiktokMusicVolume', ctx.itemIndex, 50) as number;
+			formData.tiktok_original_sound_volume = ctx.node.getNodeParameter('tiktokOriginalSoundVolume', ctx.itemIndex, 50) as number;
+
+			const musicStart = ctx.node.getNodeParameter('tiktokMusicStart', ctx.itemIndex, 0) as number;
+			const musicEnd = ctx.node.getNodeParameter('tiktokMusicEnd', ctx.itemIndex, 0) as number;
+			if (musicStart > 0) formData.tiktok_music_start = musicStart;
+			if (musicEnd > 0) formData.tiktok_music_end = musicEnd;
+		}
+
+		const coverImageUrl = ctx.node.getNodeParameter('tiktokCoverImageUrl', ctx.itemIndex, '') as string;
+		if (coverImageUrl) formData.tiktok_cover_image_url = coverImageUrl;
+
+		const uploadToDraft = ctx.node.getNodeParameter('tiktokUploadToDraft', ctx.itemIndex, false) as boolean;
+		if (uploadToDraft) formData.tiktok_upload_to_draft = 'true';
 	}
 };
 
@@ -3419,13 +3465,14 @@ export class UploadPost implements INodeType {
 				name: 'tiktokPrivacyLevel',
 				type: 'options',
 				options: [
-					{ name: 'Public to Everyone', value: 'PUBLIC_TO_EVERYONE' },
-					{ name: 'Mutual Follow Friends', value: 'MUTUAL_FOLLOW_FRIENDS' },
+					{ name: 'Account Default', value: '' },
 					{ name: 'Follower of Creator', value: 'FOLLOWER_OF_CREATOR' },
+					{ name: 'Mutual Follow Friends', value: 'MUTUAL_FOLLOW_FRIENDS' },
+					{ name: 'Public to Everyone', value: 'PUBLIC_TO_EVERYONE' },
 					{ name: 'Self Only', value: 'SELF_ONLY' },
 				],
-				default: 'PUBLIC_TO_EVERYONE',
-				description: 'Privacy setting for TikTok video (PUBLIC_TO_EVERYONE, MUTUAL_FOLLOW_FRIENDS, etc.). Only for Upload Video.',
+				default: '',
+				description: 'Privacy setting for the TikTok video. TikTok decides per account which levels are available: a private account has no Public to Everyone, and asking for one the account does not have fails with tiktok_privacy_unavailable listing the allowed ones. Account Default sends nothing and lets TikTok apply the account\'s own setting, which is the only value guaranteed to work on every account. Only for Upload Video.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -3521,6 +3568,148 @@ export class UploadPost implements INodeType {
 				],
 				default: 'DIRECT_POST',
 				description: 'Choose TikTok posting mode for video',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+
+		// ----- TikTok Capability-Gated Options -----
+		// Each of these depends on a capability declared by the TikTok connection
+		// (see the `capabilities` array on the TikTok account in the user-profiles
+		// response). When the connection lacks the capability the API ignores the
+		// field and returns a per-field warning, so the post still publishes. They
+		// are only sent when actually filled in, so leaving them at their defaults
+		// keeps the current behaviour.
+			{
+				displayName: 'TikTok Music ID',
+				name: 'tiktokMusicId',
+				type: 'string',
+				default: '',
+				description: 'Commercial Music Library track ID to add to the post: the ID field returned by the TikTok trending-music or music-search endpoint, not its commercial_music_id. To find a track by song or artist, call GET /api/uploadposts/tiktok/music/search from an HTTP Request node first. Works on video and photo posts alike, but a photo post takes the ID alone: the volume and trim options below are video-only. Needs the music capability on the TikTok connection (see capabilities in the user-profiles response); without it the field is ignored with a warning and the post still publishes. Leave empty to skip.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo', 'uploadPhotos'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Music Volume',
+				name: 'tiktokMusicVolume',
+				type: 'number',
+				default: 50,
+				typeOptions: { minValue: 0, maxValue: 100 },
+				description: 'Volume (0-100) of the Commercial Music Library track. Only sent when a TikTok Music ID is set.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Music Start (Ms)',
+				name: 'tiktokMusicStart',
+				type: 'number',
+				default: 0,
+				typeOptions: { minValue: 0 },
+				description: 'Start offset (ms) of the music track. Only sent when a TikTok Music ID is set and this is above 0.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Music End (Ms)',
+				name: 'tiktokMusicEnd',
+				type: 'number',
+				default: 0,
+				typeOptions: { minValue: 0 },
+				description: 'End offset (ms) of the music track. Only sent when a TikTok Music ID is set and this is above 0.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Original Sound Volume',
+				name: 'tiktokOriginalSoundVolume',
+				type: 'number',
+				default: 50,
+				typeOptions: { minValue: 0, maxValue: 100 },
+				description: 'Volume (0-100) of the original video audio when music is added. Only sent when a TikTok Music ID is set. Keep it above 0 so the original audio is not muted.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Location ID',
+				name: 'tiktokLocationId',
+				type: 'string',
+				default: '',
+				description: 'Location ID to tag on the post (video or photos). Needs the location capability on the TikTok connection (see capabilities in the user-profiles response) and a TikTok Location Name — the tag is only sent when both are filled in. Without the capability the field is ignored with a warning and the post still publishes. Leave empty to skip.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo', 'uploadPhotos'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Location Name',
+				name: 'tiktokLocationName',
+				type: 'string',
+				default: '',
+				description: 'Location name matching the TikTok Location ID. TikTok requires both together, so the location tag is only sent when this and the ID are both filled in.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo', 'uploadPhotos'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Cover Image URL',
+				name: 'tiktokCoverImageUrl',
+				type: 'string',
+				default: '',
+				description: 'Custom cover image URL for the video. Needs the cover_image capability on the TikTok connection (see capabilities in the user-profiles response); without it the field is ignored with a warning and the post still publishes. Takes priority over TikTok Cover Timestamp.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Is AI Generated',
+				name: 'tiktokIsAiGenerated',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to disclose the post as AI-generated on TikTok. Works on video and photo posts. Only sent when enabled.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo', 'uploadPhotos'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok Upload to Draft',
+				name: 'tiktokUploadToDraft',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to send the video to TikTok drafts instead of publishing it. Needs the draft capability on the TikTok connection (see capabilities in the user-profiles response); without it the field is ignored with a warning and the post still publishes. When enabled TikTok ignores the rest of the post settings.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
