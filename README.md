@@ -75,6 +75,7 @@ The node provides the following operations grouped for clarity:
   - Supported: Facebook, Instagram, LinkedIn, Pinterest, Reddit, Threads, TikTok, X, YouTube. Analytics are not available for Bluesky, Discord, Google Business or Telegram.
 - **Get Post Analytics**: Per-post metrics for an upload, by `request_id`.
   - Parameters: Request ID, Platform (optional filter).
+  - On TikTok, `post_metrics` also carries `retention`, `impression_sources`, `audience_types`, `new_followers`, `reach` and the watch times.
 - **Get Post Analytics by Platform ID**: Per-post metrics for a post published outside Upload-Post.
   - Parameters: Platform Post ID, Platform, Profile Username.
 - **Get Cached Post Analytics**: Replays per-post metrics already fetched, instead of querying the platforms again, so it is not subject to the live analytics rate limit (100 requests / 5 minutes). Only contains posts previously fetched through a live per-post endpoint; there is no background refresh, so captured_at is the last time that post was read live.
@@ -115,28 +116,29 @@ The node provides the following operations grouped for clarity:
   - The API response is returned as-is; its `profile` object also carries the `ui_labels` map configured for that profile.
 
 ### Comment Actions
-- **Get Post Comments**: Comments on a post from Instagram, Facebook, YouTube, LinkedIn or TikTok.
-  - Parameters: User Identifier, Platform, Post ID or URL.
+The comment endpoints are shaped like the rest of the API: **one endpoint per question, with a `platform` parameter** that says which connected network is being asked. There is no endpoint per social network.
+- **Get Post Comments**: Comments on a post from the network given by `Platform` (Instagram, Facebook, YouTube, LinkedIn or TikTok).
+  - Parameters: User Identifier, Platform, Post ID or URL, Comment ID (optional).
   - Instagram and Facebook accept the media ID or the post URL, YouTube the video ID, LinkedIn the post URN, TikTok the video ID. TikTok has no URL lookup, so pasting a URL fails with a descriptive error instead of an upstream one.
+  - Fill **Comment ID** to get the replies to that comment instead of the top-level comments of the post. It is the same question with one parameter more, not a separate operation.
+- **Comment Action**: Moderate one comment — hide, unhide, like, unlike, pin or unpin it.
+  - Parameters: User Identifier, Platform, Comment ID, Action, Post ID (shown only when it is needed).
+  - Each action carries its own inverse, so there is no separate toggle: `hide`/`unhide`, `like`/`unlike`, `pin`/`unpin`.
+  - **Post ID** is required for `hide`, `unhide`, `pin` and `unpin`, and is never sent for `like`/`unlike` — the API rejects a like that carries a post. The node checks it before the request leaves n8n.
+  - TikTok is the network that answers this today, and its profile needs the `comments` capability (see the `capabilities` array returned by **List Users**); an account connected before that capability existed has to reconnect TikTok.
 - **Private Reply to Comment**: DM the author of a comment. Instagram only.
 - **Public Reply to Comment**: Public reply under the comment. Instagram only.
 
-### TikTok Actions
-All of them read the `capabilities` array on the profile's TikTok account, which **List Users** returns. `comments` and `trend_search` are granted when the user connects TikTok, so an account connected before they existed has to reconnect first; `profile_analytics` comes with any recent connection.
-- **Get Comment Replies**: Replies hanging off one comment. Needs `comments`.
-  - Parameters: User Identifier, Video ID, Comment ID, Limit (1-50), Cursor.
-- **Manage Comment**: Hide, like or pin a comment on one of the profile's own videos, and undo any of the three. Needs `comments`.
-  - Parameters: User Identifier, Comment ID, Type (hide / like / pin), Action (HIDE·UNHIDE / LIKE·UNLIKE / PIN·UNPIN), Video ID (required for hide and pin, unused for like).
-- **Search Keywords**: What people search on TikTok around a word. Needs `trend_search`.
-  - Parameters: User Identifier, Query.
-- **Search Hashtags**: Related hashtags with their view count. Needs `profile_analytics`.
-  - Parameters: User Identifier, Query, Country Code, Language.
-- **Get Profile Insights**: Audience demographics (countries, cities, ages, genders), followers online per hour, daily followers, profile actions and bio. Needs `profile_analytics`.
-  - Parameters: User Identifier, Start Date, End Date. The window is at most 60 days and End Date must be before today; both are checked before the request leaves the node.
-- **Get Video Insights**: Per-video retention curve, impression sources, follower vs non-follower audience, new followers and watch times. Needs `profile_analytics`.
-  - Parameters: User Identifier, Limit (1-20), Cursor. Paginate with `pagination.next_cursor`.
-- **Get Category Benchmark**: Without a category, the 25 valid categories; with one, that category's averages. Needs `profile_analytics`.
-  - Parameters: User Identifier, Category (optional).
+### Insight Actions
+Two more questions with a `platform` parameter, not two TikTok endpoints. A network that cannot answer a question replies with `platform_not_supported` and the list of the ones that can; today that network is TikTok, whose profile needs the `profile_analytics` capability (see the `capabilities` array returned by **List Users**).
+- **Get Audience**: Who follows the profile and when they are around — audience countries, cities, age brackets and genders, followers online per hour, daily followers gained and lost, profile actions and the bio.
+  - Parameters: User Identifier, Platform, Start Date, End Date, Benchmark Category (all optional except the first two).
+  - Dates are `YYYY-MM-DD`. The window is clamped **by the server**: 60 days at most, and End Date always below today. A wider range is trimmed, not rejected, so the node sends it as typed.
+  - Filling **Benchmark Category** adds a `benchmark` object with that niche's averages (comments, engagement rate, follower count and growth, likes, shares, video count and views) next to the account's own numbers. The 25 accepted values come back in `benchmark_categories` on every response, so filling a picker needs no extra call.
+  - Use this to know *who* the audience is and *when* to post; use **Get Post Analytics** for how a given post did.
+- **Get Suggestions**: What to write about — hashtags or the searches people run around a seed word.
+  - Parameters: User Identifier, Platform, Type (`hashtags` / `keywords`), Query, Country Code, Language.
+  - `Type = hashtags` answers with `hashtags: [{ name, view_count }]`; `Type = keywords` answers with `keywords: [...]`. One endpoint, told apart by `type`, not by operation.
 
 Refer to the [Upload Post API Documentation](https://docs.upload-post.com) for detailed information on parameters and platform requirements.
 
