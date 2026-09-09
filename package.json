@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-upload-post",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "n8n community node for Upload Post",
   "keywords": [
     "n8n-community-node-package",
@@ -26,6 +26,7 @@
     "dev": "tsc --watch",
     "debug": "./debug.sh",
     "format": "prettier nodes credentials --write",
+    "test": "npm run build && node --test test/*.test.js",
     "lint": "eslint nodes credentials package.json",
     "lintfix": "eslint nodes credentials package.json --fix",
     "prepublishOnly": "npm run build && npm run lint -c .eslintrc.prepublish.js nodes credentials package.json"
