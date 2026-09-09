@@ -35,8 +35,8 @@ The node provides the following operations grouped for clarity:
 - **Upload Photo(s)**: Upload one or more photos to supported platforms.
   - Supports file uploads and photo URLs (comma-separated list).
   - Common parameters: User Identifier, Platform Names or IDs, Title / Main Content, Description (optional), Photos (Files or URLs), Scheduled Date (optional).
-  - Title/Description overrides per platform: `instagram_title`, `facebook_title`, `tiktok_title`, `linkedin_title`, `x_title`, `youtube_title`, `pinterest_title`, `threads_title`.
-  - Platform-specific parameters available for: Discord, Facebook, Instagram, LinkedIn, Pinterest, Telegram, TikTok, X (Twitter).
+  - Title/Description overrides per platform, including Bluesky, Slack, Mastodon, Nostr, Lemmy, Dev.to, Hashnode, WordPress, Whop and Listmonk.
+  - Platform-specific parameters available for: Bluesky, Discord, Facebook, Google Business, Instagram, Lemmy, LinkedIn, Mastodon, Pinterest, Reddit, Telegram, Threads, TikTok, WordPress, X (Twitter).
   - **Pinterest**: Requires Board selection via dynamic selector.
   - **Instagram**: Media Type (Image/Stories), TikTok: Auto-add music, disable comments, brand content toggles.
   - **Facebook**: Page selection via dynamic selector.
@@ -47,7 +47,7 @@ The node provides the following operations grouped for clarity:
   - Supports file uploads and video URLs.
   - Common parameters: User Identifier, Platform Names or IDs, Title / Main Content, Description (optional), Video (File or URL), Scheduled Date (optional).
   - Title/Description overrides per platform: `instagram_title`, `facebook_title`, `tiktok_title`, `linkedin_title`, `x_title`, `youtube_title`, `pinterest_title`.
-  - Platform-specific parameters available for: Discord, Facebook, Instagram, LinkedIn, Pinterest, Telegram, Threads, TikTok, X (Twitter), YouTube.
+  - Platform-specific parameters available for: Bluesky, Discord, Facebook, Google Business, Instagram, LinkedIn, Mastodon, Pinterest, Reddit, Telegram, Threads, TikTok, WordPress, X (Twitter), YouTube.
   - **YouTube**: Custom thumbnail (URL/binary), tags, category, privacy, embeddable, license, public stats, made for kids, synthetic media declaration, geo-restrictions, paid product placement, recording date, default language/audio language.
   - **Facebook**: Page selection, video state (Published/Draft), media type (Reels/Stories).
   - **Instagram**: Media type (Reels/Stories), share to feed, collaborators, cover URL, audio name, user tags, location ID, thumb offset.
@@ -58,7 +58,7 @@ The node provides the following operations grouped for clarity:
 
 - **Upload Text**: Upload a text-based post to supported platforms.
   - Common parameters: User Identifier, Platform Names or IDs, Title / Main Content (used as post content), Scheduled Date (optional).
-  - Platform-specific parameters available for: Discord, Facebook, LinkedIn, Reddit, Telegram, Threads, X (Twitter).
+  - Platform-specific parameters available for: Bluesky, Dev.to, Discord, Facebook, Google Business, Hashnode, Lemmy, LinkedIn, Listmonk, Mastodon, Nostr, Reddit, Slack, Telegram, Threads, Whop, WordPress, X (Twitter).
   - **Facebook**: Page selection, link URL for preview.
   - **LinkedIn**: Page selection ("Me" for personal profile).
   - **X (Twitter)**: Reply settings, poll options (2-4 options, 5-10080 min duration), post URL, quote tweet ID, geo place ID, super followers exclusivity, community ID, sharing options, direct message deep link, card URI, long text handling.
@@ -88,6 +88,16 @@ The node provides the following operations grouped for clarity:
 - **Get Platform Metrics**: Lists which metrics each platform exposes.
 - **Get Reddit Detailed Posts**: Detailed Reddit posts with full media information.
   - Parameters: Profile Username.
+- **Get Media**: List published media for a connected network.
+- **Get Google Business Locations**: List locations for a Google Business Profile.
+- **Get TikTok Trending Music / Search TikTok Music / Get TikTok Locations / Get TikTok Publishing Settings**: TikTok discovery helpers (music IDs, location IDs, creator capabilities).
+
+### Post Actions
+- **Retry Post**: Re-enqueue failed platforms of an upload without re-uploading media (`request_id` or `job_id`).
+- **Unpublish Post**: Delete a live post. Not available for Instagram, TikTok or Threads.
+- **Edit Post**: Update caption/metadata on a live post.
+- **Repost**: Repost on LinkedIn or X.
+- **Save Pin**: Save a Pinterest pin to a board.
 
 ### Scheduled Posts
 - **List Scheduled Posts**: Lists future scheduled jobs.
@@ -128,6 +138,8 @@ The comment endpoints are shaped like the rest of the API: **one endpoint per qu
   - TikTok is the network that answers this today, and its profile needs the `comments` capability (see the `capabilities` array returned by **List Users**); an account connected before that capability existed has to reconnect TikTok.
 - **Private Reply to Comment**: DM the author of a comment. Instagram only.
 - **Public Reply to Comment**: Public reply under the comment. Instagram only.
+- **Create Comment**: Top-level comment or reply (Instagram replies only; TikTok always needs the video ID).
+- **Delete Comment**: Delete a comment you own or that is on your post.
 
 ### Insight Actions
 Two more questions with a `platform` parameter, not two TikTok endpoints. A network that cannot answer a question replies with `platform_not_supported` and the list of the ones that can; today that network is TikTok, whose profile needs the `profile_analytics` capability (see the `capabilities` array returned by **List Users**).

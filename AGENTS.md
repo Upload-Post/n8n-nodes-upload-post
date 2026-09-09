@@ -7,15 +7,21 @@ This guide explains how AI agents can effectively use the Upload Post node in n8
 The Upload Post node enables automated publishing to:
 - **Instagram** (Photos, Videos, Stories, Reels)
 - **Facebook** (Photos, Videos, Text, Pages)
-- **LinkedIn** (Photos, Videos, Text, Pages)
+- **LinkedIn** (Photos, Videos, Text, Pages, Documents)
 - **TikTok** (Photos, Videos)
 - **X (Twitter)** (Photos, Videos, Text, Polls)
 - **YouTube** (Videos)
 - **Pinterest** (Photos, Videos, Boards)
 - **Threads** (Photos, Videos, Text)
-- **Reddit** (Text posts)
+- **Reddit** (Photos, Text)
+- **Bluesky** (Photos, Videos, Text)
+- **Google Business** (Photos, Videos, Text)
 - **Discord** (Photos, Videos, Text)
 - **Telegram** (Photos, Videos, Text)
+- **Mastodon** (Photos, Videos, Text)
+- **WordPress** (Photos, Videos, Text)
+- **Lemmy** (Photos, Text)
+- **Slack, Nostr, Dev.to, Hashnode, Whop, Listmonk** (Text)
 
 ## Agent Integration Capabilities
 

@@ -341,6 +341,16 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 		formData.first_comment = firstComment;
 	}
 
+	const firstCommentMedia = ctx.node.getNodeParameter('firstCommentMedia', ctx.itemIndex, '') as string;
+	if (firstCommentMedia) {
+		formData['first_comment_media[]'] = ensureArrayFromCommaSeparated(firstCommentMedia);
+	}
+
+	const replyToId = ctx.node.getNodeParameter('replyToId', ctx.itemIndex, '') as string;
+	if (replyToId) {
+		formData.reply_to_id = replyToId;
+	}
+
 	const altText = ctx.node.getNodeParameter('altText', ctx.itemIndex, '') as string;
 	if (altText) {
 		formData.alt_text = altText;
@@ -411,6 +421,10 @@ const applyPinterestOptions = (ctx: ExecutionContext, operation: UploadOperation
 	if (pinterestLink) {
 		formData.pinterest_link = pinterestLink;
 	}
+	const pinterestBoardSectionId = ctx.node.getNodeParameter('pinterestBoardSectionId', ctx.itemIndex, '') as string;
+	if (pinterestBoardSectionId) {
+		formData.pinterest_board_section_id = pinterestBoardSectionId;
+	}
 	if (operation === 'uploadVideo') {
 		const pinterestCoverImageUrl = ctx.node.getNodeParameter('pinterestCoverImageUrl', ctx.itemIndex, '') as string;
 		const pinterestCoverImageContentType = ctx.node.getNodeParameter('pinterestCoverImageContentType', ctx.itemIndex, '') as string;
@@ -458,7 +472,18 @@ const applyLinkedinOptions = (ctx: ExecutionContext, operation: UploadOperation,
 		if (linkedinLink) {
 			formData.linkedin_link_url = linkedinLink;
 		}
-	} else if (operation === 'uploadDocument') {
+	}
+
+	const linkedinAltText = ctx.node.getNodeParameter('linkedinAltText', ctx.itemIndex, '') as string;
+	if (linkedinAltText) formData.linkedin_alt_text = linkedinAltText;
+	const linkedinDisableReshare = ctx.node.getNodeParameter('linkedinDisableReshare', ctx.itemIndex, false) as boolean;
+	if (linkedinDisableReshare) formData.linkedin_disable_reshare = 'true';
+	const linkedinLinkTitle = ctx.node.getNodeParameter('linkedinLinkTitle', ctx.itemIndex, '') as string;
+	if (linkedinLinkTitle) formData.linkedin_link_title = linkedinLinkTitle;
+	const linkedinLinkDescription = ctx.node.getNodeParameter('linkedinLinkDescription', ctx.itemIndex, '') as string;
+	if (linkedinLinkDescription) formData.linkedin_link_description = linkedinLinkDescription;
+
+	if (operation === 'uploadDocument') {
 		const linkedinVisibility = ctx.node.getNodeParameter('linkedinVisibility', ctx.itemIndex, 'PUBLIC') as string;
 		formData.visibility = linkedinVisibility;
 		const documentDescription = ctx.node.getNodeParameter('documentDescription', ctx.itemIndex, '') as string;
@@ -506,6 +531,19 @@ const applyFacebookOptions = (ctx: ExecutionContext, operation: UploadOperation,
 		if (facebookLink) {
 			formData.facebook_link_url = facebookLink;
 		}
+		const facebookCallToAction = ctx.node.getNodeParameter('facebookCallToAction', ctx.itemIndex, '') as string;
+		if (facebookCallToAction) formData.facebook_call_to_action = facebookCallToAction;
+	}
+
+	const facebookPlaceId = ctx.node.getNodeParameter('facebookPlaceId', ctx.itemIndex, '') as string;
+	if (facebookPlaceId) formData.facebook_place_id = facebookPlaceId;
+	if (operation === 'uploadPhotos') {
+		const facebookAltText = ctx.node.getNodeParameter('facebookAltText', ctx.itemIndex, '') as string;
+		if (facebookAltText) formData.facebook_alt_text = facebookAltText;
+	}
+	if (operation === 'uploadVideo') {
+		const facebookIsAiGenerated = ctx.node.getNodeParameter('facebookIsAiGenerated', ctx.itemIndex, false) as boolean;
+		if (facebookIsAiGenerated) formData.facebook_is_ai_generated = 'true';
 	}
 };
 
@@ -592,6 +630,11 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 
 		const uploadToDraft = ctx.node.getNodeParameter('tiktokUploadToDraft', ctx.itemIndex, false) as boolean;
 		if (uploadToDraft) formData.tiktok_upload_to_draft = 'true';
+
+		const isAdsOnly = ctx.node.getNodeParameter('tiktokIsAdsOnly', ctx.itemIndex, false) as boolean;
+		if (isAdsOnly) formData.tiktok_is_ads_only = 'true';
+		const ttoInviteLink = ctx.node.getNodeParameter('tiktokTtoInviteLink', ctx.itemIndex, '') as string;
+		if (ttoInviteLink) formData.tiktok_tto_invite_link = ttoInviteLink;
 	}
 };
 
@@ -642,6 +685,11 @@ const applyInstagramOptions = async (ctx: ExecutionContext, operation: UploadOpe
 		}
 		if (audioName) formData.audio_name = audioName;
 		if (thumbOffset) formData.thumb_offset = thumbOffset;
+	}
+
+	if (operation === 'uploadPhotos') {
+		const instagramAltText = ctx.node.getNodeParameter('instagramAltText', ctx.itemIndex, '') as string;
+		if (instagramAltText) formData.instagram_alt_text = instagramAltText;
 	}
 };
 
@@ -714,6 +762,11 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 			}
 		}
 	}
+
+	const notifySubscribers = ctx.node.getNodeParameter('youtubeNotifySubscribers', ctx.itemIndex, true) as boolean;
+	formData.youtube_notify_subscribers = String(notifySubscribers);
+	const publishAt = ctx.node.getNodeParameter('youtubePublishAt', ctx.itemIndex, '') as string;
+	if (publishAt) formData.youtube_publish_at = publishAt;
 };
 
 const validateXPollConfiguration = (
@@ -837,6 +890,21 @@ const applyXOptions = (ctx: ExecutionContext, operation: UploadOperation, formDa
 		if (operation === 'uploadVideo' && xPlaceIdVideo) {
 			formData.place_id = xPlaceIdVideo;
 		}
+
+		const xAltText = ctx.node.getNodeParameter('xAltText', ctx.itemIndex, '') as string;
+		if (xAltText) formData.x_alt_text = xAltText;
+		const xSubtitlesUrl = ctx.node.getNodeParameter('xSubtitlesUrl', ctx.itemIndex, '') as string;
+		if (xSubtitlesUrl) formData.x_subtitles_url = xSubtitlesUrl;
+	}
+
+	const xPaidPartnership = ctx.node.getNodeParameter('xPaidPartnership', ctx.itemIndex, false) as boolean;
+	if (xPaidPartnership) formData.x_paid_partnership = 'true';
+
+	if (operation === 'uploadText') {
+		const xArticleTitle = ctx.node.getNodeParameter('xArticleTitle', ctx.itemIndex, '') as string;
+		if (xArticleTitle) formData.x_article_title = xArticleTitle;
+		const xArticleBody = ctx.node.getNodeParameter('xArticleBody', ctx.itemIndex, '') as string;
+		if (xArticleBody) formData.x_article_body = xArticleBody;
 	}
 };
 
@@ -858,6 +926,19 @@ const applyThreadsOptions = (ctx: ExecutionContext, formData: IDataObject) => {
 	if (threadsTopicTag) {
 		formData.threads_topic_tag = threadsTopicTag;
 	}
+
+	const threadsReplyControl = ctx.node.getNodeParameter('threadsReplyControl', ctx.itemIndex, '') as string;
+	if (threadsReplyControl) formData.threads_reply_control = threadsReplyControl;
+	const threadsAltText = ctx.node.getNodeParameter('threadsAltText', ctx.itemIndex, '') as string;
+	if (threadsAltText) formData.threads_alt_text = threadsAltText;
+	const threadsReplyToId = ctx.node.getNodeParameter('threadsReplyToId', ctx.itemIndex, '') as string;
+	if (threadsReplyToId) formData.threads_reply_to_id = threadsReplyToId;
+	const threadsQuotePostId = ctx.node.getNodeParameter('threadsQuotePostId', ctx.itemIndex, '') as string;
+	if (threadsQuotePostId) formData.threads_quote_post_id = threadsQuotePostId;
+	const threadsLinkAttachment = ctx.node.getNodeParameter('threadsLinkAttachment', ctx.itemIndex, '') as string;
+	if (threadsLinkAttachment) formData.threads_link_attachment = threadsLinkAttachment;
+	const threadsPollOptions = ctx.node.getNodeParameter('threadsPollOptions', ctx.itemIndex, '') as string;
+	if (threadsPollOptions) formData.threads_poll_options = threadsPollOptions;
 };
 
 const applyGoogleBusinessOptions = (ctx: ExecutionContext, _operation: UploadOperation, formData: IDataObject) => {
@@ -905,6 +986,9 @@ const applyGoogleBusinessOptions = (ctx: ExecutionContext, _operation: UploadOpe
 		const terms = ctx.node.getNodeParameter('gbpOfferTerms', ctx.itemIndex, '') as string;
 		if (terms) formData.gbp_offer_terms = terms;
 	}
+
+	const languageCode = ctx.node.getNodeParameter('gbpLanguageCode', ctx.itemIndex, '') as string;
+	if (languageCode) formData.gbp_language_code = languageCode;
 };
 
 const applyRedditOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
@@ -919,6 +1003,123 @@ const applyRedditOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 		if (redditLink) {
 			formData.reddit_link_url = redditLink;
 		}
+	}
+	const redditNsfw = ctx.node.getNodeParameter('redditNsfw', ctx.itemIndex, false) as boolean;
+	if (redditNsfw) formData.reddit_nsfw = 'true';
+	const redditSpoiler = ctx.node.getNodeParameter('redditSpoiler', ctx.itemIndex, false) as boolean;
+	if (redditSpoiler) formData.reddit_spoiler = 'true';
+	const redditFlairText = ctx.node.getNodeParameter('redditFlairText', ctx.itemIndex, '') as string;
+	if (redditFlairText) formData.reddit_flair_text = redditFlairText;
+};
+
+const setIfFilled = (formData: IDataObject, field: string, value: string | boolean | number | undefined) => {
+	if (value === undefined || value === null || value === '' || value === false) return;
+	formData[field] = typeof value === 'boolean' ? 'true' : value;
+};
+
+const applyCredentialPlatformOptions = (
+	ctx: ExecutionContext,
+	platforms: string[],
+	formData: IDataObject,
+) => {
+	const isManual = platforms.includes(MANUAL_PLATFORM_VALUE);
+	const has = (platform: string) => platforms.includes(platform) || isManual;
+
+	if (has('bluesky')) {
+		setIfFilled(formData, 'bluesky_alt_text', ctx.node.getNodeParameter('blueskyAltText', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'bluesky_langs', ctx.node.getNodeParameter('blueskyLangs', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'bluesky_labels', ctx.node.getNodeParameter('blueskyLabels', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'bluesky_threadgate', ctx.node.getNodeParameter('blueskyThreadgate', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'bluesky_quote_uri', ctx.node.getNodeParameter('blueskyQuoteUri', ctx.itemIndex, '') as string);
+	}
+
+	if (has('discord')) {
+		setIfFilled(formData, 'discord_thread_id', ctx.node.getNodeParameter('discordThreadId', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'discord_thread_name', ctx.node.getNodeParameter('discordThreadName', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'discord_username', ctx.node.getNodeParameter('discordUsername', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'discord_avatar_url', ctx.node.getNodeParameter('discordAvatarUrl', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'discord_embeds', ctx.node.getNodeParameter('discordEmbeds', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'discord_alt_text', ctx.node.getNodeParameter('discordAltText', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'discord_tts', ctx.node.getNodeParameter('discordTts', ctx.itemIndex, false) as boolean);
+	}
+
+	if (has('telegram')) {
+		setIfFilled(formData, 'telegram_parse_mode', ctx.node.getNodeParameter('telegramParseMode', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'telegram_message_thread_id', ctx.node.getNodeParameter('telegramMessageThreadId', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'telegram_disable_notification', ctx.node.getNodeParameter('telegramDisableNotification', ctx.itemIndex, false) as boolean);
+		setIfFilled(formData, 'telegram_protect_content', ctx.node.getNodeParameter('telegramProtectContent', ctx.itemIndex, false) as boolean);
+		setIfFilled(formData, 'telegram_has_spoiler', ctx.node.getNodeParameter('telegramHasSpoiler', ctx.itemIndex, false) as boolean);
+		setIfFilled(formData, 'telegram_as_document', ctx.node.getNodeParameter('telegramAsDocument', ctx.itemIndex, false) as boolean);
+	}
+
+	if (has('mastodon')) {
+		setIfFilled(formData, 'mastodon_visibility', ctx.node.getNodeParameter('mastodonVisibility', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'mastodon_sensitive', ctx.node.getNodeParameter('mastodonSensitive', ctx.itemIndex, false) as boolean);
+		setIfFilled(formData, 'mastodon_spoiler_text', ctx.node.getNodeParameter('mastodonSpoilerText', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'mastodon_language', ctx.node.getNodeParameter('mastodonLanguage', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'mastodon_alt_text', ctx.node.getNodeParameter('mastodonAltText', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'mastodon_poll_options', ctx.node.getNodeParameter('mastodonPollOptions', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'mastodon_poll_expires_in', ctx.node.getNodeParameter('mastodonPollExpiresIn', ctx.itemIndex, 0) as number);
+		setIfFilled(formData, 'mastodon_poll_multiple', ctx.node.getNodeParameter('mastodonPollMultiple', ctx.itemIndex, false) as boolean);
+	}
+
+	if (has('wordpress')) {
+		setIfFilled(formData, 'wordpress_status', ctx.node.getNodeParameter('wordpressStatus', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'wordpress_date', ctx.node.getNodeParameter('wordpressDate', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'wordpress_categories', ctx.node.getNodeParameter('wordpressCategories', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'wordpress_tags', ctx.node.getNodeParameter('wordpressTags', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'wordpress_excerpt', ctx.node.getNodeParameter('wordpressExcerpt', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'wordpress_slug', ctx.node.getNodeParameter('wordpressSlug', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'wordpress_alt_text', ctx.node.getNodeParameter('wordpressAltText', ctx.itemIndex, '') as string);
+	}
+
+	if (has('lemmy')) {
+		setIfFilled(formData, 'lemmy_community', ctx.node.getNodeParameter('lemmyCommunity', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'lemmy_url', ctx.node.getNodeParameter('lemmyUrl', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'lemmy_nsfw', ctx.node.getNodeParameter('lemmyNsfw', ctx.itemIndex, false) as boolean);
+		setIfFilled(formData, 'lemmy_alt_text', ctx.node.getNodeParameter('lemmyAltText', ctx.itemIndex, '') as string);
+	}
+
+	if (has('slack')) {
+		setIfFilled(formData, 'slack_markdown', ctx.node.getNodeParameter('slackMarkdown', ctx.itemIndex, false) as boolean);
+		setIfFilled(formData, 'slack_blocks', ctx.node.getNodeParameter('slackBlocks', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'slack_mrkdwn', ctx.node.getNodeParameter('slackMrkdwn', ctx.itemIndex, false) as boolean);
+	}
+
+	if (has('nostr')) {
+		setIfFilled(formData, 'nostr_kind', ctx.node.getNodeParameter('nostrKind', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'nostr_long_form', ctx.node.getNodeParameter('nostrLongForm', ctx.itemIndex, false) as boolean);
+	}
+
+	if (has('devto')) {
+		setIfFilled(formData, 'devto_tags', ctx.node.getNodeParameter('devtoTags', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'devto_canonical_url', ctx.node.getNodeParameter('devtoCanonicalUrl', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'devto_description', ctx.node.getNodeParameter('devtoDescription', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'devto_main_image', ctx.node.getNodeParameter('devtoMainImage', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'devto_series', ctx.node.getNodeParameter('devtoSeries', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'devto_published', ctx.node.getNodeParameter('devtoPublished', ctx.itemIndex, false) as boolean);
+	}
+
+	if (has('hashnode')) {
+		setIfFilled(formData, 'hashnode_tags', ctx.node.getNodeParameter('hashnodeTags', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'hashnode_subtitle', ctx.node.getNodeParameter('hashnodeSubtitle', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'hashnode_cover_image_url', ctx.node.getNodeParameter('hashnodeCoverImageUrl', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'hashnode_body', ctx.node.getNodeParameter('hashnodeBody', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'hashnode_draft', ctx.node.getNodeParameter('hashnodeDraft', ctx.itemIndex, false) as boolean);
+	}
+
+	if (has('whop')) {
+		setIfFilled(formData, 'whop_body', ctx.node.getNodeParameter('whopBody', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'whop_pinned', ctx.node.getNodeParameter('whopPinned', ctx.itemIndex, false) as boolean);
+		setIfFilled(formData, 'whop_paywall_amount', ctx.node.getNodeParameter('whopPaywallAmount', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'whop_paywall_currency', ctx.node.getNodeParameter('whopPaywallCurrency', ctx.itemIndex, '') as string);
+	}
+
+	if (has('listmonk')) {
+		setIfFilled(formData, 'listmonk_content_type', ctx.node.getNodeParameter('listmonkContentType', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'listmonk_send_at', ctx.node.getNodeParameter('listmonkSendAt', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'listmonk_lists', ctx.node.getNodeParameter('listmonkLists', ctx.itemIndex, '') as string);
+		setIfFilled(formData, 'listmonk_template_id', ctx.node.getNodeParameter('listmonkTemplateId', ctx.itemIndex, '') as string);
 	}
 };
 
@@ -976,6 +1177,8 @@ const applyUploadPlatformOptions = async (
 			formData.bluesky_link_url = blueskyLink;
 		}
 	}
+
+	applyCredentialPlatformOptions(ctx, platforms, formData);
 };
 
 const buildUploadPhotosRequest = async (
@@ -1278,8 +1481,188 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 				waitForCompletion: false,
 			};
 		}
+		case 'getMedia': {
+			const qs: IDataObject = {
+				platform: ctx.node.getNodeParameter('mediaPlatform', ctx.itemIndex) as string,
+				user: ctx.node.getNodeParameter('mediaUser', ctx.itemIndex) as string,
+			};
+			const pageUrn = ctx.node.getNodeParameter('mediaPageUrn', ctx.itemIndex, '') as string;
+			if (pageUrn) qs.page_urn = pageUrn;
+			const limit = ctx.node.getNodeParameter('mediaLimit', ctx.itemIndex, 0) as number;
+			if (limit) qs.limit = limit;
+			const cursor = ctx.node.getNodeParameter('mediaCursor', ctx.itemIndex, '') as string;
+			if (cursor) qs.cursor = cursor;
+			return {
+				endpoint: '/uploadposts/media',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getGoogleBusinessLocations': {
+			const qs: IDataObject = {};
+			const profile = ctx.node.getNodeParameter('gbpLocationsProfile', ctx.itemIndex, '') as string;
+			if (profile) qs.profile = profile;
+			return {
+				endpoint: '/uploadposts/google-business/locations',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getTiktokTrendingMusic': {
+			const qs: IDataObject = {
+				profile: ctx.node.getNodeParameter('tiktokDiscoveryProfile', ctx.itemIndex) as string,
+			};
+			const genre = ctx.node.getNodeParameter('tiktokMusicGenre', ctx.itemIndex, '') as string;
+			if (genre) qs.genre = genre;
+			const countryCode = ctx.node.getNodeParameter('tiktokMusicCountryCode', ctx.itemIndex, '') as string;
+			if (countryCode) qs.country_code = countryCode;
+			return {
+				endpoint: '/uploadposts/tiktok/music/trending',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'searchTiktokMusic': {
+			const qs: IDataObject = {
+				profile: ctx.node.getNodeParameter('tiktokDiscoveryProfile', ctx.itemIndex) as string,
+			};
+			const query = ctx.node.getNodeParameter('tiktokMusicQuery', ctx.itemIndex, '') as string;
+			if (query) qs.q = query;
+			const genre = ctx.node.getNodeParameter('tiktokMusicGenre', ctx.itemIndex, '') as string;
+			if (genre) qs.genre = genre;
+			const countryCode = ctx.node.getNodeParameter('tiktokMusicCountryCode', ctx.itemIndex, '') as string;
+			if (countryCode) qs.country_code = countryCode;
+			const limit = ctx.node.getNodeParameter('tiktokMusicLimit', ctx.itemIndex, 0) as number;
+			if (limit) qs.limit = limit;
+			return {
+				endpoint: '/uploadposts/tiktok/music/search',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getTiktokLocations': {
+			return {
+				endpoint: '/uploadposts/tiktok/locations',
+				method: 'GET',
+				qs: {
+					profile: ctx.node.getNodeParameter('tiktokDiscoveryProfile', ctx.itemIndex) as string,
+					q: ctx.node.getNodeParameter('tiktokLocationQuery', ctx.itemIndex) as string,
+				},
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getTiktokSettings': {
+			return {
+				endpoint: '/uploadposts/tiktok/settings',
+				method: 'GET',
+				qs: {
+					profile: ctx.node.getNodeParameter('tiktokDiscoveryProfile', ctx.itemIndex) as string,
+				},
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
 		default:
 			throw new NodeOperationError(ctx.node.getNode(), `Unsupported monitoring operation: ${ctx.operation}`, {
+				itemIndex: ctx.itemIndex,
+			});
+	}
+};
+
+const buildPostActionRequest = (ctx: ExecutionContext): RequestConfig => {
+	switch (ctx.operation) {
+		case 'retryPost': {
+			const body: IDataObject = {};
+			const requestId = ctx.node.getNodeParameter('retryRequestId', ctx.itemIndex, '') as string;
+			const jobId = ctx.node.getNodeParameter('retryJobId', ctx.itemIndex, '') as string;
+			if (requestId) body.request_id = requestId;
+			if (jobId) body.job_id = jobId;
+			if (!requestId && !jobId) {
+				throw new NodeOperationError(ctx.node.getNode(), 'Provide a Request ID or a Job ID to retry.', {
+					itemIndex: ctx.itemIndex,
+				});
+			}
+			return {
+				endpoint: '/uploadposts/posts/retry',
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'unpublishPost': {
+			return {
+				endpoint: '/uploadposts/posts/unpublish',
+				method: 'POST',
+				body: {
+					platform: ctx.node.getNodeParameter('postActionPlatform', ctx.itemIndex) as string,
+					user: ctx.node.getNodeParameter('postActionUser', ctx.itemIndex) as string,
+					post_id: ctx.node.getNodeParameter('postActionPostId', ctx.itemIndex) as string,
+				},
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'editPost': {
+			const body: IDataObject = {
+				platform: ctx.node.getNodeParameter('postActionPlatform', ctx.itemIndex) as string,
+				user: ctx.node.getNodeParameter('postActionUser', ctx.itemIndex) as string,
+				post_id: ctx.node.getNodeParameter('postActionPostId', ctx.itemIndex) as string,
+			};
+			const message = ctx.node.getNodeParameter('postActionMessage', ctx.itemIndex, '') as string;
+			if (message) body.message = message;
+			return {
+				endpoint: '/uploadposts/posts/edit',
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'repostPost': {
+			const body: IDataObject = {
+				platform: ctx.node.getNodeParameter('repostPlatform', ctx.itemIndex) as string,
+				user: ctx.node.getNodeParameter('postActionUser', ctx.itemIndex) as string,
+				post_id: ctx.node.getNodeParameter('postActionPostId', ctx.itemIndex) as string,
+			};
+			const commentary = ctx.node.getNodeParameter('postActionMessage', ctx.itemIndex, '') as string;
+			if (commentary) body.commentary = commentary;
+			return {
+				endpoint: '/uploadposts/posts/repost',
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'savePin': {
+			const body: IDataObject = {
+				platform: 'pinterest',
+				user: ctx.node.getNodeParameter('postActionUser', ctx.itemIndex) as string,
+				post_id: ctx.node.getNodeParameter('postActionPostId', ctx.itemIndex) as string,
+				pinterest_board_id: ctx.node.getNodeParameter('savePinBoardId', ctx.itemIndex) as string,
+			};
+			const sectionId = ctx.node.getNodeParameter('savePinBoardSectionId', ctx.itemIndex, '') as string;
+			if (sectionId) body.pinterest_board_section_id = sectionId;
+			return {
+				endpoint: '/uploadposts/posts/save',
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		default:
+			throw new NodeOperationError(ctx.node.getNode(), `Unsupported post action: ${ctx.operation}`, {
 				itemIndex: ctx.itemIndex,
 			});
 	}
@@ -1417,6 +1800,14 @@ const buildUserRequest = async (ctx: ExecutionContext): Promise<RequestConfig> =
 				waitForCompletion: false,
 			};
 		}
+		case 'testNotifications':
+			return {
+				endpoint: '/uploadposts/users/notifications/test',
+				method: 'POST',
+				body: {},
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
 		default:
 			throw new NodeOperationError(ctx.node.getNode(), `Unsupported user operation: ${ctx.operation}`, {
 				itemIndex: ctx.itemIndex,
@@ -1479,6 +1870,46 @@ const buildInstagramRequest = (ctx: ExecutionContext): RequestConfig => {
 				endpoint: '/uploadposts/comments/public-reply',
 				method: 'POST',
 				body: { platform: 'instagram', user, comment_id: commentId, message },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'createComment': {
+			const user = ctx.node.getNodeParameter('instagramUser', ctx.itemIndex) as string;
+			const platform = ctx.node.getNodeParameter('commentPlatform', ctx.itemIndex, 'instagram') as string;
+			const body: IDataObject = {
+				platform,
+				user,
+				message: ctx.node.getNodeParameter('createCommentMessage', ctx.itemIndex) as string,
+			};
+			const commentId = ctx.node.getNodeParameter('createCommentCommentId', ctx.itemIndex, '') as string;
+			const postId = ctx.node.getNodeParameter('createCommentPostId', ctx.itemIndex, '') as string;
+			const postUrl = ctx.node.getNodeParameter('createCommentPostUrl', ctx.itemIndex, '') as string;
+			if (commentId) body.comment_id = commentId;
+			if (postId) body.post_id = postId;
+			if (postUrl && !postId) body.post_url = postUrl;
+			return {
+				endpoint: '/uploadposts/comments/create',
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'deleteComment': {
+			const user = ctx.node.getNodeParameter('instagramUser', ctx.itemIndex) as string;
+			const platform = ctx.node.getNodeParameter('commentPlatform', ctx.itemIndex, 'instagram') as string;
+			const body: IDataObject = {
+				platform,
+				user,
+				comment_id: ctx.node.getNodeParameter('createCommentCommentId', ctx.itemIndex) as string,
+			};
+			const postId = ctx.node.getNodeParameter('createCommentPostId', ctx.itemIndex, '') as string;
+			if (postId) body.post_id = postId;
+			return {
+				endpoint: '/uploadposts/comments/delete',
+				method: 'DELETE',
+				body,
 				isUploadOperation: false,
 				waitForCompletion: false,
 			};
@@ -1597,6 +2028,9 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 	if (resource === 'monitoring') {
 		return buildMonitoringRequest(ctx);
 	}
+	if (resource === 'postActions') {
+		return buildPostActionRequest(ctx);
+	}
 	if (resource === 'users') {
 		return await buildUserRequest(ctx);
 	}
@@ -1710,6 +2144,7 @@ export class UploadPost implements INodeType {
 					// listing operation is no longer Instagram-only, hence the label.
 					{ name: 'Comment', value: 'instagram' },
 					{ name: 'Insight', value: 'insights' },
+					{ name: 'Post Action', value: 'postActions' },
 					{ name: 'Status & History', value: 'monitoring' },
 					{ name: 'Upload', value: 'uploads' },
 					{ name: 'User', value: 'users' },
@@ -1723,9 +2158,9 @@ export class UploadPost implements INodeType {
 				noDataExpression: true,
 				options: [
 					{ name: 'Upload Document', value: 'uploadDocument', action: 'Upload a document', description: 'Upload a document (PDF, PPT, PPTX, DOC, DOCX) as a native carousel/viewer (Supports: LinkedIn only)' },
-					{ name: 'Upload Photo(s)', value: 'uploadPhotos', action: 'Upload photos', description: 'Upload one or more photos (Supports: TikTok, Instagram, LinkedIn, Facebook, X, Threads, Discord, Telegram)' },
-					{ name: 'Upload Text', value: 'uploadText', action: 'Upload a text post', description: 'Upload a text-based post (Supports: X, LinkedIn, Facebook, Threads, Discord, Telegram)' },
-					{ name: 'Upload Video', value: 'uploadVideo', action: 'Upload a video', description: 'Upload a single video (Supports: TikTok, Instagram, LinkedIn, YouTube, Facebook, X, Threads, Discord, Telegram)' },
+					{ name: 'Upload Photo(s)', value: 'uploadPhotos', action: 'Upload photos', description: 'Upload one or more photos (Supports: Bluesky, Discord, Facebook, Google Business, Instagram, Lemmy, LinkedIn, Mastodon, Pinterest, Reddit, Telegram, Threads, TikTok, WordPress, X)' },
+					{ name: 'Upload Text', value: 'uploadText', action: 'Upload a text post', description: 'Upload a text-based post (Supports: Bluesky, Dev.to, Discord, Facebook, Google Business, Hashnode, Lemmy, LinkedIn, Listmonk, Mastodon, Nostr, Reddit, Slack, Telegram, Threads, Whop, WordPress, X)' },
+					{ name: 'Upload Video', value: 'uploadVideo', action: 'Upload a video', description: 'Upload a single video (Supports: Bluesky, Discord, Facebook, Google Business, Instagram, LinkedIn, Mastodon, Pinterest, Reddit, Telegram, Threads, TikTok, WordPress, X, YouTube)' },
 				],
 				default: 'uploadPhotos',
 				displayOptions: { show: { resource: ['uploads'] } },
@@ -1741,15 +2176,21 @@ export class UploadPost implements INodeType {
 					{ name: 'Edit Scheduled Post', value: 'editScheduled', action: 'Edit scheduled post', description: 'Edit schedule details (like date/time) by job ID' },
 					{ name: 'Get Analytics', value: 'getAnalytics', action: 'Get analytics', description: 'Retrieve aggregated analytics for uploads' },
 					{ name: 'Get Cached Post Analytics', value: 'getCachedPostAnalytics', action: 'Get cached post analytics', description: 'Replay per-post metrics already fetched for a profile instead of querying the platforms again, so it is not subject to the live analytics rate limit (100 requests / 5 minutes). Only contains posts previously fetched through Get Post Analytics; there is no background refresh, so captured_at is the last time that post was read live. Use Get Post Analytics to refresh a post, and this operation for bulk re-reads.' },
+					{ name: 'Get Google Business Locations', value: 'getGoogleBusinessLocations', action: 'Get google business locations', description: 'List Google Business Profile locations for a profile' },
 					{ name: 'Get Job Status', value: 'getJobStatus', action: 'Get job status', description: 'Check the status of a scheduled or queued post using the job_id' },
+					{ name: 'Get Media', value: 'getMedia', action: 'Get media', description: 'List published media for a connected network (LinkedIn, Facebook, Instagram, YouTube, and others the API exposes)' },
 					{ name: 'Get Platform Metrics', value: 'getPlatformMetrics', action: 'Get platform metrics', description: 'List the analytics metrics available for each platform' },
 					{ name: 'Get Post Analytics', value: 'getPostAnalytics', action: 'Get post analytics', description: 'Retrieve per-post analytics for an upload using its request_id. On TikTok post_metrics also carries retention, impression_sources, audience_types, new_followers, reach and the watch times.' },
 					{ name: 'Get Post Analytics by Platform ID', value: 'getPostAnalyticsByPlatformId', action: 'Get post analytics by platform id', description: 'Retrieve per-post analytics using the native platform post ID, for posts not published through Upload-Post' },
 					{ name: 'Get Reddit Detailed Posts', value: 'getRedditDetailedPosts', action: 'Get reddit detailed posts', description: 'Retrieve detailed Reddit posts with full media information' },
+					{ name: 'Get TikTok Locations', value: 'getTiktokLocations', action: 'Get tiktok locations', description: 'Search TikTok locations for a profile to use as tiktok_location_id' },
+					{ name: 'Get TikTok Publishing Settings', value: 'getTiktokSettings', action: 'Get tiktok publishing settings', description: 'Read the TikTok creator info and capabilities for a profile (privacy levels, music, comments, draft, ...)' },
+					{ name: 'Get TikTok Trending Music', value: 'getTiktokTrendingMusic', action: 'Get tiktok trending music', description: 'List trending TikTok tracks for a connected profile' },
 					{ name: 'Get Total Impressions', value: 'getTotalImpressions', action: 'Get total impressions', description: 'Retrieve impressions aggregated across connected platforms for a date range' },
 					{ name: 'Get Upload History', value: 'getHistory', action: 'Get upload history', description: 'List past uploads with optional filters' },
 					{ name: 'Get Upload Status', value: 'getStatus', action: 'Get upload status', description: 'Check the status of an upload using the request_id' },
 					{ name: 'List Scheduled Posts', value: 'listScheduled', action: 'List scheduled posts', description: 'List your scheduled (future) posts' },
+					{ name: 'Search TikTok Music', value: 'searchTiktokMusic', action: 'Search tiktok music', description: 'Search TikTok music by query for a connected profile' },
 				],
 				default: 'getStatus',
 				displayOptions: { show: { resource: ['monitoring'] } },
@@ -1767,6 +2208,7 @@ export class UploadPost implements INodeType {
 					{ name: 'Get Notification Preferences', value: 'getNotificationPrefs', action: 'Get notification preferences', description: 'Get current webhook and notification settings' },
 					{ name: 'Get User Preferences', value: 'getUserPreferences', action: 'Get user preferences', description: 'Get user preferences including calendar week start day' },
 					{ name: 'List Users', value: 'listUsers', action: 'List users', description: 'List Upload-Post users (profiles)' },
+					{ name: 'Test Notifications', value: 'testNotifications', action: 'Test notifications', description: 'Send a test event to the configured webhook and notification channels' },
 					{ name: 'Update Notification Preferences', value: 'updateNotificationPrefs', action: 'Update notification preferences', description: 'Configure webhook URL and event types for real-time notifications (upload_completed, social_account.connected, social_account.disconnected, social_account.reauth_required)' },
 					{ name: 'Update User Preferences', value: 'updateUserPreferences', action: 'Update user preferences', description: 'Update user preferences including calendar week start day (0=Sunday, 1=Monday)' },
 					{ name: 'Validate JWT (for Platform Integration)', value: 'validateJwt', action: 'Validate jwt for platform integration', description: 'Validate a connection token from your backend. Only needed for custom platform integration.' },
@@ -1782,6 +2224,8 @@ export class UploadPost implements INodeType {
 				noDataExpression: true,
 				options: [
 					{ name: 'Comment Action', value: 'commentAction', action: 'Act on a comment', description: 'Moderate one comment: hide, unhide, like, unlike, pin or unpin it. Platform says which connected network the comment lives on. Post ID is required to hide, unhide, pin or unpin, and is never sent for like or unlike.' },
+					{ name: 'Create Comment', value: 'createComment', action: 'Create a comment', description: 'Post a comment or a reply. Instagram only supports replies (comment ID required). TikTok always needs the video ID, plus comment ID to reply.' },
+					{ name: 'Delete Comment', value: 'deleteComment', action: 'Delete a comment', description: 'Delete a comment you own or that is on your post' },
 					{ name: 'Get Post Comments', value: 'getPostComments', action: 'Get post comments', description: 'Retrieve the comments on a post from the network given by Platform (Instagram, Facebook, YouTube, LinkedIn or TikTok). Fill Comment ID to get the replies to that comment instead of the top-level comments of the post.' },
 					{ name: 'Private Reply to Comment', value: 'privateReplyToComment', action: 'Private reply to comment', description: 'Send a private reply (DM) to the author of a comment. Instagram only.' },
 					{ name: 'Public Reply to Comment', value: 'publicReplyToComment', action: 'Public reply to comment', description: 'Post a public reply visible under the original comment. Instagram only.' },
@@ -1802,7 +2246,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['instagram'],
-						operation: ['getPostComments', 'privateReplyToComment', 'publicReplyToComment', 'commentAction'],
+						operation: ['getPostComments', 'privateReplyToComment', 'publicReplyToComment', 'commentAction', 'createComment', 'deleteComment'],
 					},
 				},
 			},
@@ -1811,10 +2255,13 @@ export class UploadPost implements INodeType {
 				name: 'commentPlatform',
 				type: 'options',
 				options: [
+					{ name: 'Bluesky', value: 'bluesky' },
 					{ name: 'Facebook', value: 'facebook' },
 					{ name: 'Instagram', value: 'instagram' },
 					{ name: 'LinkedIn', value: 'linkedin' },
+					{ name: 'Threads', value: 'threads' },
 					{ name: 'TikTok', value: 'tiktok' },
+					{ name: 'X (Twitter)', value: 'x' },
 					{ name: 'YouTube', value: 'youtube' },
 				],
 				default: 'instagram',
@@ -1822,7 +2269,7 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['instagram'],
-						operation: ['getPostComments'],
+						operation: ['getPostComments', 'createComment', 'deleteComment'],
 					},
 				},
 			},
@@ -1925,6 +2372,187 @@ export class UploadPost implements INodeType {
 						operation: ['privateReplyToComment', 'publicReplyToComment'],
 					},
 				},
+			},
+			{
+				displayName: 'Comment ID',
+				name: 'createCommentCommentId',
+				type: 'string',
+				default: '',
+				description: 'Reply to this comment. Required for Instagram. On TikTok add it together with Post ID to reply instead of posting a top-level comment.',
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['createComment', 'deleteComment'],
+					},
+				},
+			},
+			{
+				displayName: 'Post ID',
+				name: 'createCommentPostId',
+				type: 'string',
+				default: '',
+				description: 'Native post ID for a top-level comment. Required on TikTok (video ID) even when replying. LinkedIn uses the post URN.',
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['createComment', 'deleteComment'],
+					},
+				},
+			},
+			{
+				displayName: 'Post URL',
+				name: 'createCommentPostUrl',
+				type: 'string',
+				default: '',
+				description: 'Alternative to Post ID for a top-level comment. Ignored when Post ID is set.',
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['createComment'],
+					},
+				},
+			},
+			{
+				displayName: 'Message',
+				name: 'createCommentMessage',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Comment text to publish',
+				typeOptions: { rows: 3 },
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['createComment'],
+					},
+				},
+			},
+
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{ name: 'Edit Post', value: 'editPost', action: 'Edit a published post', description: 'Update caption or metadata on a live post. Fields you omit are left unchanged.' },
+					{ name: 'Repost', value: 'repostPost', action: 'Repost a post', description: 'Repost on LinkedIn or X' },
+					{ name: 'Retry Post', value: 'retryPost', action: 'Retry a failed upload', description: 'Re-enqueue platforms that failed on an upload without re-uploading media. Provide request ID or job ID.' },
+					{ name: 'Save Pin', value: 'savePin', action: 'Save a pinterest pin', description: 'Save a Pinterest pin to a board' },
+					{ name: 'Unpublish Post', value: 'unpublishPost', action: 'Unpublish a post', description: 'Delete a live post from a platform. Instagram, TikTok and Threads are not supported.' },
+				],
+				default: 'retryPost',
+				displayOptions: { show: { resource: ['postActions'] } },
+			},
+			{
+				displayName: 'User Identifier Name or ID',
+				name: 'postActionUser',
+				type: 'options',
+				noDataExpression: true,
+				required: true,
+				default: '',
+				description: 'Choose from your created profiles. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				typeOptions: { loadOptionsMethod: 'getUserProfiles' },
+				displayOptions: {
+					show: {
+						resource: ['postActions'],
+						operation: ['unpublishPost', 'editPost', 'repostPost', 'savePin'],
+					},
+				},
+			},
+			{
+				displayName: 'Platform',
+				name: 'postActionPlatform',
+				type: 'options',
+				required: true,
+				options: [
+					{ name: 'Bluesky', value: 'bluesky' },
+					{ name: 'Discord', value: 'discord' },
+					{ name: 'Facebook', value: 'facebook' },
+					{ name: 'Google Business', value: 'google_business' },
+					{ name: 'LinkedIn', value: 'linkedin' },
+					{ name: 'Mastodon', value: 'mastodon' },
+					{ name: 'Pinterest', value: 'pinterest' },
+					{ name: 'Telegram', value: 'telegram' },
+					{ name: 'WordPress', value: 'wordpress' },
+					{ name: 'X (Twitter)', value: 'x' },
+					{ name: 'YouTube', value: 'youtube' },
+				],
+				default: 'facebook',
+				description: 'Network to act on. Unpublish is not available for Instagram, TikTok or Threads.',
+				displayOptions: {
+					show: {
+						resource: ['postActions'],
+						operation: ['unpublishPost', 'editPost'],
+					},
+				},
+			},
+			{
+				displayName: 'Platform',
+				name: 'repostPlatform',
+				type: 'options',
+				required: true,
+				options: [
+					{ name: 'LinkedIn', value: 'linkedin' },
+					{ name: 'X (Twitter)', value: 'x' },
+				],
+				default: 'linkedin',
+				description: 'Network to repost on',
+				displayOptions: { show: { resource: ['postActions'], operation: ['repostPost'] } },
+			},
+			{
+				displayName: 'Request ID',
+				name: 'retryRequestId',
+				type: 'string',
+				default: '',
+				description: 'Request ID of the original upload. Provide this or Job ID.',
+				displayOptions: { show: { resource: ['postActions'], operation: ['retryPost'] } },
+			},
+			{
+				displayName: 'Job ID',
+				name: 'retryJobId',
+				type: 'string',
+				default: '',
+				description: 'Scheduled job ID of the original upload. Alternative to Request ID.',
+				displayOptions: { show: { resource: ['postActions'], operation: ['retryPost'] } },
+			},
+			{
+				displayName: 'Post ID',
+				name: 'postActionPostId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Native ID of the published post on the target network',
+				displayOptions: {
+					show: {
+						resource: ['postActions'],
+						operation: ['unpublishPost', 'editPost', 'repostPost', 'savePin'],
+					},
+				},
+			},
+			{
+				displayName: 'Message',
+				name: 'postActionMessage',
+				type: 'string',
+				default: '',
+				description: 'New caption. Facebook uses message, X uses text, LinkedIn uses commentary.',
+				displayOptions: { show: { resource: ['postActions'], operation: ['editPost', 'repostPost'] } },
+			},
+			{
+				displayName: 'Pinterest Board ID',
+				name: 'savePinBoardId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Board to save the pin to',
+				displayOptions: { show: { resource: ['postActions'], operation: ['savePin'] } },
+			},
+			{
+				displayName: 'Pinterest Board Section ID',
+				name: 'savePinBoardSectionId',
+				type: 'string',
+				default: '',
+				description: 'Optional board section to save the pin to',
+				displayOptions: { show: { resource: ['postActions'], operation: ['savePin'] } },
 			},
 
 			// Operations for Insights
@@ -2090,6 +2718,22 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'Text to post as the first comment (or reply) immediately after publishing. Supported on Instagram, Facebook, X, Threads, YouTube, Reddit, Bluesky, LinkedIn and TikTok. On TikTok the profile needs the "comments" capability (see the capabilities array returned by List Users).',
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+			},
+			{
+				displayName: 'First Comment Media URLs',
+				name: 'firstCommentMedia',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated media URLs to attach to the first comment, when the platform accepts it',
+				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+			},
+			{
+				displayName: 'Reply To ID',
+				name: 'replyToId',
+				type: 'string',
+				default: '',
+				description: 'ID of an existing post to reply to. X uses a tweet ID; Bluesky uses a post URL or AT-URI.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['x', 'bluesky', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'Alt Text (Extended)',
@@ -2875,6 +3519,112 @@ export class UploadPost implements INodeType {
 				description: 'Profile username whose Reddit posts you want',
 				displayOptions: { show: { operation: ['getRedditDetailedPosts'] } },
 			},
+			{
+				displayName: 'User Identifier Name or ID',
+				name: 'mediaUser',
+				type: 'options',
+				noDataExpression: true,
+				required: true,
+				default: '',
+				description: 'Choose from your created profiles. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				typeOptions: { loadOptionsMethod: 'getUserProfiles' },
+				displayOptions: { show: { operation: ['getMedia'] } },
+			},
+			{
+				displayName: 'Platform',
+				name: 'mediaPlatform',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Network to list media from (e.g. linkedin, facebook, instagram, youtube)',
+				displayOptions: { show: { operation: ['getMedia'] } },
+			},
+			{
+				displayName: 'Page URN',
+				name: 'mediaPageUrn',
+				type: 'string',
+				default: '',
+				description: 'Optional LinkedIn page URN when listing page media',
+				displayOptions: { show: { operation: ['getMedia'] } },
+			},
+			{
+				displayName: 'Limit',
+				name: 'mediaLimit',
+				type: 'number',
+				default: 0,
+				description: 'Max items to return. 0 uses the API default.',
+				displayOptions: { show: { operation: ['getMedia'] } },
+			},
+			{
+				displayName: 'Cursor',
+				name: 'mediaCursor',
+				type: 'string',
+				default: '',
+				description: 'Pagination cursor from a previous Get Media response',
+				displayOptions: { show: { operation: ['getMedia'] } },
+			},
+			{
+				displayName: 'User Identifier Name or ID',
+				name: 'gbpLocationsProfile',
+				type: 'options',
+				noDataExpression: true,
+				default: '',
+				description: 'Profile whose Google Business locations to list. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				typeOptions: { loadOptionsMethod: 'getUserProfiles' },
+				displayOptions: { show: { operation: ['getGoogleBusinessLocations'] } },
+			},
+			{
+				displayName: 'User Identifier Name or ID',
+				name: 'tiktokDiscoveryProfile',
+				type: 'options',
+				noDataExpression: true,
+				required: true,
+				default: '',
+				description: 'TikTok-connected profile. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				typeOptions: { loadOptionsMethod: 'getUserProfiles' },
+				displayOptions: { show: { operation: ['getTiktokTrendingMusic', 'searchTiktokMusic', 'getTiktokLocations', 'getTiktokSettings'] } },
+			},
+			{
+				displayName: 'Query',
+				name: 'tiktokMusicQuery',
+				type: 'string',
+				default: '',
+				description: 'Search text for TikTok music',
+				displayOptions: { show: { operation: ['searchTiktokMusic'] } },
+			},
+			{
+				displayName: 'Query',
+				name: 'tiktokLocationQuery',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'Search text for TikTok locations',
+				displayOptions: { show: { operation: ['getTiktokLocations'] } },
+			},
+			{
+				displayName: 'Genre',
+				name: 'tiktokMusicGenre',
+				type: 'string',
+				default: '',
+				description: 'Optional TikTok music genre filter',
+				displayOptions: { show: { operation: ['getTiktokTrendingMusic', 'searchTiktokMusic'] } },
+			},
+			{
+				displayName: 'Country Code',
+				name: 'tiktokMusicCountryCode',
+				type: 'string',
+				default: '',
+				description: 'Optional country code for TikTok music (e.g. US, ES)',
+				displayOptions: { show: { operation: ['getTiktokTrendingMusic', 'searchTiktokMusic'] } },
+			},
+			{
+				displayName: 'Limit',
+				name: 'tiktokMusicLimit',
+				type: 'number',
+				default: 0,
+				description: 'Max tracks to return on search. 0 uses the API default.',
+				displayOptions: { show: { operation: ['searchTiktokMusic'] } },
+			},
 
 			// Create user
 			{
@@ -2932,13 +3682,26 @@ export class UploadPost implements INodeType {
 				name: 'jwtPlatforms',
 				type: 'multiOptions',
 				options: [
+					{ name: 'Bluesky', value: 'bluesky' },
+					{ name: 'Dev.to', value: 'devto' },
 					{ name: 'Discord', value: 'discord' },
 					{ name: 'Facebook', value: 'facebook' },
+					{ name: 'Google Business', value: 'google_business' },
+					{ name: 'Hashnode', value: 'hashnode' },
 					{ name: 'Instagram', value: 'instagram' },
+					{ name: 'Lemmy', value: 'lemmy' },
 					{ name: 'LinkedIn', value: 'linkedin' },
+					{ name: 'Listmonk', value: 'listmonk' },
+					{ name: 'Mastodon', value: 'mastodon' },
+					{ name: 'Nostr', value: 'nostr' },
+					{ name: 'Pinterest', value: 'pinterest' },
+					{ name: 'Reddit', value: 'reddit' },
+					{ name: 'Slack', value: 'slack' },
 					{ name: 'Telegram', value: 'telegram' },
 					{ name: 'Threads', value: 'threads' },
 					{ name: 'TikTok', value: 'tiktok' },
+					{ name: 'Whop', value: 'whop' },
+					{ name: 'WordPress', value: 'wordpress' },
 					{ name: 'X (Twitter)', value: 'x' },
 					{ name: 'YouTube', value: 'youtube' },
 				],
@@ -3198,6 +3961,38 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
+				displayName: 'Facebook Place ID',
+				name: 'facebookPlaceId',
+				type: 'string',
+				default: '',
+				description: 'Facebook place ID to tag',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['facebook', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Facebook Alt Text',
+				name: 'facebookAltText',
+				type: 'string',
+				default: '',
+				description: 'Alt text for Facebook photos',
+				displayOptions: { show: { operation: ['uploadPhotos'], platform: ['facebook', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Facebook Is AI Generated',
+				name: 'facebookIsAiGenerated',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to disclose the Facebook video as AI-generated',
+				displayOptions: { show: { operation: ['uploadVideo'], platform: ['facebook', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Facebook Call to Action',
+				name: 'facebookCallToAction',
+				type: 'string',
+				default: '',
+				description: 'JSON call-to-action object for a Facebook text post',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['facebook', '__manual_platform__'] } },
+			},
+			{
 				displayName: 'LinkedIn Link (Text)',
 				name: 'linkedinLink',
 				type: 'string',
@@ -3209,6 +4004,38 @@ export class UploadPost implements INodeType {
 						platform: ['linkedin', '__manual_platform__']
 					},
 				},
+			},
+			{
+				displayName: 'LinkedIn Alt Text',
+				name: 'linkedinAltText',
+				type: 'string',
+				default: '',
+				description: 'Alt text for LinkedIn media',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['linkedin', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'LinkedIn Disable Reshare',
+				name: 'linkedinDisableReshare',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to disable resharing of the LinkedIn post',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'], platform: ['linkedin', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'LinkedIn Link Title',
+				name: 'linkedinLinkTitle',
+				type: 'string',
+				default: '',
+				description: 'Override title of the LinkedIn link preview card',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['linkedin', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'LinkedIn Link Description',
+				name: 'linkedinLinkDescription',
+				type: 'string',
+				default: '',
+				description: 'Override description of the LinkedIn link preview card',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['linkedin', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'Bluesky Link (Text)',
@@ -3640,6 +4467,32 @@ export class UploadPost implements INodeType {
 					}
 				},
 			},
+			{
+				displayName: 'TikTok Ads Only',
+				name: 'tiktokIsAdsOnly',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to mark the TikTok video as ads-only',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'TikTok TTO Invite Link',
+				name: 'tiktokTtoInviteLink',
+				type: 'string',
+				default: '',
+				description: 'TikTok One invite link for branded content',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['tiktok', '__manual_platform__']
+					}
+				},
+			},
 
 		// ----- Instagram Specific Parameters -----
 			{
@@ -3764,6 +4617,14 @@ export class UploadPost implements INodeType {
 					}
 				},
 			},
+			{
+				displayName: 'Instagram Alt Text',
+				name: 'instagramAltText',
+				type: 'string',
+				default: '',
+				description: 'Alt text for Instagram photos',
+				displayOptions: { show: { operation: ['uploadPhotos'], platform: ['instagram', '__manual_platform__'] } },
+			},
 
 		// ----- Threads Specific Parameters -----
 			{
@@ -3794,6 +4655,54 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'A topic tag for the Threads post (1-50 characters, no periods or ampersands). Helps increase reach on Threads.',
 				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Threads Reply Control',
+				name: 'threadsReplyControl',
+				type: 'string',
+				default: '',
+				description: 'Who can reply to the Threads post',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Threads Alt Text',
+				name: 'threadsAltText',
+				type: 'string',
+				default: '',
+				description: 'Alt text for Threads media',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['threads', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Threads Reply To ID',
+				name: 'threadsReplyToId',
+				type: 'string',
+				default: '',
+				description: 'Threads post ID to reply to',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Threads Quote Post ID',
+				name: 'threadsQuotePostId',
+				type: 'string',
+				default: '',
+				description: 'Threads post ID to quote',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['threads', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Threads Link Attachment',
+				name: 'threadsLinkAttachment',
+				type: 'string',
+				default: '',
+				description: 'URL to attach to a Threads text post',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['threads', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Threads Poll Options',
+				name: 'threadsPollOptions',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated poll options for a Threads post',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['threads', '__manual_platform__'] } },
 			},
 
 		// ----- Google Business Specific Parameters -----
@@ -3970,6 +4879,542 @@ export class UploadPost implements INodeType {
 				description: 'Terms and conditions of the offer',
 				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'], gbpTopicType: ['OFFER'] } },
 			},
+			{
+				displayName: 'Google Business Language Code',
+				name: 'gbpLanguageCode',
+				type: 'string',
+				default: '',
+				description: 'Language code for the Google Business post (e.g. en, es)',
+				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'] } },
+			},
+
+			{
+				displayName: 'Bluesky Alt Text',
+				name: 'blueskyAltText',
+				type: 'string',
+				default: '',
+				description: 'Alt text for Bluesky images',
+				displayOptions: { show: { operation: ['uploadPhotos'], platform: ['bluesky', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Bluesky Languages',
+				name: 'blueskyLangs',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated language codes for the Bluesky post (e.g. en, es)',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Bluesky Labels',
+				name: 'blueskyLabels',
+				type: 'string',
+				default: '',
+				description: 'Content labels for the Bluesky post',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Bluesky Threadgate',
+				name: 'blueskyThreadgate',
+				type: 'string',
+				default: '',
+				description: 'Who can reply (threadgate) on Bluesky',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Bluesky Quote URI',
+				name: 'blueskyQuoteUri',
+				type: 'string',
+				default: '',
+				description: 'AT-URI or URL of a Bluesky post to quote',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['bluesky', '__manual_platform__'] } },
+			},
+
+			{
+				displayName: 'Discord Thread ID',
+				name: 'discordThreadId',
+				type: 'string',
+				default: '',
+				description: 'Existing Discord thread ID to post into',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['discord', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Discord Thread Name',
+				name: 'discordThreadName',
+				type: 'string',
+				default: '',
+				description: 'Name of a new Discord thread to create with this post',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['discord', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Discord Username',
+				name: 'discordUsername',
+				type: 'string',
+				default: '',
+				description: 'Webhook username override',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['discord', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Discord Avatar URL',
+				name: 'discordAvatarUrl',
+				type: 'string',
+				default: '',
+				description: 'Webhook avatar URL override',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['discord', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Discord Embeds',
+				name: 'discordEmbeds',
+				type: 'string',
+				default: '',
+				description: 'JSON array of Discord embeds',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['discord', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Discord Alt Text',
+				name: 'discordAltText',
+				type: 'string',
+				default: '',
+				description: 'Alt text for Discord attachments',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['discord', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Discord TTS',
+				name: 'discordTts',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to send the Discord message as text-to-speech',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['discord', '__manual_platform__'] } },
+			},
+
+			{
+				displayName: 'Telegram Parse Mode',
+				name: 'telegramParseMode',
+				type: 'options',
+				options: [
+					{ name: 'HTML', value: 'HTML' },
+					{ name: 'Markdown', value: 'Markdown' },
+					{ name: 'MarkdownV2', value: 'MarkdownV2' },
+					{ name: 'None', value: '' },
+				],
+				default: '',
+				description: 'How Telegram should parse the caption',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['telegram', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Telegram Message Thread ID',
+				name: 'telegramMessageThreadId',
+				type: 'string',
+				default: '',
+				description: 'Forum topic thread ID',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['telegram', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Telegram Disable Notification',
+				name: 'telegramDisableNotification',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to send the Telegram message silently',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['telegram', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Telegram Protect Content',
+				name: 'telegramProtectContent',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to forbid forwarding and saving of the Telegram message',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['telegram', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Telegram Has Spoiler',
+				name: 'telegramHasSpoiler',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to mark Telegram media as a spoiler',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['telegram', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Telegram As Document',
+				name: 'telegramAsDocument',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to send the file as a document instead of media',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['telegram', '__manual_platform__'] } },
+			},
+
+			{
+				displayName: 'Mastodon Visibility',
+				name: 'mastodonVisibility',
+				type: 'options',
+				options: [
+					{ name: 'Account Default', value: '' },
+					{ name: 'Direct', value: 'direct' },
+					{ name: 'Private', value: 'private' },
+					{ name: 'Public', value: 'public' },
+					{ name: 'Unlisted', value: 'unlisted' },
+				],
+				default: '',
+				description: 'Mastodon post visibility',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['mastodon', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Mastodon Sensitive',
+				name: 'mastodonSensitive',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to mark the Mastodon post as sensitive',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['mastodon', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Mastodon Spoiler Text',
+				name: 'mastodonSpoilerText',
+				type: 'string',
+				default: '',
+				description: 'Content warning shown before the Mastodon post',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['mastodon', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Mastodon Language',
+				name: 'mastodonLanguage',
+				type: 'string',
+				default: '',
+				description: 'ISO language code for the Mastodon post',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['mastodon', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Mastodon Alt Text',
+				name: 'mastodonAltText',
+				type: 'string',
+				default: '',
+				description: 'Alt text for Mastodon media',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['mastodon', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Mastodon Poll Options',
+				name: 'mastodonPollOptions',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated poll options for a Mastodon text post',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['mastodon', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Mastodon Poll Expires In',
+				name: 'mastodonPollExpiresIn',
+				type: 'number',
+				default: 0,
+				description: 'Poll duration in seconds. 0 means no poll expiry override.',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['mastodon', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Mastodon Poll Multiple',
+				name: 'mastodonPollMultiple',
+				type: 'boolean',
+				default: false,
+				description: 'Whether the Mastodon poll allows multiple choices',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['mastodon', '__manual_platform__'] } },
+			},
+
+			{
+				displayName: 'WordPress Status',
+				name: 'wordpressStatus',
+				type: 'options',
+				options: [
+					{ name: 'Draft', value: 'draft' },
+					{ name: 'Not Set', value: '' },
+					{ name: 'Pending', value: 'pending' },
+					{ name: 'Private', value: 'private' },
+					{ name: 'Publish', value: 'publish' },
+				],
+				default: '',
+				description: 'WordPress post status',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['wordpress', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'WordPress Date',
+				name: 'wordpressDate',
+				type: 'string',
+				default: '',
+				description: 'WordPress publication date (ISO-8601)',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['wordpress', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'WordPress Categories',
+				name: 'wordpressCategories',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated WordPress category IDs or names',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['wordpress', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'WordPress Tags',
+				name: 'wordpressTags',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated WordPress tags',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['wordpress', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'WordPress Excerpt',
+				name: 'wordpressExcerpt',
+				type: 'string',
+				default: '',
+				description: 'Short excerpt shown on WordPress archive pages',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['wordpress', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'WordPress Slug',
+				name: 'wordpressSlug',
+				type: 'string',
+				default: '',
+				description: 'WordPress post slug',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['wordpress', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'WordPress Alt Text',
+				name: 'wordpressAltText',
+				type: 'string',
+				default: '',
+				description: 'Alt text for WordPress media',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['wordpress', '__manual_platform__'] } },
+			},
+
+			{
+				displayName: 'Lemmy Community',
+				name: 'lemmyCommunity',
+				type: 'string',
+				default: '',
+				description: 'Lemmy community name or ID',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['lemmy', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Lemmy URL',
+				name: 'lemmyUrl',
+				type: 'string',
+				default: '',
+				description: 'Optional link URL for a Lemmy post',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['lemmy', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Lemmy NSFW',
+				name: 'lemmyNsfw',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to mark the Lemmy post as NSFW',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['lemmy', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Lemmy Alt Text',
+				name: 'lemmyAltText',
+				type: 'string',
+				default: '',
+				description: 'Alt text for Lemmy images',
+				displayOptions: { show: { operation: ['uploadPhotos'], platform: ['lemmy', '__manual_platform__'] } },
+			},
+
+			{
+				displayName: 'Slack Markdown',
+				name: 'slackMarkdown',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to send the Slack message as markdown',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['slack', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Slack Blocks',
+				name: 'slackBlocks',
+				type: 'string',
+				default: '',
+				description: 'JSON Slack Block Kit payload',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['slack', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Slack Mrkdwn',
+				name: 'slackMrkdwn',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to enable Slack mrkdwn formatting',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['slack', '__manual_platform__'] } },
+			},
+
+			{
+				displayName: 'Nostr Kind',
+				name: 'nostrKind',
+				type: 'string',
+				default: '',
+				description: 'Nostr event kind. Leave empty for a short note.',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['nostr', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Nostr Long Form',
+				name: 'nostrLongForm',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to publish as a Nostr long-form article',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['nostr', '__manual_platform__'] } },
+			},
+
+			{
+				displayName: 'Dev.to Tags',
+				name: 'devtoTags',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated Dev.to tags',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['devto', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Dev.to Canonical URL',
+				name: 'devtoCanonicalUrl',
+				type: 'string',
+				default: '',
+				description: 'Canonical URL if the article was originally published elsewhere',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['devto', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Dev.to Description',
+				name: 'devtoDescription',
+				type: 'string',
+				default: '',
+				description: 'Dev.to article description / subtitle',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['devto', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Dev.to Main Image',
+				name: 'devtoMainImage',
+				type: 'string',
+				default: '',
+				description: 'Cover image URL for the Dev.to article',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['devto', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Dev.to Series',
+				name: 'devtoSeries',
+				type: 'string',
+				default: '',
+				description: 'Dev.to series name',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['devto', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Dev.to Published',
+				name: 'devtoPublished',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to publish the Dev.to article immediately instead of saving it as a draft',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['devto', '__manual_platform__'] } },
+			},
+
+			{
+				displayName: 'Hashnode Tags',
+				name: 'hashnodeTags',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated Hashnode tags',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['hashnode', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Hashnode Subtitle',
+				name: 'hashnodeSubtitle',
+				type: 'string',
+				default: '',
+				description: 'Hashnode article subtitle',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['hashnode', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Hashnode Cover Image URL',
+				name: 'hashnodeCoverImageUrl',
+				type: 'string',
+				default: '',
+				description: 'Cover image URL for the Hashnode article',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['hashnode', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Hashnode Body',
+				name: 'hashnodeBody',
+				type: 'string',
+				default: '',
+				description: 'Markdown body of the Hashnode article. The title field is used as the article title.',
+				typeOptions: { rows: 6 },
+				displayOptions: { show: { operation: ['uploadText'], platform: ['hashnode', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Hashnode Draft',
+				name: 'hashnodeDraft',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to save the Hashnode article as a draft',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['hashnode', '__manual_platform__'] } },
+			},
+
+			{
+				displayName: 'Whop Body',
+				name: 'whopBody',
+				type: 'string',
+				default: '',
+				description: 'Whop post body',
+				typeOptions: { rows: 4 },
+				displayOptions: { show: { operation: ['uploadText'], platform: ['whop', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Whop Pinned',
+				name: 'whopPinned',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to pin the Whop post',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['whop', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Whop Paywall Amount',
+				name: 'whopPaywallAmount',
+				type: 'string',
+				default: '',
+				description: 'Paywall amount for the Whop post',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['whop', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Whop Paywall Currency',
+				name: 'whopPaywallCurrency',
+				type: 'string',
+				default: '',
+				description: 'Paywall currency code (e.g. USD)',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['whop', '__manual_platform__'] } },
+			},
+
+			{
+				displayName: 'Listmonk Content Type',
+				name: 'listmonkContentType',
+				type: 'options',
+				options: [
+					{ name: 'HTML', value: 'html' },
+					{ name: 'Markdown', value: 'markdown' },
+					{ name: 'Not Set', value: '' },
+					{ name: 'Plain', value: 'plain' },
+				],
+				default: '',
+				description: 'Listmonk campaign content type',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['listmonk', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Listmonk Send At',
+				name: 'listmonkSendAt',
+				type: 'string',
+				default: '',
+				description: 'When to send the Listmonk campaign (ISO-8601)',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['listmonk', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Listmonk Lists',
+				name: 'listmonkLists',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated Listmonk list IDs',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['listmonk', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Listmonk Template ID',
+				name: 'listmonkTemplateId',
+				type: 'string',
+				default: '',
+				description: 'Template ID used by Listmonk for the campaign',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['listmonk', '__manual_platform__'] } },
+			},
 
 		// ----- Reddit Specific Parameters -----
 			{
@@ -3995,6 +5440,30 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'URL for a Reddit link post. Creates a link post with URL preview card instead of a text post.',
 				displayOptions: { show: { operation: ['uploadText'], platform: ['reddit', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Reddit NSFW',
+				name: 'redditNsfw',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to mark the Reddit post as NSFW',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Reddit Spoiler',
+				name: 'redditSpoiler',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to mark the Reddit post as a spoiler',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Reddit Flair Text',
+				name: 'redditFlairText',
+				type: 'string',
+				default: '',
+				description: 'Flair text when a flair ID is not used',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadText'], platform: ['reddit', '__manual_platform__'] } },
 			},
 
 		// ----- YouTube Specific Parameters (Video Only) -----
@@ -4255,6 +5724,32 @@ export class UploadPost implements INodeType {
 						},
 					},
 				},
+			{
+				displayName: 'YouTube Notify Subscribers',
+				name: 'youtubeNotifySubscribers',
+				type: 'boolean',
+				default: true,
+				description: 'Whether YouTube should notify subscribers when the video is published',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['youtube', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'YouTube Publish At',
+				name: 'youtubePublishAt',
+				type: 'string',
+				default: '',
+				description: 'Schedule the YouTube video to go public at this ISO-8601 datetime. Privacy should be private.',
+				displayOptions: {
+					show: {
+						operation: ['uploadVideo'],
+						platform: ['youtube', '__manual_platform__']
+					},
+				},
+			},
 
 				// ----- Pinterest Specific Parameters (Video Only) -----
 
@@ -4295,6 +5790,19 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional link to attach to the Pinterest pin',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos', 'uploadVideo'],
+						platform: ['pinterest', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'Pinterest Board Section ID',
+				name: 'pinterestBoardSectionId',
+				type: 'string',
+				default: '',
+				description: 'Optional Pinterest board section ID',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo'],
@@ -4595,6 +6103,47 @@ export class UploadPost implements INodeType {
 						platform: ['x', '__manual_platform__']
 					},
 				},
+			},
+			{
+				displayName: 'X Paid Partnership',
+				name: 'xPaidPartnership',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to mark the X post as a paid partnership',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['x', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'X Alt Text',
+				name: 'xAltText',
+				type: 'string',
+				default: '',
+				description: 'Alt text for X images',
+				displayOptions: { show: { operation: ['uploadPhotos'], platform: ['x', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'X Subtitles URL',
+				name: 'xSubtitlesUrl',
+				type: 'string',
+				default: '',
+				description: 'URL of a subtitles file for the X video',
+				displayOptions: { show: { operation: ['uploadVideo'], platform: ['x', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'X Article Title',
+				name: 'xArticleTitle',
+				type: 'string',
+				default: '',
+				description: 'Title for an X article post',
+				displayOptions: { show: { operation: ['uploadText'], platform: ['x', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'X Article Body',
+				name: 'xArticleBody',
+				type: 'string',
+				default: '',
+				description: 'Body of an X article post',
+				typeOptions: { rows: 4 },
+				displayOptions: { show: { operation: ['uploadText'], platform: ['x', '__manual_platform__'] } },
 			},
 
 			// ----- Manual Platform Entry: Platform-Specific IDs -----
