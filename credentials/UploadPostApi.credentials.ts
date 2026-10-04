@@ -8,7 +8,7 @@ import {
 export class UploadPostApi implements ICredentialType {
 	name = 'uploadPostApi';
 	displayName = 'Upload Post API';
-	readonly icon = 'file:UploadPost.svg';
+	icon = { light: 'file:UploadPost.svg', dark: 'file:UploadPost.svg' } as const;
 
 	documentationUrl = 'https://docs.upload-post.com';
 

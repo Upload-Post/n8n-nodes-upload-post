@@ -1,4 +1,3 @@
-import { Buffer } from 'buffer';
 import {
 	IDataObject,
 	IExecuteFunctions,
@@ -19,8 +18,11 @@ const MANUAL_LINKEDIN_VALUE = '__manual_linkedin__';
 const MANUAL_PINTEREST_VALUE = '__manual_pinterest__';
 const MANUAL_PLATFORM_VALUE = '__manual_platform__';
 
+// Global Buffer, typed via n8n's own helper: n8n Cloud forbids importing 'buffer'.
+type BinaryBuffer = Awaited<ReturnType<IExecuteFunctions['helpers']['getBinaryDataBuffer']>>;
+
 type BinaryFormField = {
-	value: Buffer | string;
+	value: BinaryBuffer | string;
 	options?: {
 		filename?: string;
 		contentType?: string;
@@ -2116,7 +2118,7 @@ export class UploadPost implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Upload Post',
 		name: 'uploadPost',
-		icon: 'file:uploadpost.svg',
+		icon: { light: 'file:uploadpost.svg', dark: 'file:uploadpost.svg' },
 		group: ['output'],
 		version: 1,
 		subtitle: '={{$parameter["operation"]}}',
