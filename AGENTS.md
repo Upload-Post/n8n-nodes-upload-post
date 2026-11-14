@@ -52,6 +52,13 @@ Agent → Content Generation → Upload Post Node → Multiple Platforms
 #### User Management
 - **Create/List/Delete Users**: Manage Upload Post profiles
 - **Generate/Validate JWT**: Platform integration tokens
+- **Webhook delivery log**: List Webhook Deliveries (7 days, status/attempts/HTTP code), Get Webhook Delivery (with payload), Redeliver Webhook. Webhooks are at-least-once: deduplicate by `X-Upload-Post-Delivery`
+
+#### Comments, AutoDM and DMs
+- **Get Post Comments** with Comment ID returns the replies (Instagram, Facebook, LinkedIn Pages, TikTok, Threads, YouTube)
+- **AutoDM rules (Instagram, account-wide)**: Create/List/Pause/Resume/Delete. One rule covers every post plus story replies, story mentions and keyword DMs, never expires, webhook only
+- **Direct Message**: Send DM and List Conversations on Instagram and Bluesky (Bluesky needs an app password with DM access)
+- **Resolve LinkedIn Organization**: URL or vanity of any company Page to `{urn, name, mention}` for LinkedIn mentions
 
 ## Agent Usage Examples
 
@@ -156,6 +163,9 @@ Agent → Content Generation → Upload Post Node → Multiple Platforms
 - **Advanced Options**: Music, location, cover image and draft depend on the `capabilities` array returned for the TikTok account by `GET /api/uploadposts/users` (`music`, `location`, `cover_image`, `cover_timestamp`, `draft`, `photo_privacy`, `video_privacy`, `inbox_fallback`, `profile_analytics`). Missing capability = field ignored, post still publishes, response carries a per-field warning
 - **AI Content**: Declare AI-generated content when applicable
 
+### Bluesky
+- **Gallery**: `blueskyGallery: true` publishes up to 10 images (default is the first 4)
+
 ### YouTube
 - **Metadata**: Tags, categories, privacy settings
 - **Compliance**: Made for kids, synthetic media declarations
@@ -168,6 +178,7 @@ Agent → Content Generation → Upload Post Node → Multiple Platforms
 
 ### LinkedIn
 - **Professional Focus**: Use appropriate tone and formatting
+- **Mentions**: `@[Exact Page Name](urn:li:organization:ID)` or `@company-vanity` in the post text; the name must match LinkedIn exactly (capitals included). Get it with Resolve LinkedIn Organization
 - **Page Selection**: Target specific organization pages
 - **Visibility**: Public, connections, or logged-in users
 

@@ -1033,6 +1033,8 @@ const applyCredentialPlatformOptions = (
 		setIfFilled(formData, 'bluesky_labels', ctx.node.getNodeParameter('blueskyLabels', ctx.itemIndex, '') as string);
 		setIfFilled(formData, 'bluesky_threadgate', ctx.node.getNodeParameter('blueskyThreadgate', ctx.itemIndex, '') as string);
 		setIfFilled(formData, 'bluesky_quote_uri', ctx.node.getNodeParameter('blueskyQuoteUri', ctx.itemIndex, '') as string);
+		// Only shown for Upload Photo(s); getNodeParameter returns the default elsewhere.
+		setIfFilled(formData, 'bluesky_gallery', ctx.node.getNodeParameter('blueskyGallery', ctx.itemIndex, false) as boolean);
 	}
 
 	if (has('discord')) {
@@ -1502,6 +1504,18 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 				waitForCompletion: false,
 			};
 		}
+		case 'resolveLinkedinOrganization': {
+			return {
+				endpoint: '/uploadposts/linkedin/resolve-organization',
+				method: 'GET',
+				qs: {
+					user: ctx.node.getNodeParameter('linkedinResolveProfile', ctx.itemIndex) as string,
+					url: (ctx.node.getNodeParameter('linkedinResolveUrl', ctx.itemIndex) as string).trim(),
+				},
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
 		case 'getGoogleBusinessLocations': {
 			const qs: IDataObject = {};
 			const profile = ctx.node.getNodeParameter('gbpLocationsProfile', ctx.itemIndex, '') as string;
@@ -1810,6 +1824,52 @@ const buildUserRequest = async (ctx: ExecutionContext): Promise<RequestConfig> =
 				isUploadOperation: false,
 				waitForCompletion: false,
 			};
+		case 'listWebhookDeliveries': {
+			const qs: IDataObject = {};
+			const filters: Array<[string, string]> = [
+				['webhookDeliveriesEvent', 'event'],
+				['webhookDeliveriesStatus', 'status'],
+				['webhookDeliveriesRequestId', 'request_id'],
+				['webhookDeliveriesJobId', 'job_id'],
+				['webhookDeliveriesProfile', 'profile_username'],
+			];
+			for (const [param, field] of filters) {
+				const value = ctx.node.getNodeParameter(param, ctx.itemIndex, '') as string;
+				if (value) qs[field] = value;
+			}
+			const limit = ctx.node.getNodeParameter('webhookDeliveriesLimit', ctx.itemIndex, 20) as number;
+			if (limit) qs.limit = limit;
+			const page = ctx.node.getNodeParameter('webhookDeliveriesPage', ctx.itemIndex, 1) as number;
+			if (page) qs.page = page;
+			const includePayload = ctx.node.getNodeParameter('webhookDeliveriesIncludePayload', ctx.itemIndex, false) as boolean;
+			if (includePayload) qs.include_payload = 'true';
+			return {
+				endpoint: '/uploadposts/webhooks/deliveries',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'getWebhookDelivery': {
+			const deliveryId = ctx.node.getNodeParameter('webhookDeliveryId', ctx.itemIndex) as string;
+			return {
+				endpoint: `/uploadposts/webhooks/deliveries/${encodeURIComponent(deliveryId.trim())}`,
+				method: 'GET',
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'redeliverWebhook': {
+			const deliveryId = ctx.node.getNodeParameter('webhookDeliveryId', ctx.itemIndex) as string;
+			return {
+				endpoint: `/uploadposts/webhooks/deliveries/${encodeURIComponent(deliveryId.trim())}/redeliver`,
+				method: 'POST',
+				body: {},
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
 		default:
 			throw new NodeOperationError(ctx.node.getNode(), `Unsupported user operation: ${ctx.operation}`, {
 				itemIndex: ctx.itemIndex,
@@ -1820,6 +1880,144 @@ const buildUserRequest = async (ctx: ExecutionContext): Promise<RequestConfig> =
 // Liking a comment needs nothing but the comment; hiding and pinning are done to
 // a comment inside a post, and the API rejects a like that carries a post.
 const COMMENT_ACTIONS_WITHOUT_POST = new Set(['like', 'unlike']);
+
+// Account-wide AutoDM rules share one route per action: /autodms/rules/<action>.
+const AUTODM_RULE_ACTIONS: Record<string, string> = {
+	pauseAutodmRule: 'pause',
+	resumeAutodmRule: 'resume',
+	deleteAutodmRule: 'delete',
+};
+
+// Sender actions are not messages: they need no text and spend no DM quota.
+const DM_ACTIONS_NEEDING_MESSAGE_ID = new Set(['react', 'unreact', 'delete']);
+
+const parseJsonObjectParameter = (ctx: ExecutionContext, name: string, label: string): IDataObject => {
+	const raw = ctx.node.getNodeParameter(name, ctx.itemIndex, '') as string | IDataObject;
+	if (raw === '' || raw === undefined || raw === null) return {};
+	if (typeof raw === 'object') return raw;
+	const trimmed = raw.trim();
+	if (!trimmed) return {};
+	try {
+		const parsed = JSON.parse(trimmed);
+		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as IDataObject;
+	} catch {
+		// fall through to the error below
+	}
+	throw new NodeOperationError(ctx.node.getNode(), `${label} must be a JSON object, e.g. {"quick_replies": [...]}`, {
+		itemIndex: ctx.itemIndex,
+	});
+};
+
+const buildDmRequest = (ctx: ExecutionContext): RequestConfig => {
+	const user = ctx.node.getNodeParameter('dmUser', ctx.itemIndex) as string;
+	const platform = ctx.node.getNodeParameter('dmPlatform', ctx.itemIndex, 'instagram') as string;
+
+	switch (ctx.operation) {
+		case 'sendDm': {
+			const body: IDataObject = { platform, user };
+			const recipientId = ctx.node.getNodeParameter('dmRecipientId', ctx.itemIndex, '') as string;
+			const conversationId = platform === 'bluesky'
+				? (ctx.node.getNodeParameter('dmConversationId', ctx.itemIndex, '') as string)
+				: '';
+			if (!recipientId && !conversationId) {
+				throw new NodeOperationError(
+					ctx.node.getNode(),
+					platform === 'bluesky'
+						? 'Set Recipient ID (handle, DID or profile link) or Conversation ID.'
+						: 'Recipient ID is required.',
+					{ itemIndex: ctx.itemIndex },
+				);
+			}
+			if (recipientId) body.recipient_id = recipientId;
+			if (conversationId) body.conversation_id = conversationId;
+
+			const message = ctx.node.getNodeParameter('dmMessage', ctx.itemIndex, '') as string;
+			if (message) body.message = message;
+			const replyTo = ctx.node.getNodeParameter('dmReplyTo', ctx.itemIndex, '') as string;
+			if (replyTo) body.reply_to = replyTo;
+
+			const senderAction = ctx.node.getNodeParameter(
+				platform === 'bluesky' ? 'dmBlueskySenderAction' : 'dmInstagramSenderAction',
+				ctx.itemIndex,
+				'',
+			) as string;
+			if (senderAction) {
+				body.sender_action = senderAction;
+				const messageId = ctx.node.getNodeParameter('dmMessageId', ctx.itemIndex, '') as string;
+				if (messageId) body.message_id = messageId;
+				if (DM_ACTIONS_NEEDING_MESSAGE_ID.has(senderAction) && !messageId) {
+					throw new NodeOperationError(ctx.node.getNode(), `Message ID is required for the ${senderAction} action.`, {
+						itemIndex: ctx.itemIndex,
+					});
+				}
+				if (senderAction === 'react' || senderAction === 'unreact') {
+					const reaction = ctx.node.getNodeParameter('dmReaction', ctx.itemIndex, '') as string;
+					if (reaction) body.reaction = reaction;
+				}
+			}
+
+			if (platform === 'bluesky') {
+				const sharePostUrl = ctx.node.getNodeParameter('dmBlueskySharePostUrl', ctx.itemIndex, '') as string;
+				if (sharePostUrl) body.attachments = { type: 'post', url: sharePostUrl };
+			} else {
+				const buttons = ctx.node.getNodeParameter('dmButtons', ctx.itemIndex, {}) as IDataObject;
+				const buttonList = ((buttons.button as IDataObject[] | undefined) ?? [])
+					.filter(button => button.title && button.url)
+					.map(button => ({ title: button.title, url: button.url }));
+				if (buttonList.length > 0) body.buttons = buttonList;
+				Object.assign(body, parseJsonObjectParameter(ctx, 'dmExtraFields', 'Extra Fields (JSON)'));
+			}
+
+			if (!body.message && !body.sender_action && !body.attachments) {
+				throw new NodeOperationError(ctx.node.getNode(), 'Message is required unless you send a Sender Action or share a post.', {
+					itemIndex: ctx.itemIndex,
+				});
+			}
+			return {
+				endpoint: '/uploadposts/dms/send',
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'listDmConversations': {
+			const qs: IDataObject = { platform, user };
+			const limit = ctx.node.getNodeParameter('dmLimit', ctx.itemIndex, 0) as number;
+			if (limit) qs.limit = limit;
+			const messagesLimit = ctx.node.getNodeParameter('dmMessagesLimit', ctx.itemIndex, 0) as number;
+			if (messagesLimit) qs.messages_limit = messagesLimit;
+			const stringParams: Array<[string, string]> = [
+				['dmCursor', 'cursor'],
+				['dmSince', 'since'],
+				['dmParticipantId', 'participant_id'],
+			];
+			if (platform === 'bluesky') {
+				stringParams.push(
+					['dmConversationFilterId', 'conversation_id'],
+					['dmMessagesCursor', 'messages_cursor'],
+					['dmStatus', 'status'],
+					['dmReadState', 'read_state'],
+				);
+			}
+			for (const [param, field] of stringParams) {
+				const value = ctx.node.getNodeParameter(param, ctx.itemIndex, '') as string;
+				if (value) qs[field] = value;
+			}
+			return {
+				endpoint: '/uploadposts/dms/conversations',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		default:
+			throw new NodeOperationError(ctx.node.getNode(), `Unsupported direct message operation: ${ctx.operation}`, {
+				itemIndex: ctx.itemIndex,
+			});
+	}
+};
 
 const buildInstagramRequest = (ctx: ExecutionContext): RequestConfig => {
 	switch (ctx.operation) {
@@ -1844,6 +2042,12 @@ const buildInstagramRequest = (ctx: ExecutionContext): RequestConfig => {
 			// its replies instead of the top-level comments of the post.
 			const commentId = ctx.node.getNodeParameter('commentsCommentId', ctx.itemIndex, '') as string;
 			if (commentId) qs.comment_id = commentId;
+			const limit = ctx.node.getNodeParameter('commentsLimit', ctx.itemIndex, 0) as number;
+			if (limit) qs.limit = limit;
+			// The listing paginates with `after`; `cursor` (the media list parameter)
+			// is ignored here and would silently return the first page again.
+			const after = ctx.node.getNodeParameter('commentsAfter', ctx.itemIndex, '') as string;
+			if (after) qs.after = after;
 			return {
 				endpoint: '/uploadposts/comments',
 				method: 'GET',
@@ -1945,6 +2149,68 @@ const buildInstagramRequest = (ctx: ExecutionContext): RequestConfig => {
 				waitForCompletion: false,
 			};
 		}
+		case 'createAutodmRule': {
+			const body: IDataObject = {
+				profile_username: ctx.node.getNodeParameter('autodmRuleProfile', ctx.itemIndex) as string,
+				reply_message: ctx.node.getNodeParameter('autodmRuleReplyMessage', ctx.itemIndex) as string,
+			};
+			const triggers = ctx.node.getNodeParameter('autodmRuleTriggers', ctx.itemIndex, ['comment']) as string[];
+			if (Array.isArray(triggers) && triggers.length > 0) body.triggers = triggers;
+			const keywords = ensureArrayFromCommaSeparated(
+				ctx.node.getNodeParameter('autodmRuleKeywords', ctx.itemIndex, '') as string,
+			);
+			// The API refuses dm_keyword without keywords (it would answer every DM);
+			// say it here instead of spending a request on the 400.
+			if (body.triggers && (body.triggers as string[]).includes('dm_keyword') && keywords.length === 0) {
+				throw new NodeOperationError(ctx.node.getNode(), 'The DM Keyword trigger needs at least one Trigger Keyword.', {
+					itemIndex: ctx.itemIndex,
+				});
+			}
+			if (keywords.length > 0) body.trigger_keywords = keywords;
+			const buttons = ctx.node.getNodeParameter('autodmRuleButtons', ctx.itemIndex, {}) as IDataObject;
+			const buttonList = ((buttons.button as IDataObject[] | undefined) ?? [])
+				.filter(button => button.title && button.url)
+				.map(button => ({ title: button.title, url: button.url }));
+			if (buttonList.length > 0) body.buttons = buttonList;
+			const cooldown = ctx.node.getNodeParameter('autodmRuleCooldownHours', ctx.itemIndex, 24) as number;
+			if (!Number.isInteger(cooldown)) {
+				throw new NodeOperationError(ctx.node.getNode(), 'Per-User Cooldown (Hours) must be a whole number from 0 to 720.', {
+					itemIndex: ctx.itemIndex,
+				});
+			}
+			body.per_user_cooldown_hours = cooldown;
+			return {
+				endpoint: '/uploadposts/autodms/rules',
+				method: 'POST',
+				body,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'listAutodmRules': {
+			const qs: IDataObject = {};
+			const profile = ctx.node.getNodeParameter('autodmRulesListProfile', ctx.itemIndex, '') as string;
+			if (profile) qs.profile_username = profile;
+			return {
+				endpoint: '/uploadposts/autodms/rules',
+				method: 'GET',
+				qs,
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
+		case 'pauseAutodmRule':
+		case 'resumeAutodmRule':
+		case 'deleteAutodmRule': {
+			const action = AUTODM_RULE_ACTIONS[ctx.operation];
+			return {
+				endpoint: `/uploadposts/autodms/rules/${action}`,
+				method: 'POST',
+				body: { rule_id: ctx.node.getNodeParameter('autodmRuleId', ctx.itemIndex) as string },
+				isUploadOperation: false,
+				waitForCompletion: false,
+			};
+		}
 		default:
 			throw new NodeOperationError(ctx.node.getNode(), `Unsupported Instagram operation: ${ctx.operation}`, {
 				itemIndex: ctx.itemIndex,
@@ -2026,6 +2292,9 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 	}
 	if (resource === 'insights') {
 		return buildInsightsRequest(ctx);
+	}
+	if (resource === 'dms') {
+		return buildDmRequest(ctx);
 	}
 	if (resource === 'monitoring') {
 		return buildMonitoringRequest(ctx);
@@ -2145,6 +2414,7 @@ export class UploadPost implements INodeType {
 					// Value kept as 'instagram' so saved workflows keep working; the
 					// listing operation is no longer Instagram-only, hence the label.
 					{ name: 'Comment', value: 'instagram' },
+					{ name: 'Direct Message', value: 'dms' },
 					{ name: 'Insight', value: 'insights' },
 					{ name: 'Post Action', value: 'postActions' },
 					{ name: 'Status & History', value: 'monitoring' },
@@ -2182,7 +2452,7 @@ export class UploadPost implements INodeType {
 					{ name: 'Get Job Status', value: 'getJobStatus', action: 'Get job status', description: 'Check the status of a scheduled or queued post using the job_id' },
 					{ name: 'Get Media', value: 'getMedia', action: 'Get media', description: 'List published media for a connected network (LinkedIn, Facebook, Instagram, YouTube, and others the API exposes)' },
 					{ name: 'Get Platform Metrics', value: 'getPlatformMetrics', action: 'Get platform metrics', description: 'List the analytics metrics available for each platform' },
-					{ name: 'Get Post Analytics', value: 'getPostAnalytics', action: 'Get post analytics', description: 'Retrieve per-post analytics for an upload using its request_id. On TikTok post_metrics also carries retention, impression_sources, audience_types, new_followers, reach and the watch times.' },
+					{ name: 'Get Post Analytics', value: 'getPostAnalytics', action: 'Get post analytics', description: 'Retrieve per-post analytics for an upload using its request_id. On TikTok post_metrics also carries retention, impression_sources, audience_types, new_followers, reach and the watch times, plus original_publish_id. A TikTok draft gets its metrics once the creator publishes it as public from the TikTok app (TikTok gives no post ID for private posts); after 30 days without a post use Get Post Analytics by Platform ID.' },
 					{ name: 'Get Post Analytics by Platform ID', value: 'getPostAnalyticsByPlatformId', action: 'Get post analytics by platform id', description: 'Retrieve per-post analytics using the native platform post ID, for posts not published through Upload-Post' },
 					{ name: 'Get Reddit Detailed Posts', value: 'getRedditDetailedPosts', action: 'Get reddit detailed posts', description: 'Retrieve detailed Reddit posts with full media information' },
 					{ name: 'Get TikTok Locations', value: 'getTiktokLocations', action: 'Get tiktok locations', description: 'Search TikTok locations for a profile to use as tiktok_location_id' },
@@ -2192,6 +2462,7 @@ export class UploadPost implements INodeType {
 					{ name: 'Get Upload History', value: 'getHistory', action: 'Get upload history', description: 'List past uploads with optional filters' },
 					{ name: 'Get Upload Status', value: 'getStatus', action: 'Get upload status', description: 'Check the status of an upload using the request_id' },
 					{ name: 'List Scheduled Posts', value: 'listScheduled', action: 'List scheduled posts', description: 'List your scheduled (future) posts' },
+					{ name: 'Resolve LinkedIn Organization', value: 'resolveLinkedinOrganization', action: 'Resolve a linkedin organization', description: 'Turn any LinkedIn company, showcase or school Page URL, vanity name or ID into its URN and exact name, ready to mention in a post as @[Exact Name](urn:li:organization:ID). Works for any Page, not only the ones you administer.' },
 					{ name: 'Search TikTok Music', value: 'searchTiktokMusic', action: 'Search tiktok music', description: 'Search TikTok music by query for a connected profile' },
 				],
 				default: 'getStatus',
@@ -2209,9 +2480,12 @@ export class UploadPost implements INodeType {
 					{ name: 'Generate JWT (for Platform Integration)', value: 'generateJwt', action: 'Generate jwt for platform integration', description: 'Generate a connection URL (JWT) for a profile. Only needed when integrating Upload-Post into your own platform.' },
 					{ name: 'Get Notification Preferences', value: 'getNotificationPrefs', action: 'Get notification preferences', description: 'Get current webhook and notification settings' },
 					{ name: 'Get User Preferences', value: 'getUserPreferences', action: 'Get user preferences', description: 'Get user preferences including calendar week start day' },
+					{ name: 'Get Webhook Delivery', value: 'getWebhookDelivery', action: 'Get a webhook delivery', description: 'Read one logged webhook delivery with its attempts and the exact payload that was sent' },
 					{ name: 'List Users', value: 'listUsers', action: 'List users', description: 'List Upload-Post users (profiles)' },
+					{ name: 'List Webhook Deliveries', value: 'listWebhookDeliveries', action: 'List webhook deliveries', description: 'History of the last 7 days of outgoing webhooks (account and per-profile): status, attempts and the HTTP code your endpoint answered. Use it to check whether an event reached your server.' },
+					{ name: 'Redeliver Webhook', value: 'redeliverWebhook', action: 'Redeliver a webhook', description: 'Send a logged delivery again now, with the same body, to the webhook URL configured today. It is a new delivery with its own ID (header X-Upload-Post-Redelivery-Of names the original).' },
 					{ name: 'Test Notifications', value: 'testNotifications', action: 'Test notifications', description: 'Send a test event to the configured webhook and notification channels' },
-					{ name: 'Update Notification Preferences', value: 'updateNotificationPrefs', action: 'Update notification preferences', description: 'Configure webhook URL and event types for real-time notifications (upload_completed, social_account.connected, social_account.disconnected, social_account.reauth_required)' },
+					{ name: 'Update Notification Preferences', value: 'updateNotificationPrefs', action: 'Update notification preferences', description: 'Configure webhook URL and event types for real-time notifications (upload_completed, social_account.connected, social_account.disconnected, social_account.reauth_required, dm_received, comment_received). Webhooks are delivered at least once with automatic retries: deduplicate by the X-Upload-Post-Delivery header.' },
 					{ name: 'Update User Preferences', value: 'updateUserPreferences', action: 'Update user preferences', description: 'Update user preferences including calendar week start day (0=Sunday, 1=Monday)' },
 					{ name: 'Validate JWT (for Platform Integration)', value: 'validateJwt', action: 'Validate jwt for platform integration', description: 'Validate a connection token from your backend. Only needed for custom platform integration.' },
 				],
@@ -2226,11 +2500,16 @@ export class UploadPost implements INodeType {
 				noDataExpression: true,
 				options: [
 					{ name: 'Comment Action', value: 'commentAction', action: 'Act on a comment', description: 'Moderate one comment: hide, unhide, like, unlike, pin or unpin it. Platform says which connected network the comment lives on. Post ID is required to hide, unhide, pin or unpin, and is never sent for like or unlike.' },
+					{ name: 'Create AutoDM Rule', value: 'createAutodmRule', action: 'Create an account wide autodm rule', description: 'Instagram: answer with a DM every comment on any post or reel of the account (present and future), story replies, story mentions and DMs with a keyword. Rules never expire and work from Meta webhooks only.' },
 					{ name: 'Create Comment', value: 'createComment', action: 'Create a comment', description: 'Post a comment or a reply. Instagram only supports replies (comment ID required). TikTok always needs the video ID, plus comment ID to reply.' },
+					{ name: 'Delete AutoDM Rule', value: 'deleteAutodmRule', action: 'Delete an autodm rule', description: 'Delete an account-wide AutoDM rule and drop its queued DMs' },
 					{ name: 'Delete Comment', value: 'deleteComment', action: 'Delete a comment', description: 'Delete a comment you own or that is on your post' },
-					{ name: 'Get Post Comments', value: 'getPostComments', action: 'Get post comments', description: 'Retrieve the comments on a post from the network given by Platform (Instagram, Facebook, YouTube, LinkedIn or TikTok). Fill Comment ID to get the replies to that comment instead of the top-level comments of the post.' },
+					{ name: 'Get Post Comments', value: 'getPostComments', action: 'Get post comments', description: 'Retrieve the comments on a post from the network given by Platform. Fill Comment ID to get the replies to that comment instead (Instagram, Facebook, LinkedIn company Pages, TikTok, Threads and YouTube; X and Bluesky answer platform_not_supported).' },
+					{ name: 'List AutoDM Rules', value: 'listAutodmRules', action: 'List autodm rules', description: 'List the account-wide AutoDM rules with their status, stats, queued DMs and whether Meta webhooks are arriving for each Instagram account' },
+					{ name: 'Pause AutoDM Rule', value: 'pauseAutodmRule', action: 'Pause an autodm rule', description: 'Pause an account-wide AutoDM rule: it answers nothing until resumed' },
 					{ name: 'Private Reply to Comment', value: 'privateReplyToComment', action: 'Private reply to comment', description: 'Send a private reply (DM) to the author of a comment. Instagram only.' },
 					{ name: 'Public Reply to Comment', value: 'publicReplyToComment', action: 'Public reply to comment', description: 'Post a public reply visible under the original comment. Instagram only.' },
+					{ name: 'Resume AutoDM Rule', value: 'resumeAutodmRule', action: 'Resume an autodm rule', description: 'Resume a paused account-wide AutoDM rule. A stopped rule (its Instagram account left the profile) only comes back once the account is connected to that profile again.' },
 				],
 				default: 'getPostComments',
 				displayOptions: { show: { resource: ['instagram'] } },
@@ -2280,7 +2559,34 @@ export class UploadPost implements INodeType {
 				name: 'commentsCommentId',
 				type: 'string',
 				default: '',
-				description: 'Leave empty for the top-level comments of the post. Set it to a comment ID to get the replies to that comment instead: it is the same question with one parameter more.',
+				description: 'Leave empty for the top-level comments of the post. Set it to a comment ID to get the replies to that comment instead (Instagram, Facebook, LinkedIn, TikTok, Threads, YouTube). Instagram: the numeric comment ID. Facebook: the {post}_{comment} ID from the listing (Post ID is still needed to pick the Page). LinkedIn: preferably the comment_urn from the listing; a bare ID is only looked up among the first 250 comments of the post. Post ID is always required.',
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['getPostComments'],
+					},
+				},
+			},
+			{
+				displayName: 'Page Size',
+				name: 'commentsLimit',
+				type: 'number',
+				typeOptions: { minValue: 0, maxValue: 50 },
+				default: 0,
+				description: 'Comments per page, 1-50. 0 = the platform default. LinkedIn\'s top-level listing ignores it; LinkedIn replies apply it.',
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['getPostComments'],
+					},
+				},
+			},
+			{
+				displayName: 'After (Cursor)',
+				name: 'commentsAfter',
+				type: 'string',
+				default: '',
+				description: 'The pagination.next_cursor value of the previous page, to read the next one. On LinkedIn replies it is a number (the offset of the next page).',
 				displayOptions: {
 					show: {
 						resource: ['instagram'],
@@ -2428,6 +2734,342 @@ export class UploadPost implements INodeType {
 						operation: ['createComment'],
 					},
 				},
+			},
+
+			// Account-wide AutoDM rules (Instagram)
+			{
+				displayName: 'User Identifier Name or ID',
+				name: 'autodmRuleProfile',
+				type: 'options',
+				noDataExpression: true,
+				required: true,
+				default: '',
+				description: 'Profile with the Instagram professional account connected. Choose from your created profiles. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				typeOptions: { loadOptionsMethod: 'getUserProfiles' },
+				displayOptions: { show: { resource: ['instagram'], operation: ['createAutodmRule'] } },
+			},
+			{
+				displayName: 'Reply Message',
+				name: 'autodmRuleReplyMessage',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The DM text (max 1,000 characters; 640 when buttons are added)',
+				typeOptions: { rows: 3 },
+				displayOptions: { show: { resource: ['instagram'], operation: ['createAutodmRule'] } },
+			},
+			{
+				displayName: 'Triggers',
+				name: 'autodmRuleTriggers',
+				type: 'multiOptions',
+				options: [
+					{ name: 'Comment', value: 'comment', description: 'A top-level comment on any post or reel of the account (private reply, one per comment, within 7 days)' },
+					{ name: 'DM Keyword', value: 'dm_keyword', description: 'Someone sends a DM containing one of the Trigger Keywords (required for this trigger)' },
+					{ name: 'Story Mention', value: 'story_mention', description: 'Someone mentions the account in their story (keywords do not apply: a mention carries no text)' },
+					{ name: 'Story Reply', value: 'story_reply', description: 'Someone replies to one of the account\'s stories' },
+				],
+				default: ['comment'],
+				description: 'What fires the rule. Story replies, story mentions and keyword DMs are answered inside Meta\'s 24-hour messaging window.',
+				displayOptions: { show: { resource: ['instagram'], operation: ['createAutodmRule'] } },
+			},
+			{
+				displayName: 'Trigger Keywords',
+				name: 'autodmRuleKeywords',
+				type: 'string',
+				default: '',
+				placeholder: 'guide, price, info',
+				description: 'Comma-separated, up to 20. Only events whose text contains one of them fire the rule (case- and accent-insensitive). Leave empty for a rule without a filter. Required for the DM Keyword trigger.',
+				displayOptions: { show: { resource: ['instagram'], operation: ['createAutodmRule'] } },
+			},
+			{
+				displayName: 'Buttons',
+				name: 'autodmRuleButtons',
+				type: 'fixedCollection',
+				typeOptions: { multipleValues: true, maxValue: 3 },
+				default: {},
+				placeholder: 'Add Button',
+				description: 'Up to 3 link buttons added to the DM',
+				options: [
+					{
+						name: 'button',
+						displayName: 'Button',
+						values: [
+							{ displayName: 'Title', name: 'title', type: 'string', default: '', description: 'Button label (max 20 characters)' },
+							{ displayName: 'URL', name: 'url', type: 'string', default: '', description: 'Link (http or https) the button opens' },
+						],
+					},
+				],
+				displayOptions: { show: { resource: ['instagram'], operation: ['createAutodmRule'] } },
+			},
+			{
+				displayName: 'Per-User Cooldown (Hours)',
+				name: 'autodmRuleCooldownHours',
+				type: 'number',
+				typeOptions: { minValue: 0, maxValue: 720, numberPrecision: 0 },
+				default: 24,
+				description: 'The same person gets at most one DM from this rule in this many hours, whatever they comment on or reply to. Whole number from 0 to 720. 0 turns it off for comments only: story replies, story mentions and keyword DMs always wait at least 24 hours, so two bots cannot answer each other in a loop.',
+				displayOptions: { show: { resource: ['instagram'], operation: ['createAutodmRule'] } },
+			},
+			{
+				displayName: 'Profile Username',
+				name: 'autodmRulesListProfile',
+				type: 'string',
+				default: '',
+				description: 'Only the rules of this profile. Leave empty for every rule of the account.',
+				displayOptions: { show: { resource: ['instagram'], operation: ['listAutodmRules'] } },
+			},
+			{
+				displayName: 'Rule ID',
+				name: 'autodmRuleId',
+				type: 'string',
+				required: true,
+				default: '',
+				placeholder: 'rule_4f1c2a9e0b7d4c51a2e3f6b8',
+				description: 'The rule_id returned by Create AutoDM Rule or List AutoDM Rules',
+				displayOptions: { show: { resource: ['instagram'], operation: ['pauseAutodmRule', 'resumeAutodmRule', 'deleteAutodmRule'] } },
+			},
+
+			// Operations for Direct Messages
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{ name: 'List Conversations', value: 'listDmConversations', action: 'List DM conversations', description: 'List the DM conversations of the account connected to a profile (Instagram or Bluesky), newest first, with participants and recent messages' },
+					{ name: 'Send DM', value: 'sendDm', action: 'Send a direct message', description: 'Send a direct message, or a sender action (mark read, react...), from the Instagram or Bluesky account of a profile. Sender actions spend no daily DM quota.' },
+				],
+				default: 'sendDm',
+				displayOptions: { show: { resource: ['dms'] } },
+			},
+			{
+				displayName: 'User Identifier Name or ID',
+				name: 'dmUser',
+				type: 'options',
+				noDataExpression: true,
+				required: true,
+				default: '',
+				description: 'Choose from your created profiles. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				typeOptions: { loadOptionsMethod: 'getUserProfiles' },
+				displayOptions: { show: { resource: ['dms'] } },
+			},
+			{
+				displayName: 'Platform',
+				name: 'dmPlatform',
+				type: 'options',
+				options: [
+					{ name: 'Bluesky', value: 'bluesky' },
+					{ name: 'Instagram', value: 'instagram' },
+				],
+				default: 'instagram',
+				description: 'Network of the account. Bluesky needs an app password created with "Allow access to your direct messages" (otherwise 403 bluesky_dm_scope_missing: create a new app password and reconnect Bluesky). Instagram needs the person to have written to the account in the last 24 hours.',
+				displayOptions: { show: { resource: ['dms'] } },
+			},
+			{
+				displayName: 'Recipient ID',
+				name: 'dmRecipientId',
+				type: 'string',
+				default: '',
+				description: 'Instagram: the Instagram-scoped ID of the person (from List Conversations or the dm_received webhook). Bluesky: handle (alice.bsky.social), DID (did:plc:...) or profile link; leave empty when Conversation ID is set.',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'] } },
+			},
+			{
+				displayName: 'Conversation ID',
+				name: 'dmConversationId',
+				type: 'string',
+				default: '',
+				description: 'Bluesky: send to this conversation (the ID from List Conversations) instead of looking it up from Recipient ID. Also works for group conversations.',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['bluesky'] } },
+			},
+			{
+				displayName: 'Message',
+				name: 'dmMessage',
+				type: 'string',
+				default: '',
+				description: 'Text to send. Required unless you send a Sender Action or share a Bluesky post. Bluesky: up to 1,000 characters (an emoji counts as one); links, #hashtags and up to 10 different @handle mentions become clickable.',
+				typeOptions: { rows: 3 },
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'] } },
+			},
+			{
+				displayName: 'Reply To (Message ID)',
+				name: 'dmReplyTo',
+				type: 'string',
+				default: '',
+				description: 'ID of a message in the same conversation to reply to',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'] } },
+			},
+			{
+				displayName: 'Sender Action',
+				name: 'dmInstagramSenderAction',
+				type: 'options',
+				options: [
+					{ name: 'Mark Seen', value: 'mark_seen' },
+					{ name: 'None', value: '' },
+					{ name: 'React', value: 'react' },
+					{ name: 'Typing Off', value: 'typing_off' },
+					{ name: 'Typing On', value: 'typing_on' },
+					{ name: 'Unreact', value: 'unreact' },
+				],
+				default: '',
+				description: 'Instead of (or with) a message. React and Unreact need Message ID.',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['instagram'] } },
+			},
+			{
+				displayName: 'Sender Action',
+				name: 'dmBlueskySenderAction',
+				type: 'options',
+				options: [
+					{ name: 'Accept Request', value: 'accept' },
+					{ name: 'Delete Message (For Me)', value: 'delete' },
+					{ name: 'Leave Conversation', value: 'leave' },
+					{ name: 'Mark Read', value: 'mark_read' },
+					{ name: 'Mute', value: 'mute' },
+					{ name: 'None', value: '' },
+					{ name: 'React', value: 'react' },
+					{ name: 'Unmute', value: 'unmute' },
+					{ name: 'Unreact', value: 'unreact' },
+				],
+				default: '',
+				description: 'An action on the conversation instead of a message. React, Unreact and Delete need Message ID; Mark Read takes it optionally (read up to that message). Pass Recipient ID or Conversation ID to say which conversation.',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['bluesky'] } },
+			},
+			{
+				displayName: 'Message ID',
+				name: 'dmMessageId',
+				type: 'string',
+				default: '',
+				description: 'The message the sender action applies to',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'] } },
+			},
+			{
+				displayName: 'Reaction',
+				name: 'dmReaction',
+				type: 'string',
+				default: '',
+				placeholder: '❤️',
+				description: 'Emoji for React / Unreact. Bluesky accepts a single emoji only (anything else: 400 bluesky_rejected, ReactionInvalidValue).',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'] } },
+			},
+			{
+				displayName: 'Share Bluesky Post URL',
+				name: 'dmBlueskySharePostUrl',
+				type: 'string',
+				default: '',
+				placeholder: 'https://bsky.app/profile/alice.bsky.social/post/3l5tt...',
+				description: 'A Bluesky post to share in the DM (bsky.app link or at:// URI). Bluesky chat takes no images, video or files.',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['bluesky'] } },
+			},
+			{
+				displayName: 'Buttons',
+				name: 'dmButtons',
+				type: 'fixedCollection',
+				typeOptions: { multipleValues: true, maxValue: 3 },
+				default: {},
+				placeholder: 'Add Button',
+				description: 'Up to 3 link buttons (Instagram)',
+				options: [
+					{
+						name: 'button',
+						displayName: 'Button',
+						values: [
+							{ displayName: 'Title', name: 'title', type: 'string', default: '', description: 'Button label (max 20 characters)' },
+							{ displayName: 'URL', name: 'url', type: 'string', default: '', description: 'Link (http or https) the button opens' },
+						],
+					},
+				],
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['instagram'] } },
+			},
+			{
+				displayName: 'Extra Fields (JSON)',
+				name: 'dmExtraFields',
+				type: 'json',
+				default: '',
+				description: 'Other Instagram DM fields, merged into the request body as is: attachments (objects with a type and a link or an attachment_id; types image, video, audio, file, like_heart, media_share), quick_replies (up to 13) or generic_template (up to 10 elements)',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['instagram'] } },
+			},
+			{
+				displayName: 'Page Size',
+				name: 'dmLimit',
+				type: 'number',
+				typeOptions: { minValue: 0, maxValue: 50 },
+				default: 0,
+				description: 'Conversations per page, 1-50 (Bluesky returns at most 25). 0 = the default (20).',
+				displayOptions: { show: { resource: ['dms'], operation: ['listDmConversations'] } },
+			},
+			{
+				displayName: 'Messages per Conversation',
+				name: 'dmMessagesLimit',
+				type: 'number',
+				typeOptions: { minValue: 0, maxValue: 25 },
+				default: 0,
+				description: 'Latest messages returned per conversation, 1-25. 0 = the default (10). On Bluesky 1 is the fastest page.',
+				displayOptions: { show: { resource: ['dms'], operation: ['listDmConversations'] } },
+			},
+			{
+				displayName: 'Cursor',
+				name: 'dmCursor',
+				type: 'string',
+				default: '',
+				description: 'The pagination.next_cursor value of the previous page',
+				displayOptions: { show: { resource: ['dms'], operation: ['listDmConversations'] } },
+			},
+			{
+				displayName: 'Since',
+				name: 'dmSince',
+				type: 'string',
+				default: '',
+				placeholder: '2026-10-20T12:00:00Z',
+				description: 'Only conversations with activity after this moment (Unix seconds, Unix milliseconds or ISO 8601)',
+				displayOptions: { show: { resource: ['dms'], operation: ['listDmConversations'] } },
+			},
+			{
+				displayName: 'Participant ID',
+				name: 'dmParticipantId',
+				type: 'string',
+				default: '',
+				description: 'Only your conversation with this person. Instagram: Instagram-scoped ID. Bluesky: handle or DID (reading never creates the conversation).',
+				displayOptions: { show: { resource: ['dms'], operation: ['listDmConversations'] } },
+			},
+			{
+				displayName: 'Conversation ID',
+				name: 'dmConversationFilterId',
+				type: 'string',
+				default: '',
+				description: 'Bluesky: only this conversation (direct or group)',
+				displayOptions: { show: { resource: ['dms'], operation: ['listDmConversations'], dmPlatform: ['bluesky'] } },
+			},
+			{
+				displayName: 'Messages Cursor',
+				name: 'dmMessagesCursor',
+				type: 'string',
+				default: '',
+				description: 'Bluesky, with Conversation ID: messages.paging.next_cursor of that conversation, to read older messages',
+				displayOptions: { show: { resource: ['dms'], operation: ['listDmConversations'], dmPlatform: ['bluesky'] } },
+			},
+			{
+				displayName: 'Status',
+				name: 'dmStatus',
+				type: 'options',
+				options: [
+					{ name: 'All', value: '' },
+					{ name: 'Accepted', value: 'accepted' },
+					{ name: 'Requests', value: 'request' },
+				],
+				default: '',
+				description: 'Bluesky: only message requests or only accepted conversations',
+				displayOptions: { show: { resource: ['dms'], operation: ['listDmConversations'], dmPlatform: ['bluesky'] } },
+			},
+			{
+				displayName: 'Read State',
+				name: 'dmReadState',
+				type: 'options',
+				options: [
+					{ name: 'All', value: '' },
+					{ name: 'Unread', value: 'unread' },
+				],
+				default: '',
+				description: 'Bluesky: only conversations with unread messages',
+				displayOptions: { show: { resource: ['dms'], operation: ['listDmConversations'], dmPlatform: ['bluesky'] } },
 			},
 
 			{
@@ -2783,7 +3425,7 @@ export class UploadPost implements INodeType {
 					name: 'linkedinTitle',
 					type: 'string',
 					default: '',
-					description: 'Optional override for LinkedIn title',
+					description: 'Optional override for LinkedIn title (the post text of Upload Text). LinkedIn mentions: @[Exact Page Name](urn:li:organization:ID), @[Name](urn:li:person:ID) or @company-vanity. A company name must match LinkedIn exactly, capitals included, or it is published as plain text; get the URN and name with Resolve LinkedIn Organization.',
 					displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['linkedin', '__manual_platform__'] } },
 				},
 				{
@@ -2926,7 +3568,7 @@ export class UploadPost implements INodeType {
 				name: 'linkedinDescription',
 				type: 'string',
 				default: '',
-				description: 'Override for LinkedIn post commentary. When empty we repeat the main title.',
+				description: 'Override for LinkedIn post commentary. When empty we repeat the main title. Put mentions here rather than only in the title (the title also becomes the images\' alt text). LinkedIn mentions: @[Exact Page Name](urn:li:organization:ID), @[Name](urn:li:person:ID) or @company-vanity. A company name must match LinkedIn exactly, capitals included, or it is published as plain text; get the URN and name with Resolve LinkedIn Organization.',
 				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['linkedin', '__manual_platform__'] } },
 			},
 			{
@@ -3567,6 +4209,27 @@ export class UploadPost implements INodeType {
 			},
 			{
 				displayName: 'User Identifier Name or ID',
+				name: 'linkedinResolveProfile',
+				type: 'options',
+				noDataExpression: true,
+				required: true,
+				default: '',
+				description: 'Profile whose LinkedIn connection makes the lookup. Choose from your created profiles. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				typeOptions: { loadOptionsMethod: 'getUserProfiles' },
+				displayOptions: { show: { operation: ['resolveLinkedinOrganization'] } },
+			},
+			{
+				displayName: 'LinkedIn Page',
+				name: 'linkedinResolveUrl',
+				type: 'string',
+				required: true,
+				default: '',
+				placeholder: 'https://www.linkedin.com/company/linkedin/',
+				description: 'Company, showcase or school Page URL, vanity name (with or without @), numeric ID or urn:li:organization:ID. Person profiles (/in/) cannot be resolved. Live lookups count against 60 per hour per account; cached Pages are free.',
+				displayOptions: { show: { operation: ['resolveLinkedinOrganization'] } },
+			},
+			{
+				displayName: 'User Identifier Name or ID',
 				name: 'gbpLocationsProfile',
 				type: 'options',
 				noDataExpression: true,
@@ -3809,6 +4472,99 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { operation: ['validateJwt'] } },
 			},
 
+			// Webhook delivery log
+			{
+				displayName: 'Event',
+				name: 'webhookDeliveriesEvent',
+				type: 'options',
+				options: [
+					{ name: 'Account Connected', value: 'social_account_connected' },
+					{ name: 'Account Disconnected', value: 'social_account_disconnected' },
+					{ name: 'All Events', value: '' },
+					{ name: 'Comment Received', value: 'comment_received' },
+					{ name: 'DM Received', value: 'dm_received' },
+					{ name: 'Re-Auth Required', value: 'social_account_reauth_required' },
+					{ name: 'Upload Completed', value: 'upload_completed' },
+				],
+				default: '',
+				description: 'Only deliveries of this event',
+				displayOptions: { show: { resource: ['users'], operation: ['listWebhookDeliveries'] } },
+			},
+			{
+				displayName: 'Status',
+				name: 'webhookDeliveriesStatus',
+				type: 'options',
+				options: [
+					{ name: 'All Statuses', value: '' },
+					{ name: 'Cancelled', value: 'cancelled', description: 'The webhook or the event subscription was removed' },
+					{ name: 'Delivered', value: 'delivered' },
+					{ name: 'Failed', value: 'failed', description: 'Gave up after 6 attempts, or refused with a 4xx' },
+					{ name: 'Pending', value: 'pending', description: 'A retry is scheduled' },
+				],
+				default: '',
+				description: 'Only deliveries in this state',
+				displayOptions: { show: { resource: ['users'], operation: ['listWebhookDeliveries'] } },
+			},
+			{
+				displayName: 'Request ID',
+				name: 'webhookDeliveriesRequestId',
+				type: 'string',
+				default: '',
+				description: 'Only the deliveries of one upload (request_id of the upload response)',
+				displayOptions: { show: { resource: ['users'], operation: ['listWebhookDeliveries'] } },
+			},
+			{
+				displayName: 'Job ID',
+				name: 'webhookDeliveriesJobId',
+				type: 'string',
+				default: '',
+				description: 'Only the deliveries of one scheduled or async job',
+				displayOptions: { show: { resource: ['users'], operation: ['listWebhookDeliveries'] } },
+			},
+			{
+				displayName: 'Profile Username',
+				name: 'webhookDeliveriesProfile',
+				type: 'string',
+				default: '',
+				description: 'Only the deliveries of that profile\'s webhook',
+				displayOptions: { show: { resource: ['users'], operation: ['listWebhookDeliveries'] } },
+			},
+			{
+				displayName: 'Page Size',
+				name: 'webhookDeliveriesLimit',
+				type: 'number',
+				typeOptions: { minValue: 1, maxValue: 100 },
+				default: 20,
+				description: 'Deliveries per page, 1-100, newest first',
+				displayOptions: { show: { resource: ['users'], operation: ['listWebhookDeliveries'] } },
+			},
+			{
+				displayName: 'Page',
+				name: 'webhookDeliveriesPage',
+				type: 'number',
+				typeOptions: { minValue: 1, maxValue: 50 },
+				default: 1,
+				description: 'Page number, 1-50. For older rows narrow the list with Status, Event or Request ID.',
+				displayOptions: { show: { resource: ['users'], operation: ['listWebhookDeliveries'] } },
+			},
+			{
+				displayName: 'Include Payload',
+				name: 'webhookDeliveriesIncludePayload',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to include the exact body that was sent with each delivery (left out by default to keep the list light; Get Webhook Delivery always includes it)',
+				displayOptions: { show: { resource: ['users'], operation: ['listWebhookDeliveries'] } },
+			},
+			{
+				displayName: 'Delivery ID',
+				name: 'webhookDeliveryId',
+				type: 'string',
+				required: true,
+				default: '',
+				description: 'The delivery_id from List Webhook Deliveries (the X-Upload-Post-Delivery header your endpoint received). Deliveries are kept for 7 days.',
+				displayOptions: { show: { resource: ['users'], operation: ['getWebhookDelivery', 'redeliverWebhook'] } },
+			},
+
 			// Update Notification Preferences
 			{
 				displayName: 'Webhook Enabled',
@@ -3832,10 +4588,12 @@ export class UploadPost implements INodeType {
 				name: 'webhookEvents',
 				type: 'multiOptions',
 				options: [
-					{ name: 'Upload Completed', value: 'upload_completed', description: 'When a post upload finishes (success or failure)' },
 					{ name: 'Account Connected', value: 'social_account.connected', description: 'When a social account is connected or reconnected' },
 					{ name: 'Account Disconnected', value: 'social_account.disconnected', description: 'When a social account is disconnected' },
+					{ name: 'Comment Received', value: 'comment_received', description: 'When a comment arrives on a connected Instagram, TikTok or LinkedIn Page account' },
+					{ name: 'DM Received', value: 'dm_received', description: 'When a direct message arrives on a connected Instagram or Bluesky account (Bluesky is checked every 5 minutes)' },
 					{ name: 'Re-Auth Required', value: 'social_account.reauth_required', description: 'When a social account needs re-authentication' },
+					{ name: 'Upload Completed', value: 'upload_completed', description: 'When a post upload finishes (success or failure)' },
 				],
 				default: ['upload_completed', 'social_account.connected', 'social_account.disconnected', 'social_account.reauth_required'],
 				description: 'Which webhook events to subscribe to',
@@ -4890,6 +5648,14 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { operation: ['uploadPhotos', 'uploadVideo', 'uploadText'], platform: ['google_business', '__manual_platform__'] } },
 			},
 
+			{
+				displayName: 'Bluesky Gallery',
+				name: 'blueskyGallery',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to publish up to 10 images as a Bluesky gallery (app.bsky.embed.gallery). Without it Bluesky takes the first 4 images; with more than 10 the first 10 are published and the response carries a warning.',
+				displayOptions: { show: { operation: ['uploadPhotos'], platform: ['bluesky', '__manual_platform__'] } },
+			},
 			{
 				displayName: 'Bluesky Alt Text',
 				name: 'blueskyAltText',
