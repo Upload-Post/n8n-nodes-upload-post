@@ -6418,7 +6418,7 @@ export class UploadPost implements INodeType {
 				name: 'youtubeHasPaidProductPlacement',
 				type: 'boolean',
 				default: false,
-				description: 'Whether this is a declaration for paid product placements (FTC compliance). Only for Upload Video.',
+				description: 'Whether this is a declaration for paid product placements (FTC compliance, shown as "Paid promotion" in YouTube Studio). YouTube does not document the flag as settable, so Upload-Post reads it back: check youtube_paid_product_placement.applied in the YouTube result, not only success. Only for Upload Video.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
