@@ -7,8 +7,8 @@ const root = path.join(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'nodes/UploadPost/UploadPost.node.ts'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
-test('package version is 0.5.0', () => {
-	assert.equal(pkg.version, '0.5.0');
+test('package version is 0.6.0', () => {
+	assert.equal(pkg.version, '0.6.0');
 });
 
 test('upload platforms include the credential channels from the current API', () => {
@@ -46,6 +46,7 @@ test('sends credential-platform fields the SDK allowlists', () => {
 		'instagram_alt_text',
 		'linkedin_disable_reshare',
 		'tiktok_is_ads_only',
+		'bluesky_gallery',
 	]) {
 		assert.match(source, new RegExp(field.replace(/[[\]]/g, '\\$&')));
 	}
@@ -67,6 +68,19 @@ test('exposes current API operations', () => {
 		'getTiktokLocations',
 		'getTiktokSettings',
 		'testNotifications',
+		'listWebhookDeliveries',
+		'getWebhookDelivery',
+		'redeliverWebhook',
+		'createAutodmRule',
+		'listAutodmRules',
+		'pauseAutodmRule',
+		'resumeAutodmRule',
+		'deleteAutodmRule',
+		'sendDm',
+		'listDmConversations',
+		'resolveLinkedinOrganization',
+		'dm_received',
+		'comment_received',
 	]) {
 		assert.match(source, new RegExp(`value: '${operation}'`));
 	}
@@ -81,4 +95,13 @@ test('compiled node description includes the new operations', () => {
 	assert.match(compiled, /uploadposts\/comments\/create/);
 	assert.match(compiled, /uploadposts\/tiktok\/music\/search/);
 	assert.match(compiled, /uploadposts\/google-business\/locations/);
+	assert.match(compiled, /uploadposts\/webhooks\/deliveries/);
+	assert.match(compiled, /uploadposts\/autodms\/rules/);
+	assert.match(compiled, /uploadposts\/dms\/send/);
+	assert.match(compiled, /uploadposts\/linkedin\/resolve-organization/);
+});
+
+test('Bluesky gallery is documented with the current 10-image limit', () => {
+	assert.match(source, /up to 10 images as a Bluesky gallery/);
+	assert.doesNotMatch(source, /up to 20 images/i);
 });

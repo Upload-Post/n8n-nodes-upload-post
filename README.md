@@ -75,7 +75,8 @@ The node provides the following operations grouped for clarity:
   - Supported: Facebook, Instagram, LinkedIn, Pinterest, Reddit, Threads, TikTok, X, YouTube. Analytics are not available for Bluesky, Discord, Google Business or Telegram.
 - **Get Post Analytics**: Per-post metrics for an upload, by `request_id`.
   - Parameters: Request ID, Platform (optional filter).
-  - On TikTok, `post_metrics` also carries `retention`, `impression_sources`, `audience_types`, `new_followers`, `reach` and the watch times.
+  - On TikTok, `post_metrics` also carries `retention`, `impression_sources`, `audience_types`, `new_followers`, `reach` and the watch times, plus `original_publish_id`.
+  - TikTok drafts (`MEDIA_UPLOAD`): metrics arrive once the creator publishes the draft as **public** from the TikTok app (TikTok gives no post ID for private posts). Until then `post_metrics_error` says it is still in the inbox; after 30 days without a post, read it with **Get Post Analytics by Platform ID**.
 - **Get Post Analytics by Platform ID**: Per-post metrics for a post published outside Upload-Post.
   - Parameters: Platform Post ID, Platform, Profile Username.
 - **Get Cached Post Analytics**: Replays per-post metrics already fetched, instead of querying the platforms again, so it is not subject to the live analytics rate limit (100 requests / 5 minutes). Only contains posts previously fetched through a live per-post endpoint; there is no background refresh, so captured_at is the last time that post was read live.
@@ -90,6 +91,10 @@ The node provides the following operations grouped for clarity:
   - Parameters: Profile Username.
 - **Get Media**: List published media for a connected network.
 - **Get Google Business Locations**: List locations for a Google Business Profile.
+- **Resolve LinkedIn Organization**: Turn any LinkedIn company, showcase or school Page (URL, vanity name, numeric ID or `urn:li:organization:ID`) into `{urn, id, name, vanity_name, mention}`.
+  - Parameters: User Identifier (its LinkedIn connection makes the lookup), LinkedIn Page.
+  - Paste `mention` (`@[Exact Name](urn:li:organization:ID)`) into the LinkedIn post text. LinkedIn only links a company mention whose name matches the Page **exactly, capitals included**; otherwise it is published as plain text. `@company-vanity` in the post text is also resolved on publish.
+  - Person profiles (`/in/…`) cannot be resolved (`400 linkedin_person_not_resolvable`). Live lookups count against 60 per hour per account; cached Pages (`cached: true`) are free.
 - **Get TikTok Trending Music / Search TikTok Music / Get TikTok Locations / Get TikTok Publishing Settings**: TikTok discovery helpers (music IDs, location IDs, creator capabilities).
 
 ### Post Actions
@@ -124,13 +129,21 @@ The node provides the following operations grouped for clarity:
 - **Validate JWT (for platform integration)**: Validate a connection token from your backend.
   - Parameters: JWT token (password field).
   - The API response is returned as-is; its `profile` object also carries the `ui_labels` map configured for that profile.
+- **Get / Update Notification Preferences, Test Notifications**: Webhook URL and events (`upload_completed`, `social_account.*`, `dm_received`, `comment_received`).
+  - Webhooks are delivered **at least once**: a timeout, connection error, `5xx`, `408` or `429` is retried up to 6 attempts over about 8.5 hours (+1 min, +5 min, +30 min, +2 h, +6 h) with the same body and the same `X-Upload-Post-Delivery` header, so deduplicate by that header. `X-Upload-Post-Attempt` carries the attempt number. Other `4xx` answers are final.
+- **List Webhook Deliveries**: The last 7 days of outgoing webhooks, newest first, with status (`pending`, `delivered`, `failed`, `cancelled`), attempts and the HTTP code your endpoint answered.
+  - Parameters: Event, Status, Request ID, Job ID, Profile Username (all optional filters), Page Size (1-100, default 20), Page (1-50), Include Payload.
+- **Get Webhook Delivery**: One delivery with its attempts and the exact payload that was sent.
+- **Redeliver Webhook**: Send a logged delivery again now, to the webhook URL configured today. It is a new delivery with its own ID (`X-Upload-Post-Redelivery-Of` names the original). `409` when there is no webhook, event subscription or allowed URL to send it to.
 
 ### Comment Actions
 The comment endpoints are shaped like the rest of the API: **one endpoint per question, with a `platform` parameter** that says which connected network is being asked. There is no endpoint per social network.
-- **Get Post Comments**: Comments on a post from the network given by `Platform` (Instagram, Facebook, YouTube, LinkedIn or TikTok).
-  - Parameters: User Identifier, Platform, Post ID or URL, Comment ID (optional).
+- **Get Post Comments**: Comments on a post from the network given by `Platform`.
+  - Parameters: User Identifier, Platform, Post ID or URL, Comment ID (optional), Page Size (optional, 1-50), After (Cursor) (optional, the `pagination.next_cursor` of the previous page).
   - Instagram and Facebook accept the media ID or the post URL, YouTube the video ID, LinkedIn the post URN, TikTok the video ID. TikTok has no URL lookup, so pasting a URL fails with a descriptive error instead of an upstream one.
-  - Fill **Comment ID** to get the replies to that comment instead of the top-level comments of the post. It is the same question with one parameter more, not a separate operation.
+  - Fill **Comment ID** to get the replies to that comment instead of the top-level comments of the post. It is the same question with one parameter more, not a separate operation. Replies work on Instagram, Facebook, LinkedIn (company Pages), TikTok, Threads and YouTube; X and Bluesky answer `platform_not_supported`.
+    - Instagram: the numeric comment ID. Facebook: the `{post}_{comment}` ID; Post ID is still needed (its `{page_id}_` prefix picks the Page). LinkedIn: preferably the `comment_urn` from the listing; a bare ID is only looked up among the post's first 250 comments (`404 linkedin_comment_not_found` otherwise).
+    - Errors: `400 invalid_comment_id` (wrong format), `404 comment_not_found` (Instagram/Facebook), `403 linkedin_personal_not_supported` / `linkedin_page_access_denied`. A comment without replies is a `200` with an empty list.
 - **Comment Action**: Moderate one comment — hide, unhide, like, unlike, pin or unpin it.
   - Parameters: User Identifier, Platform, Comment ID, Action, Post ID (shown only when it is needed).
   - Each action carries its own inverse, so there is no separate toggle: `hide`/`unhide`, `like`/`unlike`, `pin`/`unpin`.
@@ -140,6 +153,22 @@ The comment endpoints are shaped like the rest of the API: **one endpoint per qu
 - **Public Reply to Comment**: Public reply under the comment. Instagram only.
 - **Create Comment**: Top-level comment or reply (Instagram replies only; TikTok always needs the video ID).
 - **Delete Comment**: Delete a comment you own or that is on your post.
+- **Create / List / Pause / Resume / Delete AutoDM Rule** (Instagram, account-wide): one rule answers with a DM every comment on any post or reel of the account, present and future, plus story replies, story mentions and DMs with a keyword. Rules never expire, do not count towards the 2 monitors per profile per day, and work from Meta webhooks only.
+  - Create parameters: User Identifier, Reply Message (max 1,000 characters; 640 with buttons), Triggers (`comment`, `story_reply`, `story_mention`, `dm_keyword`), Trigger Keywords (comma-separated, up to 20; required for `dm_keyword`), Buttons (up to 3), Per-User Cooldown (whole hours, 0-720, default 24; story and DM triggers always wait at least 24 h).
+  - Up to 10 rules per Instagram account. A post with its own monitor is answered by that monitor only. Pace: 25 DMs per account every 15 minutes plus the plan's daily DM allowance; what does not fit is queued for up to 24 hours.
+  - List shows each rule's `status` (`active`, `paused`, `reconnect_required`, `stopped` with `stop_reason`, `disabled`), `stats`, `pending` and `webhook` (`receiving_events`, `last_event_at`, `hint`): if Meta stops sending events to an account, you see it there.
+  - Errors: `502 webhook_subscription_failed` (reconnect Instagram), `409 duplicate_rule` / `rule_limit_reached` / `rule_creation_in_progress` / `rule_stopped`, `503 account_rules_disabled`.
+
+### Direct Message Actions
+- **Send DM**: Send a direct message from the Instagram or Bluesky account of a profile, or a sender action.
+  - Parameters: User Identifier, Platform, Recipient ID, Message, Reply To, Sender Action, Message ID, Reaction; Instagram: Buttons, Extra Fields (JSON: `attachments`, `quick_replies`, `generic_template`); Bluesky: Conversation ID, Share Bluesky Post URL.
+  - Instagram: the person must have written to the account in the last 24 hours. Sender actions: `typing_on`, `typing_off`, `mark_seen`, `react`, `unreact`.
+  - Bluesky: the account must be connected with an app password created with **"Allow access to your direct messages"** (otherwise `403 bluesky_dm_scope_missing`: create one in Bluesky > Settings > Privacy and security > App passwords and reconnect). Recipient ID is a handle, DID or profile link. Messages up to 1,000 characters, up to 10 clickable `@mentions`; a Bluesky post can be shared; no images or files. Sender actions: `mark_read`, `react`/`unreact` (a single emoji), `delete` (for you), `accept`, `mute`, `unmute`, `leave`.
+  - Bluesky `504 bluesky_send_unconfirmed` (`retryable: false`) means the DM may have gone out: read the conversation before sending again. `403 bluesky_recipient_unavailable` carries the `reason` and spends no quota.
+- **List Conversations**: DM conversations newest first, with participants and recent messages.
+  - Parameters: User Identifier, Platform, Page Size, Messages per Conversation, Cursor, Since, Participant ID; Bluesky: Conversation ID, Messages Cursor, Status (`request`/`accepted`), Read State (`unread`).
+  - Bluesky returns at most 25 conversations per page; when a page takes too long the rest come with only their latest message and `messages_truncated: true`.
+  - New DMs can also reach you as the `dm_received` webhook (Bluesky is checked every 5 minutes).
 
 ### Insight Actions
 Two more questions with a `platform` parameter, not two TikTok endpoints. A network that cannot answer a question replies with `platform_not_supported` and the list of the ones that can; today that network is TikTok, whose profile needs the `profile_analytics` capability (see the `capabilities` array returned by **List Users**).
@@ -192,6 +221,7 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 - **Link (Text)**: URL for link preview in text posts.
 
 #### LinkedIn
+- **Mentions**: write `@[Exact Page Name](urn:li:organization:ID)`, `@[Name](urn:li:person:ID)` or `@company-vanity` in the LinkedIn post text (put them in the description for photos and videos). Get the URN and exact name with **Resolve LinkedIn Organization**.
 - **Page Selection**: Dynamic picker for organization pages ("Me" option for personal profiles).
 - **Visibility (Photos/Video)**: Public, Connections, Logged In, Container (video only).
 - **Video Description**: User commentary for video posts.
@@ -272,6 +302,9 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 
 #### Reddit
 - **Text Options**: Subreddit (without r/), flair ID for post categorization.
+
+#### Bluesky
+- **Images**: 4 per post by default (more are dropped with a warning). Turn on **Bluesky Gallery** (Upload Photo(s)) to publish up to 10 images as a gallery; with more than 10 the first 10 are published and the response carries a warning.
 
 ### Validation Rules & Restrictions
 
