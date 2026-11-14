@@ -377,6 +377,14 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 		}
 	}
 
+	// Cross-network paid partnership. The API maps it to TikTok branded content,
+	// YouTube paid promotion and X paid partnership; other networks answer with a
+	// warning and still publish. Only sent when on, so existing workflows are unchanged.
+	const paidPartnership = ctx.node.getNodeParameter('paidPartnership', ctx.itemIndex, false) as boolean;
+	if (paidPartnership) {
+		formData.paid_partnership = 'true';
+	}
+
 	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean;
 	formData.async_upload = String(uploadAsync);
 
@@ -422,6 +430,10 @@ const applyPinterestOptions = (ctx: ExecutionContext, operation: UploadOperation
 	const pinterestLink = ctx.node.getNodeParameter('pinterestLink', ctx.itemIndex, '') as string;
 	if (pinterestLink) {
 		formData.pinterest_link = pinterestLink;
+	}
+	const pinterestSponsorId = ctx.node.getNodeParameter('pinterestSponsorId', ctx.itemIndex, '') as string;
+	if (pinterestSponsorId) {
+		formData.pinterest_sponsor_id = pinterestSponsorId;
 	}
 	const pinterestBoardSectionId = ctx.node.getNodeParameter('pinterestBoardSectionId', ctx.itemIndex, '') as string;
 	if (pinterestBoardSectionId) {
@@ -507,6 +519,11 @@ const applyFacebookOptions = (ctx: ExecutionContext, operation: UploadOperation,
 				: selection;
 	}
 	if (resolvedValue) formData.facebook_page_id = resolvedValue;
+
+	const facebookSponsorId = ctx.node.getNodeParameter('facebookSponsorId', ctx.itemIndex, '') as string;
+	if (facebookSponsorId) {
+		formData.facebook_sponsor_id = facebookSponsorId;
+	}
 
 	if (operation === 'uploadVideo') {
 		const facebookVideoState = ctx.node.getNodeParameter('facebookVideoState', ctx.itemIndex, '') as string;
@@ -3752,6 +3769,14 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument'] } },
 			},
 			{
+				displayName: 'Paid Partnership',
+				name: 'paidPartnership',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to mark the post as paid or sponsored. Sets the native label on TikTok (branded content), YouTube (paid promotion) and X (paid partnership). Facebook and Pinterest also need a Sponsor ID. Instagram, LinkedIn, Threads, Reddit, Bluesky and Google Business have no native label: the response carries a warning and the post still publishes. The network-specific toggle wins when both are set.',
+				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+			},
+			{
 				displayName: 'Max Posts Per Slot',
 				name: 'maxPostsPerSlot',
 				type: 'number',
@@ -4819,6 +4844,19 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
+						platform: ['facebook', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'Facebook Sponsor ID',
+				name: 'facebookSponsorId',
+				type: 'string',
+				default: '',
+				description: 'Numeric ID of the sponsor\'s Page, for the branded content tag. Works on Page photos, Page videos (Facebook Media Type = Video) and text posts. Reels and Stories have no sponsor field. The Page needs access to Meta\'s branded content tool.',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
 						platform: ['facebook', '__manual_platform__']
 					},
 				},
@@ -6558,6 +6596,19 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional link to attach to the Pinterest pin',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos', 'uploadVideo'],
+						platform: ['pinterest', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'Pinterest Sponsor ID',
+				name: 'pinterestSponsorId',
+				type: 'string',
+				default: '',
+				description: 'Numeric ID of the sponsor\'s Pinterest account, for the paid partnership label. Pinterest keeps this to a closed beta.',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo'],

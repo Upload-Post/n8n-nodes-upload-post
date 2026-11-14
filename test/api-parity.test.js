@@ -7,8 +7,8 @@ const root = path.join(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'nodes/UploadPost/UploadPost.node.ts'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
-test('package version is 0.6.0', () => {
-	assert.equal(pkg.version, '0.6.0');
+test('package version is 0.7.0', () => {
+	assert.equal(pkg.version, '0.7.0');
 });
 
 test('upload platforms include the credential channels from the current API', () => {
@@ -104,4 +104,20 @@ test('compiled node description includes the new operations', () => {
 test('Bluesky gallery is documented with the current 10-image limit', () => {
 	assert.match(source, /up to 10 images as a Bluesky gallery/);
 	assert.doesNotMatch(source, /up to 20 images/i);
+});
+
+test('paid partnership and sponsor ids reach the API form', () => {
+	// Cross-network flag: only sent when on, for photos, videos and text.
+	assert.match(source, /name: 'paidPartnership'[\s\S]{0,1500}operation: \['uploadPhotos','uploadVideo','uploadText'\]/);
+	assert.match(source, /getNodeParameter\('paidPartnership', ctx\.itemIndex, false\) as boolean;\s+if \(paidPartnership\) \{\s+formData\.paid_partnership = 'true';/);
+	// Facebook and Pinterest need the sponsor's id.
+	assert.match(source, /name: 'facebookSponsorId'[\s\S]{0,900}operation: \['uploadPhotos', 'uploadVideo', 'uploadText'\]/);
+	assert.match(source, /formData\.facebook_sponsor_id = facebookSponsorId/);
+	assert.match(source, /name: 'pinterestSponsorId'[\s\S]{0,600}operation: \['uploadPhotos', 'uploadVideo'\]/);
+	assert.match(source, /formData\.pinterest_sponsor_id = pinterestSponsorId/);
+});
+
+test('paid partnership is never sent unless it is switched on', () => {
+	assert.doesNotMatch(source, /formData\.paid_partnership = String\(/);
+	assert.doesNotMatch(source, /formData\.paid_partnership = 'false'/);
 });
