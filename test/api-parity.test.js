@@ -7,8 +7,25 @@ const root = path.join(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'nodes/UploadPost/UploadPost.node.ts'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
-test('package version is 0.6.0', () => {
-	assert.equal(pkg.version, '0.6.0');
+test('package version is 0.7.0', () => {
+	assert.equal(pkg.version, '0.7.0');
+});
+
+test('paid partnership: switch and sponsor ids are properties and are sent as the API names them', () => {
+	for (const [property, field] of [
+		['paidPartnership', 'paid_partnership'],
+		['facebookSponsorId', 'facebook_sponsor_id'],
+		['pinterestSponsorId', 'pinterest_sponsor_id'],
+	]) {
+		assert.match(source, new RegExp(`name: '${property}'`), `${property} is not a node property`);
+		assert.match(source, new RegExp(`getNodeParameter\\('${property}'`), `${property} is never read`);
+		assert.match(source, new RegExp(`formData\\.${field} = `), `${field} is never sent`);
+	}
+});
+
+test('paid partnership is only sent when switched on, so existing workflows are unchanged', () => {
+	assert.match(source, /if \(paidPartnership\) formData\.paid_partnership = 'true';/);
+	assert.doesNotMatch(source, /formData\.paid_partnership = String\(/);
 });
 
 test('upload platforms include the credential channels from the current API', () => {
