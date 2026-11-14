@@ -353,6 +353,11 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 		formData.reply_to_id = replyToId;
 	}
 
+	// Cross-network paid-partnership switch (TikTok branded content, YouTube paid promotion, X paid
+	// partnership). Only sent when on, so a workflow that does not use it sends exactly what it did.
+	const paidPartnership = ctx.node.getNodeParameter('paidPartnership', ctx.itemIndex, false) as boolean;
+	if (paidPartnership) formData.paid_partnership = 'true';
+
 	const altText = ctx.node.getNodeParameter('altText', ctx.itemIndex, '') as string;
 	if (altText) {
 		formData.alt_text = altText;
@@ -422,6 +427,10 @@ const applyPinterestOptions = (ctx: ExecutionContext, operation: UploadOperation
 	const pinterestLink = ctx.node.getNodeParameter('pinterestLink', ctx.itemIndex, '') as string;
 	if (pinterestLink) {
 		formData.pinterest_link = pinterestLink;
+	}
+	const pinterestSponsorId = ctx.node.getNodeParameter('pinterestSponsorId', ctx.itemIndex, '') as string;
+	if (pinterestSponsorId) {
+		formData.pinterest_sponsor_id = pinterestSponsorId;
 	}
 	const pinterestBoardSectionId = ctx.node.getNodeParameter('pinterestBoardSectionId', ctx.itemIndex, '') as string;
 	if (pinterestBoardSectionId) {
@@ -539,6 +548,8 @@ const applyFacebookOptions = (ctx: ExecutionContext, operation: UploadOperation,
 
 	const facebookPlaceId = ctx.node.getNodeParameter('facebookPlaceId', ctx.itemIndex, '') as string;
 	if (facebookPlaceId) formData.facebook_place_id = facebookPlaceId;
+	const facebookSponsorId = ctx.node.getNodeParameter('facebookSponsorId', ctx.itemIndex, '') as string;
+	if (facebookSponsorId) formData.facebook_sponsor_id = facebookSponsorId;
 	if (operation === 'uploadPhotos') {
 		const facebookAltText = ctx.node.getNodeParameter('facebookAltText', ctx.itemIndex, '') as string;
 		if (facebookAltText) formData.facebook_alt_text = facebookAltText;
@@ -570,6 +581,13 @@ const applySharedTiktokFields = (ctx: ExecutionContext, formData: IDataObject) =
 	if (isAiGenerated) formData.tiktok_is_ai_generated = 'true';
 };
 
+// The API lets a network's own field beat the paid_partnership switch, and these two toggles
+// default to false, so an unticked one sent as "false" would cancel the switch. With the switch
+// on, an unticked toggle is left out and the API applies the switch; a ticked one still goes.
+const setOwnPaidToggle = (formData: IDataObject, field: string, value: boolean) => {
+	if (value || formData.paid_partnership !== 'true') formData[field] = String(value);
+};
+
 const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, formData: IDataObject) => {
 	if (operation === 'uploadPhotos') {
 		const autoAddMusic = ctx.node.getNodeParameter('tiktokAutoAddMusic', ctx.itemIndex, false) as boolean;
@@ -581,7 +599,7 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 
 		formData.auto_add_music = String(autoAddMusic);
 		formData.disable_comment = String(disableComment);
-		formData.brand_content_toggle = String(brandContentToggle);
+		setOwnPaidToggle(formData, 'brand_content_toggle', brandContentToggle);
 		formData.brand_organic_toggle = String(brandOrganicToggle);
 		formData.photo_cover_index = photoCoverIndex;
 		if (photoDescription && formData.description === undefined) {
@@ -605,7 +623,7 @@ const applyTiktokOptions = (ctx: ExecutionContext, operation: UploadOperation, f
 		formData.disable_comment = String(disableComment);
 		formData.disable_stitch = String(disableStitch);
 		formData.cover_timestamp = coverTimestamp;
-		formData.brand_content_toggle = String(brandContentToggle);
+		setOwnPaidToggle(formData, 'brand_content_toggle', brandContentToggle);
 		formData.brand_organic_toggle = String(brandOrganicToggle);
 		formData.is_aigc = String(isAigc);
 		if (postMode) formData.post_mode = postMode;
@@ -736,7 +754,7 @@ const applyYoutubeOptions = async (ctx: ExecutionContext, formData: IDataObject)
 	if (defaultAudioLanguage) formData.defaultAudioLanguage = defaultAudioLanguage;
 	if (allowedCountries) formData.allowedCountries = allowedCountries;
 	if (blockedCountries) formData.blockedCountries = blockedCountries;
-	formData.hasPaidProductPlacement = String(hasPaidProductPlacement);
+	setOwnPaidToggle(formData, 'hasPaidProductPlacement', hasPaidProductPlacement);
 	if (recordingDate) formData.recordingDate = recordingDate;
 	if (playlistId) formData.youtube_playlist_id = playlistId;
 
@@ -3372,6 +3390,14 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
 			},
 			{
+				displayName: 'Paid Partnership',
+				name: 'paidPartnership',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to mark the post as paid or sponsored on every selected network that has a native label: TikTok branded content (direct posts only, not with "Only Me" privacy), YouTube paid promotion and X paid partnership. A network\'s own toggle also works. Instagram, LinkedIn and Threads have no API field for it: the result then carries a warning. Facebook needs the Facebook Sponsor ID and Pinterest the Pinterest Sponsor ID.',
+				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+			},
+			{
 				displayName: 'Reply To ID',
 				name: 'replyToId',
 				type: 'string',
@@ -4726,6 +4752,14 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Facebook place ID to tag',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['facebook', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Facebook Sponsor ID',
+				name: 'facebookSponsorId',
+				type: 'string',
+				default: '',
+				description: 'Page ID (digits) of the sponsor, for Facebook\'s branded content tag. Works on Page photos, Page videos (media type Video) and text posts, not on Reels or Stories. The Page needs access to Meta\'s branded content tool.',
 				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['facebook', '__manual_platform__'] } },
 			},
 			{
@@ -6418,7 +6452,7 @@ export class UploadPost implements INodeType {
 				name: 'youtubeHasPaidProductPlacement',
 				type: 'boolean',
 				default: false,
-				description: 'Whether this is a declaration for paid product placements (FTC compliance). Only for Upload Video.',
+				description: 'Whether this is a declaration for paid product placements (FTC compliance). Only for Upload Video. If YouTube visibly did not keep it, the result carries a warning',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
@@ -6558,6 +6592,19 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional link to attach to the Pinterest pin',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos', 'uploadVideo'],
+						platform: ['pinterest', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'Pinterest Sponsor ID',
+				name: 'pinterestSponsorId',
+				type: 'string',
+				default: '',
+				description: 'Account ID (digits) of the sponsor, for a Pinterest paid partnership. Pinterest keeps this to a closed beta.',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo'],
