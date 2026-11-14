@@ -380,6 +380,11 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 	const uploadAsync = ctx.node.getNodeParameter('uploadAsync', ctx.itemIndex) as boolean;
 	formData.async_upload = String(uploadAsync);
 
+	// Cross-network paid partnership: TikTok, YouTube and X take it natively; the other
+	// networks get a warning in the response. Only sent when switched on.
+	const paidPartnership = ctx.node.getNodeParameter('paidPartnership', ctx.itemIndex, false) as boolean;
+	if (paidPartnership && operation !== 'uploadDocument') formData.paid_partnership = 'true';
+
 	const rawPlatforms = ctx.node.getNodeParameter('platform', ctx.itemIndex) as string[];
 	const platforms = getFilteredPlatforms(operation, Array.isArray(rawPlatforms) ? rawPlatforms : []);
 	formData['platform[]'] = platforms;
@@ -426,6 +431,10 @@ const applyPinterestOptions = (ctx: ExecutionContext, operation: UploadOperation
 	const pinterestBoardSectionId = ctx.node.getNodeParameter('pinterestBoardSectionId', ctx.itemIndex, '') as string;
 	if (pinterestBoardSectionId) {
 		formData.pinterest_board_section_id = pinterestBoardSectionId;
+	}
+	const pinterestSponsorId = ctx.node.getNodeParameter('pinterestSponsorId', ctx.itemIndex, '') as string;
+	if (pinterestSponsorId) {
+		formData.pinterest_sponsor_id = pinterestSponsorId;
 	}
 	if (operation === 'uploadVideo') {
 		const pinterestCoverImageUrl = ctx.node.getNodeParameter('pinterestCoverImageUrl', ctx.itemIndex, '') as string;
@@ -539,6 +548,9 @@ const applyFacebookOptions = (ctx: ExecutionContext, operation: UploadOperation,
 
 	const facebookPlaceId = ctx.node.getNodeParameter('facebookPlaceId', ctx.itemIndex, '') as string;
 	if (facebookPlaceId) formData.facebook_place_id = facebookPlaceId;
+	// Sponsor's Page id for Meta's branded content tag (the API skips Reels and Stories with a warning).
+	const facebookSponsorId = ctx.node.getNodeParameter('facebookSponsorId', ctx.itemIndex, '') as string;
+	if (facebookSponsorId) formData.facebook_sponsor_id = facebookSponsorId;
 	if (operation === 'uploadPhotos') {
 		const facebookAltText = ctx.node.getNodeParameter('facebookAltText', ctx.itemIndex, '') as string;
 		if (facebookAltText) formData.facebook_alt_text = facebookAltText;
@@ -3772,6 +3784,18 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
+				displayName: 'Paid Partnership',
+				name: 'paidPartnership',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to mark the post as paid or sponsored. TikTok (Direct Post, not private), YouTube and X get their native label; other networks add a warning to the response. Instagram and Facebook Reels have no native label through the API. A network\'s own option (TikTok Brand Content Toggle, YouTube Has Paid Product Placement, X Paid Partnership) wins when set.',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos','uploadVideo','uploadText']
+					}
+				},
+			},
+			{
 				displayName: 'Idempotency Key',
 				name: 'idempotencyKey',
 				type: 'string',
@@ -4726,6 +4750,14 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Facebook place ID to tag',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['facebook', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Facebook Sponsor Page ID',
+				name: 'facebookSponsorId',
+				type: 'string',
+				default: '',
+				description: 'Numeric Page ID of the sponsor, to apply Meta\'s branded content tag. Works on Page photos, Page videos (Media Type Video) and text/link posts; Reels and Stories have no sponsor field. The Page needs access to Meta\'s branded content tool.',
 				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo','uploadText'], platform: ['facebook', '__manual_platform__'] } },
 			},
 			{
@@ -6558,6 +6590,19 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				default: '',
 				description: 'Optional link to attach to the Pinterest pin',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos', 'uploadVideo'],
+						platform: ['pinterest', '__manual_platform__']
+					}
+				},
+			},
+			{
+				displayName: 'Pinterest Sponsor Account ID',
+				name: 'pinterestSponsorId',
+				type: 'string',
+				default: '',
+				description: 'Numeric account ID of the sponsor, for a paid partnership Pin. Pinterest only enables it for accounts in its closed beta.',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos', 'uploadVideo'],
