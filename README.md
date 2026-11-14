@@ -37,9 +37,9 @@ The node provides the following operations grouped for clarity:
   - Common parameters: User Identifier, Platform Names or IDs, Title / Main Content, Description (optional), Photos (Files or URLs), Scheduled Date (optional).
   - Title/Description overrides per platform, including Bluesky, Slack, Mastodon, Nostr, Lemmy, Dev.to, Hashnode, WordPress, Whop and Listmonk.
   - Platform-specific parameters available for: Bluesky, Discord, Facebook, Google Business, Instagram, Lemmy, LinkedIn, Mastodon, Pinterest, Reddit, Telegram, Threads, TikTok, WordPress, X (Twitter).
-  - **Pinterest**: Requires Board selection via dynamic selector.
+  - **Pinterest**: Requires Board selection via dynamic selector. Optional Sponsor ID for a paid partnership (Pinterest closed beta).
   - **Instagram**: Media Type (Image/Stories), TikTok: Auto-add music, disable comments, brand content toggles.
-  - **Facebook**: Page selection via dynamic selector.
+  - **Facebook**: Page selection via dynamic selector. Optional Sponsor ID for Facebook's branded content tag (Page photos, videos and text posts).
   - **LinkedIn**: Visibility settings (Photos only), Page selection via dynamic selector.
   - **X (Twitter)**: Tagged user IDs, reply settings, geo place ID.
 
@@ -49,11 +49,11 @@ The node provides the following operations grouped for clarity:
   - Title/Description overrides per platform: `instagram_title`, `facebook_title`, `tiktok_title`, `linkedin_title`, `x_title`, `youtube_title`, `pinterest_title`.
   - Platform-specific parameters available for: Bluesky, Discord, Facebook, Google Business, Instagram, LinkedIn, Mastodon, Pinterest, Reddit, Telegram, Threads, TikTok, WordPress, X (Twitter), YouTube.
   - **YouTube**: Custom thumbnail (URL/binary), tags, category, privacy, embeddable, license, public stats, made for kids, synthetic media declaration, geo-restrictions, paid product placement, recording date, default language/audio language.
-  - **Facebook**: Page selection, video state (Published/Draft), media type (Reels/Stories).
+  - **Facebook**: Page selection, video state (Published/Draft), media type (Reels/Stories/Video), Sponsor ID for the branded content tag (Page videos; Reels and Stories have no sponsor field).
   - **Instagram**: Media type (Reels/Stories), share to feed, collaborators, cover URL, audio name, user tags, location ID, thumb offset.
   - **TikTok**: Privacy level, disable duet/stitch/comments, cover timestamp, brand content toggles, AI-generated content flag, post mode.
   - **LinkedIn**: Visibility settings, Page selection, video description.
-  - **Pinterest**: Board selection, cover image options (URL/base64/keyframe).
+  - **Pinterest**: Board selection, cover image options (URL/base64/keyframe), Sponsor ID (paid partnership, closed beta).
   - **X (Twitter)**: Tagged user IDs, reply settings, nullcast, place ID, long text handling.
 
 - **Upload Text**: Upload a text-based post to supported platforms.
@@ -235,6 +235,12 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 - **Photo Options**: Auto-add music, disable comments, photo cover index, brand content toggles (paid partnerships/third-party brands vs own business).
 - **Video Options**: Privacy level (Public/Mutual Friends/Followers/Self), disable duet/stitch/comments, cover timestamp (ms), brand content toggles, AI-generated content flag, post mode (Direct Post/Media Upload).
 - **Brand Content**: Separate toggles for paid partnerships and own business promotion.
+
+#### Paid Partnership (all upload operations)
+- **Paid Partnership**: one switch that marks the post as paid or sponsored. The API maps it to each network's native label: TikTok branded content (direct posts only, and never with the "Only me" privacy level, which the API refuses), YouTube paid promotion and the X paid partnership label. Networks without a native label, Instagram included, add a warning to the response and the post still publishes.
+- When Paid Partnership is on, an unticked **TikTok Brand Content Toggle** or **YouTube Has Paid Product Placement** box is not sent, so it cannot cancel the switch. A ticked one is sent as before. With Paid Partnership off, nothing changes.
+- **Facebook Sponsor ID** / **Pinterest Sponsor ID**: the sponsor's numeric ID for those two networks, which only take the label together with it.
+- TikTok does not return the label it applied, so check the post in the TikTok app. TikTok's Music Usage Confirmation is a consent line the app shows before posting; it is not an API parameter.
 
 #### TikTok Advanced Video Options
 
