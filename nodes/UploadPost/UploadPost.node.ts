@@ -348,6 +348,13 @@ const prepareUploadBase = (ctx: ExecutionContext, operation: UploadOperation): U
 		formData['first_comment_media[]'] = ensureArrayFromCommaSeparated(firstCommentMedia);
 	}
 
+	// Cross-platform paid-partnership switch (TikTok, YouTube, X). Only sent when on:
+	// a request without it behaves exactly as before.
+	const paidPartnership = ctx.node.getNodeParameter('paidPartnership', ctx.itemIndex, false) as boolean;
+	if (paidPartnership) {
+		formData.paid_partnership = 'true';
+	}
+
 	const replyToId = ctx.node.getNodeParameter('replyToId', ctx.itemIndex, '') as string;
 	if (replyToId) {
 		formData.reply_to_id = replyToId;
@@ -414,6 +421,10 @@ const applyPinterestOptions = (ctx: ExecutionContext, operation: UploadOperation
 	}
 	if (pinterestBoardId) {
 		formData.pinterest_board_id = pinterestBoardId;
+	}
+	const pinterestSponsorId = ctx.node.getNodeParameter('pinterestSponsorId', ctx.itemIndex, '') as string;
+	if (pinterestSponsorId) {
+		formData.pinterest_sponsor_id = pinterestSponsorId;
 	}
 	const pinterestAltText = ctx.node.getNodeParameter('pinterestAltText', ctx.itemIndex, '') as string;
 	if (pinterestAltText) {
@@ -507,6 +518,10 @@ const applyFacebookOptions = (ctx: ExecutionContext, operation: UploadOperation,
 				: selection;
 	}
 	if (resolvedValue) formData.facebook_page_id = resolvedValue;
+	const facebookSponsorId = ctx.node.getNodeParameter('facebookSponsorId', ctx.itemIndex, '') as string;
+	if (facebookSponsorId) {
+		formData.facebook_sponsor_id = facebookSponsorId;
+	}
 
 	if (operation === 'uploadVideo') {
 		const facebookVideoState = ctx.node.getNodeParameter('facebookVideoState', ctx.itemIndex, '') as string;
@@ -3364,6 +3379,14 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
 			},
 			{
+				displayName: 'Paid Partnership',
+				name: 'paidPartnership',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to mark the post with the native paid-partnership / branded-content label on every network that has one: TikTok (brand content toggle), YouTube (paid product placement) and X (paid partnership). A network-specific option wins over this switch. Instagram, LinkedIn, Threads and the rest have no native label through the API: the post still publishes and the result carries a warning. TikTok rejects it with the "Only me" privacy level.',
+				displayOptions: { show: { resource: ['uploads'], operation: ['uploadPhotos','uploadVideo','uploadText'] } },
+			},
+			{
 				displayName: 'First Comment Media URLs',
 				name: 'firstCommentMedia',
 				type: 'string',
@@ -3578,6 +3601,14 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'Override for YouTube video description. When empty we default to the main title.',
 				displayOptions: { show: { operation: ['uploadVideo'], platform: ['youtube', '__manual_platform__'] } },
+			},
+			{
+				displayName: 'Pinterest Sponsor Account ID',
+				name: 'pinterestSponsorId',
+				type: 'string',
+				default: '',
+				description: 'Account ID (digits only) of the sponsor, for Pinterest\'s paid partnership. Pinterest only opens this to accounts in its closed beta.',
+				displayOptions: { show: { operation: ['uploadPhotos','uploadVideo'], platform: ['pinterest', '__manual_platform__'] } },
 			},
 			{
 				displayName: 'Pinterest Alt Text (Override)',
@@ -4854,6 +4885,19 @@ export class UploadPost implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],
+						platform: ['facebook', '__manual_platform__']
+					},
+				},
+			},
+			{
+				displayName: 'Facebook Sponsor Page ID',
+				name: 'facebookSponsorId',
+				type: 'string',
+				default: '',
+				description: 'Page ID (digits only) of the sponsor, for Meta\'s branded content tag. Works on Page photos, normal Page videos (Media Type "Video") and text posts. Reels and Stories have no sponsor field: the value is ignored and the result carries a warning. The Page needs access to Meta\'s branded content tool.',
+				displayOptions: {
+					show: {
+						operation: ['uploadPhotos', 'uploadVideo', 'uploadText'],
 						platform: ['facebook', '__manual_platform__']
 					},
 				},
@@ -6418,7 +6462,7 @@ export class UploadPost implements INodeType {
 				name: 'youtubeHasPaidProductPlacement',
 				type: 'boolean',
 				default: false,
-				description: 'Whether this is a declaration for paid product placements (FTC compliance). Only for Upload Video.',
+				description: 'Whether to declare paid product placement (sent as paidProductPlacementDetails.hasPaidProductPlacement). YouTube does not list this property as settable, so it may ignore it: when its reply shows false the result carries a warning. Read it back with videos.list (part=paidProductPlacementDetails) or turn on Paid promotion in YouTube Studio. Only for Upload Video.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],

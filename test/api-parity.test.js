@@ -7,8 +7,8 @@ const root = path.join(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'nodes/UploadPost/UploadPost.node.ts'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
-test('package version is 0.6.0', () => {
-	assert.equal(pkg.version, '0.6.0');
+test('package version is 0.7.0', () => {
+	assert.equal(pkg.version, '0.7.0');
 });
 
 test('upload platforms include the credential channels from the current API', () => {
@@ -104,4 +104,30 @@ test('compiled node description includes the new operations', () => {
 test('Bluesky gallery is documented with the current 10-image limit', () => {
 	assert.match(source, /up to 10 images as a Bluesky gallery/);
 	assert.doesNotMatch(source, /up to 20 images/i);
+});
+
+test('paid partnership and sponsor ids: properties exist and are sent only when set', () => {
+	// Properties (shown on the upload operations they apply to).
+	for (const name of ['paidPartnership', 'facebookSponsorId', 'pinterestSponsorId']) {
+		assert.match(source, new RegExp(`name: '${name}'`), `${name} property`);
+	}
+	assert.match(source, /name: 'paidPartnership',[\s\S]{0,120}type: 'boolean',[\s\S]{0,40}default: false/);
+	assert.match(
+		source,
+		/name: 'facebookSponsorId',[\s\S]{0,900}operation: \['uploadPhotos', 'uploadVideo', 'uploadText'\]/,
+	);
+	assert.match(
+		source,
+		/name: 'pinterestSponsorId',[\s\S]{0,500}operation: \['uploadPhotos','uploadVideo'\]/,
+	);
+
+	// Sending: the API field names, and only when the option is on / non-empty.
+	assert.match(source, /if \(paidPartnership\) \{\s*formData\.paid_partnership = 'true';/);
+	assert.match(source, /if \(facebookSponsorId\) \{\s*formData\.facebook_sponsor_id = facebookSponsorId;/);
+	assert.match(source, /if \(pinterestSponsorId\) \{\s*formData\.pinterest_sponsor_id = pinterestSponsorId;/);
+});
+
+test('YouTube paid placement description no longer promises FTC compliance', () => {
+	assert.doesNotMatch(source, /paid product placements \(FTC compliance\)/);
+	assert.match(source, /paidProductPlacementDetails\.hasPaidProductPlacement/);
 });
