@@ -1636,6 +1636,11 @@ const buildPostActionRequest = (ctx: ExecutionContext): RequestConfig => {
 			};
 			const message = ctx.node.getNodeParameter('postActionMessage', ctx.itemIndex, '') as string;
 			if (message) body.message = message;
+			// YouTube "Includes paid promotion": sent only when the user picks Yes or No.
+			if (body.platform === 'youtube') {
+				const paidPromotion = ctx.node.getNodeParameter('postActionYoutubePaidPromotion', ctx.itemIndex, '') as string;
+				if (paidPromotion) body.hasPaidProductPlacement = paidPromotion === 'true';
+			}
 			return {
 				endpoint: '/uploadposts/posts/edit',
 				method: 'POST',
@@ -3180,6 +3185,19 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'New caption. Facebook uses message, X uses text, LinkedIn uses commentary.',
 				displayOptions: { show: { resource: ['postActions'], operation: ['editPost', 'repostPost'] } },
+			},
+			{
+				displayName: 'YouTube Paid Promotion',
+				name: 'postActionYoutubePaidPromotion',
+				type: 'options',
+				options: [
+					{ name: 'Leave Unchanged', value: '' },
+					{ name: 'Include Paid Promotion', value: 'true' },
+					{ name: 'Remove Paid Promotion', value: 'false' },
+				],
+				default: '',
+				description: 'Sets or clears the "Includes paid promotion" label of a published YouTube video. It is written with its own videos.update (50 YouTube quota units, only when the stored value differs) and the response carries youtube_has_paid_product_placement, the value read back from YouTube.',
+				displayOptions: { show: { resource: ['postActions'], operation: ['editPost'], postActionPlatform: ['youtube'] } },
 			},
 			{
 				displayName: 'Pinterest Board ID',

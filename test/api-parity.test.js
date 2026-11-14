@@ -52,6 +52,14 @@ test('sends credential-platform fields the SDK allowlists', () => {
 	}
 });
 
+test('Edit Post can set the YouTube paid promotion label and only sends it when chosen', () => {
+	assert.match(source, /name: 'postActionYoutubePaidPromotion'/);
+	assert.match(source, /body\.platform === 'youtube'/);
+	assert.match(source, /body\.hasPaidProductPlacement = paidPromotion === 'true'/);
+	// the default leaves the label alone: nothing is sent unless Yes or No is picked
+	assert.match(source, /name: 'Leave Unchanged', value: ''/);
+});
+
 test('exposes current API operations', () => {
 	for (const operation of [
 		'retryPost',
