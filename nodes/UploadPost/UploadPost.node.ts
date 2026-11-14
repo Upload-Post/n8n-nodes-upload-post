@@ -1636,6 +1636,11 @@ const buildPostActionRequest = (ctx: ExecutionContext): RequestConfig => {
 			};
 			const message = ctx.node.getNodeParameter('postActionMessage', ctx.itemIndex, '') as string;
 			if (message) body.message = message;
+			// YouTube only. Empty = leave the flag alone (a change costs 50 quota units).
+			if (body.platform === 'youtube') {
+				const paidPromotion = ctx.node.getNodeParameter('postActionYoutubePaidPromotion', ctx.itemIndex, '') as string;
+				if (paidPromotion) body.hasPaidProductPlacement = paidPromotion === 'true';
+			}
 			return {
 				endpoint: '/uploadposts/posts/edit',
 				method: 'POST',
@@ -3180,6 +3185,19 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'New caption. Facebook uses message, X uses text, LinkedIn uses commentary.',
 				displayOptions: { show: { resource: ['postActions'], operation: ['editPost', 'repostPost'] } },
+			},
+			{
+				displayName: 'YouTube Includes Paid Promotion',
+				name: 'postActionYoutubePaidPromotion',
+				type: 'options',
+				options: [
+					{ name: 'Leave Unchanged', value: '' },
+					{ name: 'Yes', value: 'true' },
+					{ name: 'No', value: 'false' },
+				],
+				default: '',
+				description: 'Set or clear the "Includes paid promotion" disclosure on an existing YouTube video. Sent as its own YouTube update (50 quota units) and read back; the response carries youtube_paid_product_placement with state applied, not_applied or unverified.',
+				displayOptions: { show: { resource: ['postActions'], operation: ['editPost'], postActionPlatform: ['youtube'] } },
 			},
 			{
 				displayName: 'Pinterest Board ID',
@@ -6418,7 +6436,7 @@ export class UploadPost implements INodeType {
 				name: 'youtubeHasPaidProductPlacement',
 				type: 'boolean',
 				default: false,
-				description: 'Whether this is a declaration for paid product placements (FTC compliance). Only for Upload Video.',
+				description: 'Whether to tick "Includes paid promotion" on the video. YouTube does not document this property as writable on upload, so when it is true the API reads it back and, if it did not stick, sets it with one extra YouTube update (50 quota units); the result carries youtube_paid_product_placement (applied, not_applied or unverified) and never fails the post. Only for Upload Video.',
 				displayOptions: {
 					show: {
 						operation: ['uploadVideo'],

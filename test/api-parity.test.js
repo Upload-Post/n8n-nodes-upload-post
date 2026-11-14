@@ -105,3 +105,12 @@ test('Bluesky gallery is documented with the current 10-image limit', () => {
 	assert.match(source, /up to 10 images as a Bluesky gallery/);
 	assert.doesNotMatch(source, /up to 20 images/i);
 });
+
+test('Edit Post can set the YouTube paid promotion flag and leaves it alone by default', () => {
+	// Three-way option, empty by default: a boolean would send false on every YouTube edit,
+	// spending 50 YouTube quota units and clearing a flag nobody asked to change.
+	assert.match(source, /name: 'postActionYoutubePaidPromotion'/);
+	assert.match(source, /name: 'Leave Unchanged', value: ''/);
+	assert.match(source, /postActionPlatform: \['youtube'\]/);
+	assert.match(source, /if \(body\.platform === 'youtube'\) \{\s*const paidPromotion = [^;]*'postActionYoutubePaidPromotion'[^;]*;\s*if \(paidPromotion\) body\.hasPaidProductPlacement = paidPromotion === 'true';/);
+});
