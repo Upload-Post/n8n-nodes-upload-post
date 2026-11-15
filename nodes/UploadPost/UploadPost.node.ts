@@ -12,6 +12,14 @@ import {
 	sleep
 } from 'n8n-workflow';
 
+import {
+	applyNetworkUploadOptions,
+	buildNetworkRequest,
+	NETWORK_RESOURCES,
+	networkProperties,
+	uploadExtraProperties,
+} from './NetworkOperations';
+
 const MANUAL_USER_VALUE = '__manual_user__';
 const MANUAL_FACEBOOK_VALUE = '__manual_facebook__';
 const MANUAL_LINKEDIN_VALUE = '__manual_linkedin__';
@@ -211,7 +219,7 @@ const PLATFORM_SUPPORT: Record<UploadOperation, string[]> = {
 	uploadPhotos: ['bluesky', 'discord', 'facebook', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'reddit', 'google_business', 'mastodon', 'lemmy', 'wordpress'],
 	uploadVideo: ['bluesky', 'discord', 'facebook', 'instagram', 'linkedin', 'pinterest', 'reddit', 'telegram', 'threads', 'tiktok', 'x', 'youtube', 'google_business', 'mastodon', 'wordpress'],
 	uploadText: ['bluesky', 'discord', 'facebook', 'linkedin', 'reddit', 'telegram', 'threads', 'x', 'google_business', 'slack', 'mastodon', 'nostr', 'lemmy', 'devto', 'hashnode', 'wordpress', 'whop', 'listmonk'],
-	uploadDocument: ['linkedin'],
+	uploadDocument: ['linkedin', 'telegram'],
 };
 
 const DESCRIPTION_ENABLED_PLATFORMS = new Set(['linkedin', 'facebook', 'youtube', 'pinterest', 'tiktok']);
@@ -1183,6 +1191,7 @@ const applyUploadPlatformOptions = async (
 	}
 
 	applyCredentialPlatformOptions(ctx, platforms, formData);
+	applyNetworkUploadOptions(ctx.node, ctx.itemIndex, operation, platforms, formData);
 };
 
 const buildUploadPhotosRequest = async (
@@ -1291,6 +1300,7 @@ const buildUploadDocumentRequest = async (
 	if (prep.platforms.includes('linkedin') || isManualDoc) {
 		applyLinkedinOptions(ctx, 'uploadDocument', prep.formData, isManualDoc);
 	}
+	applyNetworkUploadOptions(ctx.node, ctx.itemIndex, 'uploadDocument', prep.platforms, prep.formData);
 
 	return {
 		endpoint: '/upload_document',
@@ -1616,14 +1626,19 @@ const buildPostActionRequest = (ctx: ExecutionContext): RequestConfig => {
 			};
 		}
 		case 'unpublishPost': {
+			const body: IDataObject = {
+				platform: ctx.node.getNodeParameter('postActionPlatform', ctx.itemIndex) as string,
+				user: ctx.node.getNodeParameter('postActionUser', ctx.itemIndex) as string,
+				post_id: ctx.node.getNodeParameter('postActionPostId', ctx.itemIndex) as string,
+			};
+			if (body.platform === 'telegram' && ctx.node.getNodeParameter('telegramDeleteAllMessages', ctx.itemIndex, false) === true) {
+				body.delete_all_messages = true;
+			}
+			Object.assign(body, parseJsonObjectParameter(ctx, 'postActionExtraFields', 'Extra Fields (JSON)'));
 			return {
 				endpoint: '/uploadposts/posts/unpublish',
 				method: 'POST',
-				body: {
-					platform: ctx.node.getNodeParameter('postActionPlatform', ctx.itemIndex) as string,
-					user: ctx.node.getNodeParameter('postActionUser', ctx.itemIndex) as string,
-					post_id: ctx.node.getNodeParameter('postActionPostId', ctx.itemIndex) as string,
-				},
+				body,
 				isUploadOperation: false,
 				waitForCompletion: false,
 			};
@@ -1635,7 +1650,17 @@ const buildPostActionRequest = (ctx: ExecutionContext): RequestConfig => {
 				post_id: ctx.node.getNodeParameter('postActionPostId', ctx.itemIndex) as string,
 			};
 			const message = ctx.node.getNodeParameter('postActionMessage', ctx.itemIndex, '') as string;
-			if (message) body.message = message;
+			// Telegram reads text (caption on media posts), Google Business reads summary.
+			if (message) {
+				if (body.platform === 'telegram') body.text = message;
+				else if (body.platform === 'google_business') body.summary = message;
+				else body.message = message;
+			}
+			if (body.platform === 'telegram') {
+				const telegramAction = ctx.node.getNodeParameter('telegramEditAction', ctx.itemIndex, '') as string;
+				if (telegramAction) body.action = telegramAction;
+			}
+			Object.assign(body, parseJsonObjectParameter(ctx, 'postActionExtraFields', 'Extra Fields (JSON)'));
 			return {
 				endpoint: '/uploadposts/posts/edit',
 				method: 'POST',
@@ -1651,7 +1676,17 @@ const buildPostActionRequest = (ctx: ExecutionContext): RequestConfig => {
 				post_id: ctx.node.getNodeParameter('postActionPostId', ctx.itemIndex) as string,
 			};
 			const commentary = ctx.node.getNodeParameter('postActionMessage', ctx.itemIndex, '') as string;
-			if (commentary) body.commentary = commentary;
+			if (body.platform === 'telegram') {
+				// Telegram needs an explicit mode or destination; a copy takes a new caption.
+				body.mode = ctx.node.getNodeParameter('telegramRepostMode', ctx.itemIndex, 'forward') as string;
+				const target = String(ctx.node.getNodeParameter('telegramRepostTargetChatId', ctx.itemIndex, '') ?? '').trim();
+				if (target) body.target_chat_id = target;
+				if (ctx.node.getNodeParameter('telegramRepostAllMessages', ctx.itemIndex, false) === true) body.all_messages = true;
+				if (commentary && body.mode === 'copy') body.caption = commentary;
+			} else if (commentary) {
+				body.commentary = commentary;
+			}
+			Object.assign(body, parseJsonObjectParameter(ctx, 'postActionExtraFields', 'Extra Fields (JSON)'));
 			return {
 				endpoint: '/uploadposts/posts/repost',
 				method: 'POST',
@@ -2287,6 +2322,9 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 	}
 
 	const resource = ctx.node.getNodeParameter('resource', ctx.itemIndex) as string;
+	if (NETWORK_RESOURCES.includes(resource)) {
+		return buildNetworkRequest(ctx.node, ctx.itemIndex, resource, ctx.operation);
+	}
 	if (resource === 'instagram') {
 		return buildInstagramRequest(ctx);
 	}
@@ -2413,23 +2451,28 @@ export class UploadPost implements INodeType {
 				options: [
 					// Value kept as 'instagram' so saved workflows keep working; the
 					// listing operation is no longer Instagram-only, hence the label.
+					{ name: 'Bluesky', value: 'bluesky' },
 					{ name: 'Comment', value: 'instagram' },
 					{ name: 'Direct Message', value: 'dms' },
+					{ name: 'Google Business', value: 'googleBusiness' },
 					{ name: 'Insight', value: 'insights' },
 					{ name: 'Post Action', value: 'postActions' },
+					{ name: 'Queue & Best Time', value: 'queue' },
 					{ name: 'Status & History', value: 'monitoring' },
+					{ name: 'Telegram', value: 'telegram' },
 					{ name: 'Upload', value: 'uploads' },
 					{ name: 'User', value: 'users' },
 				],
 				default: 'uploads',
 			},
+			...networkProperties,
 			{
 				displayName: 'Operation',
 				name: 'operation',
 				type: 'options',
 				noDataExpression: true,
 				options: [
-					{ name: 'Upload Document', value: 'uploadDocument', action: 'Upload a document', description: 'Upload a document (PDF, PPT, PPTX, DOC, DOCX) as a native carousel/viewer (Supports: LinkedIn only)' },
+					{ name: 'Upload Document', value: 'uploadDocument', action: 'Upload a document', description: 'Upload a document (PDF, PPT, PPTX, DOC, DOCX) as a native carousel/viewer on LinkedIn, or any file up to 50 MB (audio, voice, sticker, GIF...) to Telegram (Supports: LinkedIn, Telegram)' },
 					{ name: 'Upload Photo(s)', value: 'uploadPhotos', action: 'Upload photos', description: 'Upload one or more photos (Supports: Bluesky, Discord, Facebook, Google Business, Instagram, Lemmy, LinkedIn, Mastodon, Pinterest, Reddit, Telegram, Threads, TikTok, WordPress, X)' },
 					{ name: 'Upload Text', value: 'uploadText', action: 'Upload a text post', description: 'Upload a text-based post (Supports: Bluesky, Dev.to, Discord, Facebook, Google Business, Hashnode, Lemmy, LinkedIn, Listmonk, Mastodon, Nostr, Reddit, Slack, Telegram, Threads, Whop, WordPress, X)' },
 					{ name: 'Upload Video', value: 'uploadVideo', action: 'Upload a video', description: 'Upload a single video (Supports: Bluesky, Discord, Facebook, Google Business, Instagram, LinkedIn, Mastodon, Pinterest, Reddit, Telegram, Threads, TikTok, WordPress, X, YouTube)' },
@@ -3079,7 +3122,7 @@ export class UploadPost implements INodeType {
 				noDataExpression: true,
 				options: [
 					{ name: 'Edit Post', value: 'editPost', action: 'Edit a published post', description: 'Update caption or metadata on a live post. Fields you omit are left unchanged.' },
-					{ name: 'Repost', value: 'repostPost', action: 'Repost a post', description: 'Repost on LinkedIn or X' },
+					{ name: 'Repost', value: 'repostPost', action: 'Repost a post', description: 'Repost on LinkedIn, X or Threads, or forward / copy a Telegram post to the same chat or another one' },
 					{ name: 'Retry Post', value: 'retryPost', action: 'Retry a failed upload', description: 'Re-enqueue platforms that failed on an upload without re-uploading media. Provide request ID or job ID.' },
 					{ name: 'Save Pin', value: 'savePin', action: 'Save a pinterest pin', description: 'Save a Pinterest pin to a board' },
 					{ name: 'Unpublish Post', value: 'unpublishPost', action: 'Unpublish a post', description: 'Delete a live post from a platform. Instagram, TikTok and Threads are not supported.' },
@@ -3137,6 +3180,8 @@ export class UploadPost implements INodeType {
 				required: true,
 				options: [
 					{ name: 'LinkedIn', value: 'linkedin' },
+					{ name: 'Telegram', value: 'telegram' },
+					{ name: 'Threads', value: 'threads' },
 					{ name: 'X (Twitter)', value: 'x' },
 				],
 				default: 'linkedin',
@@ -3178,8 +3223,66 @@ export class UploadPost implements INodeType {
 				name: 'postActionMessage',
 				type: 'string',
 				default: '',
-				description: 'New caption. Facebook uses message, X uses text, LinkedIn uses commentary.',
+				description: 'New caption. Facebook uses message, X uses text, LinkedIn uses commentary, Telegram the new text or caption (repost: the caption of a copy), Google Business the post summary.',
 				displayOptions: { show: { resource: ['postActions'], operation: ['editPost', 'repostPost'] } },
+			},
+			{
+				displayName: 'Telegram Action',
+				name: 'telegramEditAction',
+				type: 'options',
+				options: [
+					{ name: 'None', value: '' },
+					{ name: 'Pin', value: 'pin' },
+					{ name: 'Stop Live Location', value: 'stop_live_location' },
+					{ name: 'Stop Poll', value: 'stop_poll' },
+					{ name: 'Unpin', value: 'unpin' },
+				],
+				default: '',
+				description: 'Pin or unpin the message (silent unless telegram_pin_notify is true), stop a poll (returns the final poll; not together with a new text) or stop a live location',
+				displayOptions: { show: { resource: ['postActions'], operation: ['editPost'], postActionPlatform: ['telegram'] } },
+			},
+			{
+				displayName: 'Telegram Mode',
+				name: 'telegramRepostMode',
+				type: 'options',
+				options: [
+					{ name: 'Copy (New Message Without the Link to the Original)', value: 'copy' },
+					{ name: 'Forward (Keeps "Forwarded From")', value: 'forward' },
+				],
+				default: 'forward',
+				displayOptions: { show: { resource: ['postActions'], operation: ['repostPost'], repostPlatform: ['telegram'] } },
+			},
+			{
+				displayName: 'Telegram Target Chat ID',
+				name: 'telegramRepostTargetChatId',
+				type: 'string',
+				default: '',
+				description: 'Destination chat ID or public @username (the bot must be able to post there). Empty = the same chat.',
+				displayOptions: { show: { resource: ['postActions'], operation: ['repostPost'], repostPlatform: ['telegram'] } },
+			},
+			{
+				displayName: 'Telegram All Messages',
+				name: 'telegramRepostAllMessages',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to also send the rest of a long caption, the first comment and the text sent before a location, not only the album items',
+				displayOptions: { show: { resource: ['postActions'], operation: ['repostPost'], repostPlatform: ['telegram'] } },
+			},
+			{
+				displayName: 'Telegram Delete All Messages',
+				name: 'telegramDeleteAllMessages',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to delete every message of the post (album items, caption rest, first comment), not only Post ID. Bots can delete messages for 48 hours.',
+				displayOptions: { show: { resource: ['postActions'], operation: ['unpublishPost'], postActionPlatform: ['telegram'] } },
+			},
+			{
+				displayName: 'Extra Fields (JSON)',
+				name: 'postActionExtraFields',
+				type: 'json',
+				default: '',
+				description: 'Other fields merged into the request body as is, e.g. Telegram {"telegram_reply_markup": {...}}, {"telegram_media": "https://example.com/new.jpg", "caption": "Fixed"} or {"telegram_link_preview": false}, Google Business {"cta_type": "LEARN_MORE", "cta_url": "https://example.com"}',
+				displayOptions: { show: { resource: ['postActions'], operation: ['editPost', 'repostPost', 'unpublishPost'] } },
 			},
 			{
 				displayName: 'Pinterest Board ID',
@@ -3919,13 +4022,14 @@ export class UploadPost implements INodeType {
 						{ name: 'LinkedIn', value: 'linkedin' },
 						{ name: 'Pinterest', value: 'pinterest' },
 						{ name: 'Reddit', value: 'reddit' },
+						{ name: 'Telegram', value: 'telegram' },
 						{ name: 'Threads', value: 'threads' },
 						{ name: 'TikTok', value: 'tiktok' },
 						{ name: 'X (Twitter)', value: 'x' },
 						{ name: 'YouTube', value: 'youtube' },
 					],
 					default: [],
-					description: 'Platforms to fetch analytics for. Analytics are not available for Bluesky, Discord, Google Business or Telegram.',
+					description: 'Platforms to fetch analytics for. Telegram returns subscribers or members, reactions and active boosts (the Bot API has no views). Analytics are not available for Discord.',
 					displayOptions: { show: { operation: ['getAnalytics'] } },
 				},
 				{
@@ -6956,7 +7060,7 @@ export class UploadPost implements INodeType {
 					}
 				},
 			},
-
+			...uploadExtraProperties,
 		],
 	};
 
@@ -6994,7 +7098,7 @@ export class UploadPost implements INodeType {
 					uploadPhotos: ['bluesky', 'discord', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'telegram', 'threads', 'tiktok', 'x', 'reddit', 'mastodon', 'lemmy', 'wordpress'],
 					uploadVideo: ['bluesky', 'discord', 'facebook', 'google_business', 'instagram', 'linkedin', 'pinterest', 'reddit', 'telegram', 'threads', 'tiktok', 'x', 'youtube', 'mastodon', 'wordpress'],
 					uploadText: ['bluesky', 'discord', 'facebook', 'google_business', 'linkedin', 'reddit', 'telegram', 'threads', 'x', 'slack', 'mastodon', 'nostr', 'lemmy', 'devto', 'hashnode', 'wordpress', 'whop', 'listmonk'],
-					uploadDocument: ['linkedin'],
+					uploadDocument: ['linkedin', 'telegram'],
 				};
 
 				const supportedPlatforms = platformSupport[operation] || [];

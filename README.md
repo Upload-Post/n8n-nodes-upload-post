@@ -65,6 +65,13 @@ The node provides the following operations grouped for clarity:
   - **Threads**: Long text as single post option.
   - **Reddit**: Subreddit selection, flair ID.
 
+- **Upload Document**: LinkedIn document posts (PDF, PPT/PPTX, DOC/DOCX) and, on Telegram, any file up to 50 MB (audio, voice, sticker, GIF, video note...) with **Telegram Options > Send As**.
+
+- **Paid Partnership** (Upload Photo(s), Video and Text): one switch for sponsored posts, mapped to each network's native label (TikTok branded content, YouTube paid promotion, X paid partnership). Facebook and Pinterest also need **Facebook Sponsor ID** / **Pinterest Sponsor ID** (the sponsor's Page / account). Networks without a label publish without it and the response carries a warning; a network-specific field always wins. TikTok refuses it with the Only Me privacy level (`commercial_disclosure_privacy_conflict`) and drafts do not carry it.
+- **Telegram Options** (collection): text and caption override, first comment (as a reply by default), pin after publishing (silent unless Pin Notify), reply to a message (with quote), inline URL buttons (Reply Markup), message effect, link preview options, polls, locations (live too), venues, contacts, dice and rich messages (Upload Text), video cover / thumbnail / start time, album with extra Media URLs, Send As (animation, video note, live photo, audio, voice, sticker, document), caption overflow (split), paid media in Telegram Stars, Send By URL. Names and JSON objects follow the Telegram Bot API.
+- **Bluesky Options** (collection): Tags (up to 8, not shown in the text), Created At (import older posts), Thread Overflow (long text continues as replies), GIF As Video, Captions (WebVTT, video), Video Presentation (GIF-style video).
+- **Google Business Options** (collection): Alert Type, Upload To Gallery, Multiple Media (up to 10 photos), recurring EVENT/OFFER posts (Recurrence, days, day of month, week occurrence, end) and Google's own Scheduled Time.
+
 ### Status & History Actions
 - **Get Upload Status**: Check the status/result of an async upload by `request_id`.
   - Parameters: Request ID.
@@ -72,7 +79,7 @@ The node provides the following operations grouped for clarity:
   - Parameters: Page (default 1), Limit (default 20). Limit can be 20, 50, or 100.
 - **Get Analytics**: Retrieve aggregated profile analytics.
   - Parameters: Profile Username, Platforms (required — at least one), Facebook Page ID (required when Facebook is selected), LinkedIn Page URN (optional).
-  - Supported: Facebook, Instagram, LinkedIn, Pinterest, Reddit, Threads, TikTok, X, YouTube. Analytics are not available for Bluesky, Discord, Google Business or Telegram.
+  - Supported: Facebook, Instagram, LinkedIn, Pinterest, Reddit, Telegram, Threads, TikTok, X, YouTube. Telegram returns subscribers or members, reactions and active boosts (the Bot API has no views). Analytics are not available for Discord.
 - **Get Post Analytics**: Per-post metrics for an upload, by `request_id`.
   - Parameters: Request ID, Platform (optional filter).
   - On TikTok, `post_metrics` also carries `retention`, `impression_sources`, `audience_types`, `new_followers`, `reach` and the watch times, plus `original_publish_id`.
@@ -99,10 +106,33 @@ The node provides the following operations grouped for clarity:
 
 ### Post Actions
 - **Retry Post**: Re-enqueue failed platforms of an upload without re-uploading media (`request_id` or `job_id`).
-- **Unpublish Post**: Delete a live post. Not available for Instagram, TikTok or Threads.
-- **Edit Post**: Update caption/metadata on a live post.
-- **Repost**: Repost on LinkedIn or X.
+- **Unpublish Post**: Delete a live post. Not available for Instagram, TikTok or Threads. Telegram: **Telegram Delete All Messages** removes every message of the post (album items, caption rest, first comment), not only Post ID.
+- **Edit Post**: Update caption/metadata on a live post. Telegram: new text or caption, **Telegram Action** (pin, unpin, stop poll, stop live location); Google Business: Message becomes the post summary. **Extra Fields (JSON)** passes any other documented field (buttons, media replacement, call to action...).
+- **Repost**: Repost on LinkedIn, X or Threads, or forward / copy a Telegram post (**Telegram Mode**, **Telegram Target Chat ID**, **Telegram All Messages**; Message is the new caption of a copy).
 - **Save Pin**: Save a Pinterest pin to a board.
+
+### Queue & Best Time
+- **Get Best Times**: Best hours to publish for a connected account (Bluesky, Facebook, Instagram, LinkedIn, Pinterest, Threads, TikTok, YouTube), with `source` (`audience_activity`, `account_posts`, `upload_post_history`, `none`) and `confidence`.
+  - Parameters: Profile, Platform, Time Zone, Top Hours, Refresh; LinkedIn Page URN / Facebook Page ID.
+- **Get Queue Settings / Get Queue Preview / Get Next Queue Slot**: read the profile queue (`slots_mode`, `auto_slots`, `effective_slots`).
+- **Update Queue Settings**: **Slots Mode = Automatic** (`slots=auto`) fills the queue with the best hours of the profile's networks (Automatic Slots per Day, Automatic Slots Platforms, Refresh); **Fixed** goes back to fixed slots (Fixed Slots JSON). Also Time Zone, Days of Week and Max Posts per Slot. Posts already scheduled do not move.
+
+### Telegram Actions
+Your own bot in the connected chat, group or channel.
+- **Get Chat Info / Update Chat Info**: details, subscribers or members and administrators; change title, description and (Extra Fields) permissions, slow mode...
+- **Get Boosts**, **Get Member** (one member, or the administrators), **Moderate Member** (ban, unban, restrict, promote, demote, custom title; ban/promote/demote need **Confirm**).
+- **Create Invite Link / Revoke Invite Link** (revoke needs Confirm).
+- **Get Bot Profile / Update Bot Profile**, **Get Bot Commands / Set Bot Commands**.
+
+### Bluesky Actions
+- **Get Profile** (one or several handles/DIDs, or the connected account), **Get Notifications**, **Get Unread Count**, **Search Posts**, **Search Accounts**.
+- **List Drafts / Create Draft / Delete Draft**: drafts shown in the Bluesky app (text only; delete needs **Confirm**).
+
+### Google Business Actions
+- **List Posts / Get Post**: the location's posts. Edit them with Post Action > Edit Post and delete them with Unpublish Post (platform Google Business).
+- **List Reviews / Get Review**.
+- **Get Performance** (daily metrics for a date range) and **Get Search Keywords** (monthly).
+- **Get Location Info / Update Location Info**: `edit_mode` legacy (default) or strict (title, address, categories, open status; Dry Run and Confirm), Extra Fields for hours and the rest.
 
 ### Scheduled Posts
 - **List Scheduled Posts**: Lists future scheduled jobs.

@@ -60,6 +60,13 @@ Agent → Content Generation → Upload Post Node → Multiple Platforms
 - **Direct Message**: Send DM and List Conversations on Instagram and Bluesky (Bluesky needs an app password with DM access)
 - **Resolve LinkedIn Organization**: URL or vanity of any company Page to `{urn, name, mention}` for LinkedIn mentions
 
+#### Best time, queue and networks
+- **Queue & Best Time**: Get Best Times (`source` + `confidence` per network), queue settings/preview/next slot, Update Queue Settings with **Slots Mode = Automatic** (`slots=auto`: the queue publishes at the best hours)
+- **Paid Partnership** on uploads: one switch mapped to TikTok, YouTube and X labels; Facebook/Pinterest also need the sponsor ID
+- **Telegram**: Telegram Options on uploads (polls, locations, buttons, pin, replies, rich messages, paid media, any file via Upload Document), edit/forward/copy/delete posts in Post Actions, chat info, members, invite links, bot profile and commands, analytics
+- **Bluesky**: Bluesky Options on uploads (tags, created at, thread overflow, captions), profiles, notifications, search, drafts
+- **Google Business**: Google Business Options on uploads (recurring posts, several photos, gallery), posts, reviews, performance, search keywords, location info (legacy/strict edit)
+
 ## Agent Usage Examples
 
 ### Basic Content Publishing
@@ -165,6 +172,11 @@ Agent → Content Generation → Upload Post Node → Multiple Platforms
 
 ### Bluesky
 - **Gallery**: `blueskyGallery: true` publishes up to 10 images (default is the first 4)
+- **Bluesky Options**: `tags` (hidden hashtags), `createdAt`, `threadOverflow`, `captions` (video)
+
+### Telegram
+- **Telegram Options**: `poll`, `location`, `venue`, `contact`, `dice` (Upload Text), `replyMarkup` (URL buttons), `pin`, `replyToMessageId`, `sendAs`, `paidStarCount`
+- Edit, forward/copy (`telegramRepostMode`) and delete (`telegramDeleteAllMessages`) through Post Actions with platform `telegram`
 
 ### YouTube
 - **Metadata**: Tags, categories, privacy settings
