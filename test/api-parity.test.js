@@ -7,8 +7,8 @@ const root = path.join(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'nodes/UploadPost/UploadPost.node.ts'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
-test('package version is 0.6.0', () => {
-	assert.equal(pkg.version, '0.6.0');
+test('package version is 0.7.0', () => {
+	assert.equal(pkg.version, '0.7.0');
 });
 
 test('upload platforms include the credential channels from the current API', () => {
@@ -99,6 +99,26 @@ test('compiled node description includes the new operations', () => {
 	assert.match(compiled, /uploadposts\/autodms\/rules/);
 	assert.match(compiled, /uploadposts\/dms\/send/);
 	assert.match(compiled, /uploadposts\/linkedin\/resolve-organization/);
+});
+
+test('exposes the best time, queue, Telegram, Bluesky and Google Business operations', () => {
+	const network = fs.readFileSync(path.join(root, 'nodes/UploadPost/NetworkOperations.ts'), 'utf8');
+	for (const operation of [
+		'getBestTimes', 'getQueueSettings', 'updateQueueSettings', 'getQueuePreview', 'getNextQueueSlot',
+		'getTelegramChatInfo', 'updateTelegramChatInfo', 'moderateTelegramMember', 'createTelegramInviteLink',
+		'getTelegramBotProfile', 'setTelegramBotCommands',
+		'getBlueskyProfile', 'getBlueskyNotifications', 'searchBlueskyPosts', 'createBlueskyDraft',
+		'listGbpPosts', 'getGbpPost', 'listGbpReviews', 'getGbpPerformance', 'getGbpLocationInfo', 'updateGbpLocationInfo',
+	]) {
+		assert.match(network, new RegExp(`value: '${operation}'`));
+	}
+	for (const field of ['telegram_poll', 'telegram_reply_markup', 'bluesky_tags', 'bluesky_captions', 'gbp_recurrence', 'gbp_scheduled_time']) {
+		assert.match(network, new RegExp(`'${field}'`));
+	}
+	assert.match(source, /paid_partnership|applyNetworkUploadOptions/);
+	assert.match(source, /delete_all_messages/);
+	// Nothing that is switched off in the API is offered.
+	assert.doesNotMatch(network, /allow_paid_broadcast|telegram\/updates|bluesky\/graph|\/youtube\//);
 });
 
 test('Bluesky gallery is documented with the current 10-image limit', () => {
