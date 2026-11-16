@@ -27,6 +27,50 @@ To use this node, you need to configure the Upload Post API credentials:
 5.  Paste your Upload Post API key into the **API Key** field.
 6.  Select **Save**.
 
+## Upload Post Trigger
+
+The package has two nodes: **Upload Post** (actions) and **Upload Post Trigger**, which starts a workflow when Upload-Post sends a webhook event. Both use the same **Upload Post API** credential.
+
+**Requirement: a public HTTPS address.** Upload-Post only delivers to a public `https://` URL. An n8n running on `localhost`, a private IP or plain `http` cannot be activated: Upload-Post answers `400 invalid_url` and the node shows *"Upload-Post only sends webhooks to a public HTTPS URL"*. Self-hosted n8n must run behind a public https address and have its `WEBHOOK_URL` environment variable set to it. n8n Cloud works as is.
+
+**Parameters**
+- **Events** (required, several allowed):
+  - `upload_completed`: an upload finished, published or failed (check `success` in each platform result).
+  - `social_account_connected`, `social_account_disconnected`, `social_account_reauth_required`.
+  - `comment_received`, `dm_received`, `telegram_update`: opt-in. The account has to have that feature available (comments on Instagram/TikTok/LinkedIn Pages, DMs on Instagram/Bluesky/Telegram bot, Telegram bot updates turned on in Upload-Post).
+  - Google Business Profile: `review_received`, `review_updated`, `customer_media_received`, `listing_google_update`, `listing_duplicate`, `listing_control_changed` (need Google Business notifications turned on).
+  - YouTube: `youtube_video_published`, `youtube_video_updated` (need YouTube notifications turned on for the channel). While an event is not available on the account, activation fails with `invalid_events` and the list of events the account accepts.
+- **Profile Name or ID** (optional): only events of that Upload-Post profile. Leave **All Profiles** for the whole account.
+- **Verify Signature** (on by default): rejects with `401` any request whose `X-Upload-Post-Signature` does not match the account webhook secret, or whose `X-Upload-Post-Timestamp` is more than 5 minutes off. The secret is read from `GET /api/uploadposts/users/notifications` and cached; if a signature fails, the node reads it again (at most once a minute) in case it was rotated.
+
+**How it works**
+- Activating the workflow creates a **webhook subscription** (`POST /api/uploadposts/webhooks/subscriptions`) for the node's URL with `source: "n8n"` and the workflow name. It is separate from the account or profile webhook URL configured with **Update Notification Preferences**, which keeps working unchanged. Each account can have up to 10 active subscriptions (`409 subscription_limit_reached` beyond that).
+- Deactivating the workflow deletes the subscription. If it is already gone (`404`), that counts as deleted.
+- **Listen for test event** uses n8n's test URL, which is a different subscription from the production one: n8n creates it while listening and deletes it when it stops.
+- On activation the node first looks for an active subscription with the same URL, events and profile and reuses it. A subscription Upload-Post disabled (for example because the URL kept answering `404`/`410`) is reactivated. Changing the events or the profile creates a new subscription and removes the old one on that URL.
+- The first delivery can take up to about a minute. Deliveries are at least once: deduplicate by `uploadPostDelivery.deliveryId`.
+
+**Output**: one item per delivery with the webhook body as sent by Upload-Post (same body as the account webhook, e.g. `event`, `profile_username`, `platform`, `success`, `result`…) plus `uploadPostDelivery`:
+
+```json
+{
+  "event": "upload_completed",
+  "profile_username": "my_profile",
+  "...": "the rest of the event body",
+  "uploadPostDelivery": {
+    "event": "upload_completed",
+    "deliveryId": "6b1d…",
+    "attempt": 1,
+    "subscriptionId": "whsub_…",
+    "timestamp": "1763300000"
+  }
+}
+```
+
+`redeliveryOf` is added when the delivery is a manual redelivery (**Redeliver Webhook**). A delivery for an event the node did not select is acknowledged with `200` and does not run the workflow.
+
+To see what the subscription is doing: `GET /api/uploadposts/webhooks/subscriptions` (status, `disabled_reason`, health) and `GET /api/uploadposts/webhooks/deliveries?subscription_id=<id>` (its delivery log). `POST /api/uploadposts/webhooks/subscriptions/{id}/test` sends a sample of one of its events to the workflow.
+
 ## Operations
 
 The node provides the following operations grouped for clarity:
@@ -397,7 +441,7 @@ Related docs:
 
 ## Compatibility
 
-Tested with n8n version 1.x.
+Tested with n8n version 1.x. The Upload Post Trigger was loaded and activated against a local n8n 2.x in Docker.
 Requires Node.js version 20.15 or later.
 
 ## Development
