@@ -5,7 +5,7 @@ import { IDataObject, IExecuteFunctions, INodeProperties, NodeOperationError } f
 // optional and nothing is sent unless it is filled, so existing workflows send
 // exactly the same requests as before.
 
-type NetworkContext = {
+export type NetworkContext = {
 	node: IExecuteFunctions;
 	itemIndex: number;
 	operation: string;
@@ -28,17 +28,17 @@ const MANUAL_PLATFORM_VALUE = '__manual_platform__';
 // Parameter helpers
 // ---------------------------------------------------------------------------
 
-const param = (ctx: NetworkContext, name: string, fallback: unknown): unknown =>
+export const param = (ctx: NetworkContext, name: string, fallback: unknown): unknown =>
 	ctx.node.getNodeParameter(name, ctx.itemIndex, fallback);
 
-const str = (ctx: NetworkContext, name: string): string => String(param(ctx, name, '') ?? '').trim();
-const bool = (ctx: NetworkContext, name: string): boolean => param(ctx, name, false) === true;
+export const str = (ctx: NetworkContext, name: string): string => String(param(ctx, name, '') ?? '').trim();
+export const bool = (ctx: NetworkContext, name: string): boolean => param(ctx, name, false) === true;
 
-const fail = (ctx: NetworkContext, message: string): never => {
+export const fail = (ctx: NetworkContext, message: string): never => {
 	throw new NodeOperationError(ctx.node.getNode(), message, { itemIndex: ctx.itemIndex });
 };
 
-const parseJson = (ctx: NetworkContext, raw: unknown, label: string): unknown => {
+export const parseJson = (ctx: NetworkContext, raw: unknown, label: string): unknown => {
 	if (raw === undefined || raw === null || raw === '') return undefined;
 	if (typeof raw !== 'string') return raw;
 	const trimmed = raw.trim();
@@ -50,7 +50,7 @@ const parseJson = (ctx: NetworkContext, raw: unknown, label: string): unknown =>
 	}
 };
 
-const jsonObjectParam = (ctx: NetworkContext, name: string, label: string): IDataObject => {
+export const jsonObjectParam = (ctx: NetworkContext, name: string, label: string): IDataObject => {
 	const parsed = parseJson(ctx, param(ctx, name, ''), label);
 	if (parsed === undefined) return {};
 	if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
@@ -60,7 +60,7 @@ const jsonObjectParam = (ctx: NetworkContext, name: string, label: string): IDat
 };
 
 // [n8n parameter, API field]: strings and numbers are sent when filled.
-const putFilled = (ctx: NetworkContext, target: IDataObject, pairs: Array<[string, string]>) => {
+export const putFilled = (ctx: NetworkContext, target: IDataObject, pairs: Array<[string, string]>) => {
 	for (const [name, field] of pairs) {
 		const value = param(ctx, name, '');
 		if (value === undefined || value === null || value === '' || value === 0) continue;
@@ -72,7 +72,7 @@ const putFilled = (ctx: NetworkContext, target: IDataObject, pairs: Array<[strin
 	}
 };
 
-const requireStr = (ctx: NetworkContext, name: string, label: string): string => {
+export const requireStr = (ctx: NetworkContext, name: string, label: string): string => {
 	const value = str(ctx, name);
 	if (!value) fail(ctx, `${label} is required`);
 	return value;

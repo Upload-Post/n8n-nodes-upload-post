@@ -134,6 +134,16 @@ Your own bot in the connected chat, group or channel.
 - **Get Performance** (daily metrics for a date range) and **Get Search Keywords** (monthly).
 - **Get Location Info / Update Location Info**: `edit_mode` legacy (default) or strict (title, address, categories, open status; Dry Run and Confirm), Extra Fields for hours and the rest.
 
+### YouTube Actions
+Managing the channel after publishing. Every call spends the account's daily YouTube allowance (2,000 units on paid plans, 200 on free; searches 5 and 1 calls a day): check it with **Get Quota**. Destructive calls need **Confirm**, which is never on by default.
+- **Get Videos** (by IDs, Most Popular chart or the channel's ratings) and **Get Quota**.
+- **Playlists**: List Playlists, Create Playlist (50 units), Update Playlist, Delete Playlist (Confirm), List Playlist Videos, Add Video to Playlist (position, note), Remove Video From Playlist (Confirm).
+- **Comments**: List Comments (one video or the whole channel inbox, moderation status, search), List Comment Replies, Reply to Comment (or comment on a video), Delete Comment (Confirm), Moderate Comments (approve, hold or reject up to 50; reject needs Confirm, optional Ban Author). Writes cost 50 units.
+- **Channel**: Get Channel, Update Channel (description, keywords, Extra Fields for country, default language, translations).
+- **Search** (query, only my videos, channel, type, order).
+- **Live**: List Live Broadcasts, Create Live Broadcast (optionally with its stream; the stream key in the answer is a secret).
+- Upload Video: **YouTube Localizations (JSON)** (translated title and description, needs YouTube Default Language) and **YouTube Brand Partner** (brand channel ID `UC…`).
+
 ### Scheduled Posts
 - **List Scheduled Posts**: Lists future scheduled jobs.
 - **Cancel Scheduled Post**: Cancels a scheduled job by its Job ID.
