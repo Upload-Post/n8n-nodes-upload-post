@@ -31,7 +31,7 @@ To use this node, you need to configure the Upload Post API credentials:
 
 The package has two nodes: **Upload Post** (actions) and **Upload Post Trigger**, which starts a workflow when Upload-Post sends a webhook event. Both use the same **Upload Post API** credential.
 
-**Requirement: a public HTTPS address.** Upload-Post only delivers to a public `https://` URL. An n8n running on `localhost`, a private IP or plain `http` cannot be activated: Upload-Post answers `400 invalid_url` and the node shows *"Upload-Post only sends webhooks to a public HTTPS URL"*. Self-hosted n8n must run behind a public https address and have its `WEBHOOK_URL` environment variable set to it. n8n Cloud works as is.
+**Requirement: a public HTTPS address.** Upload-Post only delivers to a public `https://` URL. An n8n running on `localhost`, a private IP or plain `http` cannot be activated: Upload-Post answers `400 invalid_url` and the node shows *"Upload-Post only sends webhooks to a public HTTPS URL: set WEBHOOK_URL on this n8n to its public https address"* (in n8n 2.x, as the workflow activation error). Self-hosted n8n must run behind a public https address and have its `WEBHOOK_URL` environment variable set to it. n8n Cloud works as is.
 
 **Parameters**
 - **Events** (required, several allowed):
@@ -441,7 +441,7 @@ Related docs:
 
 ## Compatibility
 
-Tested with n8n version 1.x. The Upload Post Trigger was loaded and activated against a local n8n 2.x in Docker.
+Tested with n8n version 1.x. The Upload Post Trigger was checked on n8n 2.47 (loading, credential, activation, signed deliveries, test URL).
 Requires Node.js version 20.15 or later.
 
 ## Development

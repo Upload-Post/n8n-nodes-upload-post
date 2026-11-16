@@ -79,7 +79,9 @@ const describeError = (statusCode: number, body: IDataObject): { message: string
 	switch (reason) {
 		case 'invalid_url':
 			return {
-				message: 'Upload-Post only sends webhooks to a public HTTPS URL',
+				// n8n shows only the message when an activation fails, so the fix goes here too.
+				message:
+					'Upload-Post only sends webhooks to a public HTTPS URL: set WEBHOOK_URL on this n8n to its public https address',
 				description:
 					`${apiMessage ? apiMessage + '. ' : ''}This n8n instance gave a webhook URL that Upload-Post cannot reach ` +
 					'(not https, or a private/local address). Run n8n behind a public https address and set its WEBHOOK_URL ' +
