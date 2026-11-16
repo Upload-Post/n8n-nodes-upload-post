@@ -81,9 +81,10 @@ The node provides the following operations grouped for clarity:
   - Parameters: Platform Post ID, Platform, Profile Username.
 - **Get Cached Post Analytics**: Replays per-post metrics already fetched, instead of querying the platforms again, so it is not subject to the live analytics rate limit (100 requests / 5 minutes). Only contains posts previously fetched through a live per-post endpoint; there is no background refresh, so captured_at is the last time that post was read live.
   - Parameters: Profile Username (required), Platform (optional filter), Limit (default 50, max 200), Cursor, Since / Until (`YYYY-MM-DD`, defaults to the last 30 days).
-  - Values are only as fresh as your last live read — check `captured_at` on each post. Use **Get Post Analytics** for a just-published post and this operation for bulk or historical reads.
+  - Values are only as fresh as your last read — check `as_of` (or `captured_at`) on each post. Use **Get Post Analytics** for a just-published post and this operation for bulk or historical reads.
   - Paginate by passing the `next_cursor` from the previous response as `Cursor` while `has_more` is true.
-  - Supported: Facebook, Instagram, LinkedIn, Pinterest, Reddit, Threads, TikTok, YouTube. X (Twitter) is not cached.
+  - Supported: Bluesky, Facebook, Instagram, LinkedIn, Pinterest, Reddit, Threads, TikTok, X (Twitter), YouTube.
+  - Every analytics answer says how old its numbers are (`as_of`, `next_refresh_at`) and why a metric is missing (`missing`). X and YouTube posts are only updated when someone reads them. See [Why numbers can differ from the native app](https://docs.upload-post.com/guides/why-analytics-numbers-differ).
 - **Get Total Impressions**: Impressions aggregated across connected platforms.
   - Parameters: Profile Username, Period or Start/End Date, Platforms, Breakdown.
 - **Get Platform Metrics**: Lists which metrics each platform exposes.
