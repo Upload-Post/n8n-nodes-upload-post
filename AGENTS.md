@@ -65,6 +65,7 @@ Agent → Content Generation → Upload Post Node → Multiple Platforms
 - **Paid Partnership** on uploads: one switch mapped to TikTok, YouTube and X labels; Facebook/Pinterest also need the sponsor ID
 - **Telegram**: Telegram Options on uploads (polls, locations, buttons, pin, replies, rich messages, paid media, any file via Upload Document), edit/forward/copy/delete posts in Post Actions, chat info, members, invite links, bot profile and commands, analytics
 - **Bluesky**: Bluesky Options on uploads (tags, created at, thread overflow, captions), profiles, notifications, search, drafts
+- **YouTube**: playlists, comment inbox and moderation, channel settings, search, live broadcasts, video details and the daily allowance (Get Quota); `youtubeLocalizations` / `youtubeBrandPartner` on Upload Video; destructive calls need `youtubeConfirm`
 - **Google Business**: Google Business Options on uploads (recurring posts, several photos, gallery), posts, reviews, performance, search keywords, location info (legacy/strict edit)
 
 ## Agent Usage Examples

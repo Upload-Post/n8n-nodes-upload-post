@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-upload-post",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "n8n community node for Upload Post",
   "keywords": [
     "n8n-community-node-package",

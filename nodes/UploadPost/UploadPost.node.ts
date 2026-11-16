@@ -19,6 +19,12 @@ import {
 	networkProperties,
 	uploadExtraProperties,
 } from './NetworkOperations';
+import {
+	applyYoutubeUploadOptions,
+	buildYoutubeRequest,
+	youtubeProperties,
+	youtubeUploadProperties,
+} from './YouTubeOperations';
 
 const MANUAL_USER_VALUE = '__manual_user__';
 const MANUAL_FACEBOOK_VALUE = '__manual_facebook__';
@@ -1192,6 +1198,7 @@ const applyUploadPlatformOptions = async (
 
 	applyCredentialPlatformOptions(ctx, platforms, formData);
 	applyNetworkUploadOptions(ctx.node, ctx.itemIndex, operation, platforms, formData);
+	applyYoutubeUploadOptions(ctx.node, ctx.itemIndex, operation, platforms, formData);
 };
 
 const buildUploadPhotosRequest = async (
@@ -2322,6 +2329,9 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 	}
 
 	const resource = ctx.node.getNodeParameter('resource', ctx.itemIndex) as string;
+	if (resource === 'youtube') {
+		return buildYoutubeRequest(ctx.node, ctx.itemIndex, ctx.operation);
+	}
 	if (NETWORK_RESOURCES.includes(resource)) {
 		return buildNetworkRequest(ctx.node, ctx.itemIndex, resource, ctx.operation);
 	}
@@ -2462,10 +2472,12 @@ export class UploadPost implements INodeType {
 					{ name: 'Telegram', value: 'telegram' },
 					{ name: 'Upload', value: 'uploads' },
 					{ name: 'User', value: 'users' },
+					{ name: 'YouTube', value: 'youtube' },
 				],
 				default: 'uploads',
 			},
 			...networkProperties,
+			...youtubeProperties,
 			{
 				displayName: 'Operation',
 				name: 'operation',
@@ -7061,6 +7073,7 @@ export class UploadPost implements INodeType {
 				},
 			},
 			...uploadExtraProperties,
+			...youtubeUploadProperties,
 		],
 	};
 
