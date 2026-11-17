@@ -1,0 +1,26 @@
+{
+  "source": "Upload-Post API spec, components.schemas.WebhookEventName (backend profiles._webhook_event_names). Update it together with the trigger event list.",
+  "copied": "2026-11-17",
+  "events": [
+    "upload_completed",
+    "social_account_connected",
+    "social_account_disconnected",
+    "social_account_reauth_required",
+    "dm_received",
+    "comment_received",
+    "review_received",
+    "review_updated",
+    "customer_media_received",
+    "listing_google_update",
+    "listing_duplicate",
+    "listing_control_changed",
+    "telegram_update",
+    "post_analytics_updated",
+    "youtube_video_published",
+    "youtube_video_updated",
+    "post_approval_requested",
+    "post_approved",
+    "post_rejected",
+    "post_approval_expired"
+  ]
+}

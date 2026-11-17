@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-upload-post",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "n8n community node for Upload Post",
   "keywords": [
     "n8n-community-node-package",
@@ -40,7 +40,8 @@
       "dist/credentials/UploadPostApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/UploadPost/UploadPost.node.js"
+      "dist/nodes/UploadPost/UploadPost.node.js",
+      "dist/nodes/UploadPostTrigger/UploadPostTrigger.node.js"
     ]
   },
   "devDependencies": {

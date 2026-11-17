@@ -27,6 +27,55 @@ To use this node, you need to configure the Upload Post API credentials:
 5.  Paste your Upload Post API key into the **API Key** field.
 6.  Select **Save**.
 
+## Upload Post Trigger
+
+The package has two nodes: **Upload Post** (actions) and **Upload Post Trigger**, which starts a workflow when Upload-Post sends a webhook event. Both use the same **Upload Post API** credential.
+
+**Requirement: a public HTTPS address.** Upload-Post only delivers to a public `https://` URL. An n8n running on `localhost`, a private IP or plain `http` cannot be activated: Upload-Post answers `400 invalid_url` and the node shows *"Upload-Post only sends webhooks to a public HTTPS URL: set WEBHOOK_URL on this n8n to its public https address"* (in n8n 2.x, as the workflow activation error). Self-hosted n8n must run behind a public https address and have its `WEBHOOK_URL` environment variable set to it. n8n Cloud works as is.
+
+**Not generally available yet.** Webhook subscriptions are switched off on Upload-Post for now: while they are, activating the trigger fails with `503 webhook_subscriptions_disabled` (*"Webhook subscriptions are not generally available on Upload-Post yet"*). That is the feature being off, not a temporary failure. Until it is on, point the account webhook (**Update Notification Preferences**) at an n8n **Webhook** node.
+
+**Parameters**
+- **Events** (required, several allowed):
+  - `upload_completed`: an upload finished, published or failed (check `success` in each platform result).
+  - `social_account_connected`, `social_account_disconnected`, `social_account_reauth_required`.
+  - `comment_received`, `dm_received`, `telegram_update`: opt-in. The account has to have that feature available (comments on Instagram/TikTok/LinkedIn Pages, DMs on Instagram/Bluesky/Telegram bot, Telegram bot updates turned on in Upload-Post).
+  - Google Business Profile: `review_received`, `review_updated`, `customer_media_received`, `listing_google_update`, `listing_duplicate`, `listing_control_changed` (need Google Business notifications turned on).
+  - `post_analytics_updated`: opt-in. Upload-Post refreshed a post's analytics (on a read or a scheduled checkpoint); at most once per post and age bucket, with a daily cap per account.
+  - YouTube: `youtube_video_published`, `youtube_video_updated`. Only accepted while YouTube notifications are turned on (not available on every account yet).
+  - Post approvals: `post_approval_requested`, `post_approved`, `post_rejected`, `post_approval_expired`. Only accepted while post approvals are turned on for the account.
+  - While an event is not available on the account, Upload-Post answers `400 invalid_events` and the activation error names those events (*"These events are not available on this Upload-Post account: …"*); the error details list the events the account accepts now.
+- **Profile Name or ID** (optional): only events of that Upload-Post profile. Leave **All Profiles** for the whole account.
+- **Verify Signature** (on by default): rejects with `401` any request whose `X-Upload-Post-Signature` does not match the account webhook secret, or whose `X-Upload-Post-Timestamp` is more than 5 minutes off. The secret is read from `GET /api/uploadposts/users/notifications` and cached; if a signature fails, the node reads it again (at most once a minute) in case it was rotated.
+
+**How it works**
+- Activating the workflow creates a **webhook subscription** (`POST /api/uploadposts/webhooks/subscriptions`) for the node's URL with `source: "n8n"` and the workflow name. It is separate from the account or profile webhook URL configured with **Update Notification Preferences**, which keeps working unchanged. Each account can have up to 10 active subscriptions (`409 subscription_limit_reached` beyond that).
+- Deactivating the workflow deletes the subscription. If it is already gone (`404`), that counts as deleted.
+- **Listen for test event** uses n8n's test URL, which is a different subscription from the production one: n8n creates it while listening and deletes it when it stops.
+- On activation the node first looks for an active subscription with the same URL, events and profile and reuses it. A subscription Upload-Post disabled (for example because the URL kept answering `404`/`410`) is reactivated. Changing the events or the profile creates a new subscription and removes the old one on that URL.
+- The first delivery can take up to about a minute. Deliveries are at least once: deduplicate by `uploadPostDelivery.deliveryId`.
+
+**Output**: one item per delivery with the webhook body as sent by Upload-Post (same body as the account webhook, e.g. `event`, `profile_username`, `platform`, `success`, `result`…) plus `uploadPostDelivery`:
+
+```json
+{
+  "event": "upload_completed",
+  "profile_username": "my_profile",
+  "...": "the rest of the event body",
+  "uploadPostDelivery": {
+    "event": "upload_completed",
+    "deliveryId": "6b1d…",
+    "attempt": 1,
+    "subscriptionId": "whsub_…",
+    "timestamp": "1763300000"
+  }
+}
+```
+
+`redeliveryOf` is added when the delivery is a manual redelivery (**Redeliver Webhook**). A delivery for an event the node did not select is acknowledged with `200` and does not run the workflow.
+
+To see what the subscription is doing: `GET /api/uploadposts/webhooks/subscriptions` (status, `disabled_reason`, health) and `GET /api/uploadposts/webhooks/deliveries?subscription_id=<id>` (its delivery log). `POST /api/uploadposts/webhooks/subscriptions/{id}/test` sends a sample of one of its events to the workflow.
+
 ## Operations
 
 The node provides the following operations grouped for clarity:
@@ -68,7 +117,7 @@ The node provides the following operations grouped for clarity:
 - **Upload Document**: LinkedIn document posts (PDF, PPT/PPTX, DOC/DOCX) and, on Telegram, any file up to 50 MB (audio, voice, sticker, GIF, video note...) with **Telegram Options > Send As**.
 
 - **Paid Partnership** (Upload Photo(s), Video and Text): one switch for sponsored posts, mapped to each network's native label (TikTok branded content, YouTube paid promotion, X paid partnership). Facebook and Pinterest also need **Facebook Sponsor ID** / **Pinterest Sponsor ID** (the sponsor's Page / account). Networks without a label publish without it and the response carries a warning; a network-specific field always wins. TikTok refuses it with the Only Me privacy level (`commercial_disclosure_privacy_conflict`) and drafts do not carry it.
-- **Telegram Options** (collection): text and caption override, first comment (as a reply by default), pin after publishing (silent unless Pin Notify), reply to a message (with quote), inline URL buttons (Reply Markup), message effect, link preview options, polls, locations (live too), venues, contacts, dice and rich messages (Upload Text), video cover / thumbnail / start time, album with extra Media URLs, Send As (animation, video note, live photo, audio, voice, sticker, document), caption overflow (split), paid media in Telegram Stars, Send By URL. Names and JSON objects follow the Telegram Bot API.
+- **Telegram Options** (collection): text and caption override, first comment (as a reply by default), pin after publishing (silent unless Pin Notify), reply to a message (with quote), inline URL buttons (Reply Markup), message effect, link preview options, polls, locations (live too), venues, contacts, dice and rich messages (Upload Text), video cover / thumbnail / start time, album with extra Media URLs, Send As (animation, video note, live photo, audio, voice, sticker, document), caption overflow (split), paid media in Telegram Stars, Send By URL, message and caption entities, full Reply Parameters, suggested posts, ephemeral messages, games, and **Allow Paid Broadcast** (faster than 30 messages/s, 0.1 Star per extra message from the bot's balance; Telegram only allows it to bots with 100,000 Stars and 100,000 monthly active users, otherwise the Telegram result fails). Names and JSON objects follow the Telegram Bot API.
 - **Bluesky Options** (collection): Tags (up to 8, not shown in the text), Created At (import older posts), Thread Overflow (long text continues as replies), GIF As Video, Captions (WebVTT, video), Video Presentation (GIF-style video).
 - **Google Business Options** (collection): Alert Type, Upload To Gallery, Multiple Media (up to 10 photos), recurring EVENT/OFFER posts (Recurrence, days, day of month, week occurrence, end) and Google's own Scheduled Time.
 
@@ -238,6 +287,7 @@ You have two ways to handle this in n8n:
 - Configure "Poll Interval (Seconds)" (default 10) and "Timeout (Seconds)".
 - The node sleeps between checks (using n8n's `sleep`) and calls `GET /api/uploadposts/status?request_id=...` until success/failure or timeout.
 - Note: This does not guarantee completion in hosted environments with strict execution limits.
+- A post by a team Editor or Contributor that goes to approval comes back as `202` with `pending_approval: true` (or `approval_status: "draft"`) and an `approval_id`: nothing is published until the owner or an Admin approves it, so the node returns that answer at once instead of polling.
 
 2) Workflow-level polling (recommended for reliability)
 - Use the Upload operation, read `request_id` from its output.
@@ -397,7 +447,7 @@ Related docs:
 
 ## Compatibility
 
-Tested with n8n version 1.x.
+Tested with n8n version 1.x. The Upload Post Trigger was checked on n8n 2.47 (loading, credential, activation, signed deliveries, test URL).
 Requires Node.js version 20.15 or later.
 
 ## Development
