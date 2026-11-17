@@ -117,8 +117,10 @@ test('exposes the best time, queue, Telegram, Bluesky and Google Business operat
 	}
 	assert.match(source, /paid_partnership|applyNetworkUploadOptions/);
 	assert.match(source, /delete_all_messages/);
-	// Nothing that is switched off in the API is offered.
-	assert.doesNotMatch(network, /allow_paid_broadcast|telegram\/updates|bluesky\/graph|\/youtube\//)
+	// Nothing that is switched off in the API is offered. Telegram paid
+	// broadcasts are on (since 16-nov-2026) and offered.
+	assert.doesNotMatch(network, /bluesky\/graph|\/youtube\//);
+	assert.match(network, /'telegram_allow_paid_broadcast'/);
 	const youtube = fs.readFileSync(path.join(root, 'nodes/UploadPost/YouTubeOperations.ts'), 'utf8');
 	// YouTube Analytics queries, Reporting and push notifications are not offered.
 	assert.doesNotMatch(youtube, /analytics\/query|reporting|\/push/i);;
