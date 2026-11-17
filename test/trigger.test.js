@@ -143,7 +143,7 @@ test('checkExists surfaces a disabled feature as a clear error', async () => {
 			}),
 		},
 	});
-	await assert.rejects(hooks.checkExists.call(ctx), /not available on Upload-Post/);
+	await assert.rejects(hooks.checkExists.call(ctx), /not generally available on Upload-Post yet/);
 });
 
 // --------------------------------------------------------------------- create

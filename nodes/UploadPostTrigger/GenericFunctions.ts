@@ -124,8 +124,11 @@ const describeError = (
 			};
 		case 'webhook_subscriptions_disabled':
 			return {
-				message: 'Webhook subscriptions are not available on Upload-Post right now',
-				description: apiMessage || 'Try again later.',
+				// Off as a feature, not a temporary failure: retrying will not help.
+				message: 'Webhook subscriptions are not generally available on Upload-Post yet, so this trigger cannot be activated',
+				description:
+					`${apiMessage ? apiMessage + '. ' : ''}Upload-Post answered 503 webhook_subscriptions_disabled: the feature is switched off, ` +
+					'not a temporary failure. Until it is on, use the account webhook (Update Notification Preferences) with an n8n Webhook node.',
 			};
 	}
 	if (statusCode === 401 || statusCode === 403) {
