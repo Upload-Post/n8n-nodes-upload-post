@@ -7,6 +7,10 @@
   - Optional profile filter and **Verify Signature** (on by default): HMAC-SHA256 of `"{timestamp}.{raw body}"` with the account webhook secret, constant-time comparison, deliveries more than 5 minutes off rejected.
   - Uses webhook subscriptions (`/api/uploadposts/webhooks/subscriptions`): one per active workflow and one while listening for a test event, created with `source: "n8n"` and the workflow name, deleted on deactivation (a `404` counts as deleted). It does not touch the account or profile webhook URL.
   - Needs n8n on a public HTTPS address: a local URL is refused by Upload-Post (`400 invalid_url`) and the node says so.
+  - Not generally available yet: while webhook subscriptions are switched off, activation fails with `503 webhook_subscriptions_disabled` and the node says the feature is off (not a temporary failure).
+- Telegram Options on uploads: **Allow Paid Broadcast** (`telegram_allow_paid_broadcast`, spends the bot's Stars), plus Entities, Caption Entities, Reply Parameters, Suggested Post Parameters, Ephemeral Message Parameters, Game Short Name and Disable Content Type Detection.
+- A team member's post that goes to approval (`202`, `pending_approval: true`) is returned right away instead of polling the status until the timeout.
+- Create User says that a repeated name answers `409 Username already in use` and a full plan `403 PROFILE_LIMIT_REACHED`.
 
 ## 0.8.0
 

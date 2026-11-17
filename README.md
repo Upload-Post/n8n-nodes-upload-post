@@ -33,6 +33,8 @@ The package has two nodes: **Upload Post** (actions) and **Upload Post Trigger**
 
 **Requirement: a public HTTPS address.** Upload-Post only delivers to a public `https://` URL. An n8n running on `localhost`, a private IP or plain `http` cannot be activated: Upload-Post answers `400 invalid_url` and the node shows *"Upload-Post only sends webhooks to a public HTTPS URL: set WEBHOOK_URL on this n8n to its public https address"* (in n8n 2.x, as the workflow activation error). Self-hosted n8n must run behind a public https address and have its `WEBHOOK_URL` environment variable set to it. n8n Cloud works as is.
 
+**Not generally available yet.** Webhook subscriptions are switched off on Upload-Post for now: while they are, activating the trigger fails with `503 webhook_subscriptions_disabled` (*"Webhook subscriptions are not generally available on Upload-Post yet"*). That is the feature being off, not a temporary failure. Until it is on, point the account webhook (**Update Notification Preferences**) at an n8n **Webhook** node.
+
 **Parameters**
 - **Events** (required, several allowed):
   - `upload_completed`: an upload finished, published or failed (check `success` in each platform result).
@@ -115,7 +117,7 @@ The node provides the following operations grouped for clarity:
 - **Upload Document**: LinkedIn document posts (PDF, PPT/PPTX, DOC/DOCX) and, on Telegram, any file up to 50 MB (audio, voice, sticker, GIF, video note...) with **Telegram Options > Send As**.
 
 - **Paid Partnership** (Upload Photo(s), Video and Text): one switch for sponsored posts, mapped to each network's native label (TikTok branded content, YouTube paid promotion, X paid partnership). Facebook and Pinterest also need **Facebook Sponsor ID** / **Pinterest Sponsor ID** (the sponsor's Page / account). Networks without a label publish without it and the response carries a warning; a network-specific field always wins. TikTok refuses it with the Only Me privacy level (`commercial_disclosure_privacy_conflict`) and drafts do not carry it.
-- **Telegram Options** (collection): text and caption override, first comment (as a reply by default), pin after publishing (silent unless Pin Notify), reply to a message (with quote), inline URL buttons (Reply Markup), message effect, link preview options, polls, locations (live too), venues, contacts, dice and rich messages (Upload Text), video cover / thumbnail / start time, album with extra Media URLs, Send As (animation, video note, live photo, audio, voice, sticker, document), caption overflow (split), paid media in Telegram Stars, Send By URL. Names and JSON objects follow the Telegram Bot API.
+- **Telegram Options** (collection): text and caption override, first comment (as a reply by default), pin after publishing (silent unless Pin Notify), reply to a message (with quote), inline URL buttons (Reply Markup), message effect, link preview options, polls, locations (live too), venues, contacts, dice and rich messages (Upload Text), video cover / thumbnail / start time, album with extra Media URLs, Send As (animation, video note, live photo, audio, voice, sticker, document), caption overflow (split), paid media in Telegram Stars, Send By URL, message and caption entities, full Reply Parameters, suggested posts, ephemeral messages, games, and **Allow Paid Broadcast** (faster than 30 messages/s, 0.1 Star per extra message from the bot's balance; Telegram only allows it to bots with 100,000 Stars and 100,000 monthly active users, otherwise the Telegram result fails). Names and JSON objects follow the Telegram Bot API.
 - **Bluesky Options** (collection): Tags (up to 8, not shown in the text), Created At (import older posts), Thread Overflow (long text continues as replies), GIF As Video, Captions (WebVTT, video), Video Presentation (GIF-style video).
 - **Google Business Options** (collection): Alert Type, Upload To Gallery, Multiple Media (up to 10 photos), recurring EVENT/OFFER posts (Recurrence, days, day of month, week occurrence, end) and Google's own Scheduled Time.
 
@@ -285,6 +287,7 @@ You have two ways to handle this in n8n:
 - Configure "Poll Interval (Seconds)" (default 10) and "Timeout (Seconds)".
 - The node sleeps between checks (using n8n's `sleep`) and calls `GET /api/uploadposts/status?request_id=...` until success/failure or timeout.
 - Note: This does not guarantee completion in hosted environments with strict execution limits.
+- A post by a team Editor or Contributor that goes to approval comes back as `202` with `pending_approval: true` (or `approval_status: "draft"`) and an `approval_id`: nothing is published until the owner or an Admin approves it, so the node returns that answer at once instead of polling.
 
 2) Workflow-level polling (recommended for reliability)
 - Use the Upload operation, read `request_id` from its output.
