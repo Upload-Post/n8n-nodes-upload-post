@@ -232,6 +232,41 @@ test('create explains why a local n8n URL is refused', async () => {
 	assert.equal(ctx.staticData.subscriptionId, undefined);
 });
 
+test('create names the events Upload-Post refuses (400 invalid_events)', async () => {
+	const ctx = hookContext({
+		params: { events: ['upload_completed', 'youtube_video_published', 'post_approved'] },
+		routes: {
+			'POST /uploadposts/webhooks/subscriptions': () => ({
+				statusCode: 400,
+				body: {
+					success: false,
+					reason: 'invalid_events',
+					message: 'Unknown webhook events: youtube_video_published, post_approved',
+					allowed_events: ['upload_completed', 'comment_received'],
+				},
+			}),
+		},
+	});
+	await assert.rejects(hooks.create.call(ctx), (error) => {
+		assert.match(error.message, /not available on this Upload-Post account: post_approved, youtube_video_published/);
+		assert.match(error.description, /accepts now: upload_completed, comment_received/);
+		return true;
+	});
+});
+
+test('invalid_events without allowed_events falls back to the API message', async () => {
+	const ctx = hookContext({
+		params: { events: ['upload_completed', 'post_rejected'] },
+		routes: {
+			'POST /uploadposts/webhooks/subscriptions': () => ({
+				statusCode: 400,
+				body: { success: false, reason: 'invalid_events', message: 'Unknown webhook events: post_rejected' },
+			}),
+		},
+	});
+	await assert.rejects(hooks.create.call(ctx), /not available on this Upload-Post account: post_rejected\./);
+});
+
 test('create cuts the workflow name to 100 characters', async () => {
 	const state = { posts: [], listed: [], deleted: [] };
 	const ctx = hookContext({ params: { events: ['upload_completed'] }, routes: createRoutes(state), workflowName: 'x'.repeat(150) });
@@ -411,31 +446,25 @@ test('an event the node did not select is acknowledged without running the workf
 
 // ---------------------------------------------------------------- description
 
-test('the trigger is registered and lists every subscribable event', () => {
+test('the trigger is registered and its events are exactly the API catalog', () => {
 	const pkg = require(path.join(__dirname, '..', 'package.json'));
 	assert.ok(pkg.n8n.nodes.includes('dist/nodes/UploadPostTrigger/UploadPostTrigger.node.js'));
+	// Versioned copy of components.schemas.WebhookEventName from the API spec.
+	const catalog = require(path.join(__dirname, 'fixtures', 'webhook-event-names.json')).events;
 	const events = node.description.properties.find((p) => p.name === 'events').options.map((o) => o.value);
-	for (const event of [
-		'upload_completed',
-		'social_account_connected',
-		'social_account_disconnected',
-		'social_account_reauth_required',
-		'dm_received',
-		'comment_received',
-		'telegram_update',
-		'review_received',
-		'review_updated',
-		'customer_media_received',
-		'listing_google_update',
-		'listing_duplicate',
-		'listing_control_changed',
-		'youtube_video_published',
-		'youtube_video_updated',
-	]) {
-		assert.ok(events.includes(event), event);
-	}
+	assert.deepEqual([...events].sort(), [...catalog].sort());
+	assert.equal(new Set(events).size, events.length);
 	const verify = node.description.properties.find((p) => p.name === 'verifySignature');
 	assert.equal(verify.default, true);
 	assert.deepEqual(node.description.inputs, []);
 	assert.equal(node.description.credentials[0].name, 'uploadPostApi');
+});
+
+test('events gated by an account feature say so in their description', () => {
+	const options = node.description.properties.find((p) => p.name === 'events').options;
+	for (const option of options) {
+		if (/^(youtube_video_|post_approval_|post_approved|post_rejected)/.test(option.value)) {
+			assert.match(option.description, /Needs .* turned on/, option.value);
+		}
+	}
 });

@@ -39,7 +39,10 @@ The package has two nodes: **Upload Post** (actions) and **Upload Post Trigger**
   - `social_account_connected`, `social_account_disconnected`, `social_account_reauth_required`.
   - `comment_received`, `dm_received`, `telegram_update`: opt-in. The account has to have that feature available (comments on Instagram/TikTok/LinkedIn Pages, DMs on Instagram/Bluesky/Telegram bot, Telegram bot updates turned on in Upload-Post).
   - Google Business Profile: `review_received`, `review_updated`, `customer_media_received`, `listing_google_update`, `listing_duplicate`, `listing_control_changed` (need Google Business notifications turned on).
-  - YouTube: `youtube_video_published`, `youtube_video_updated` (need YouTube notifications turned on for the channel). While an event is not available on the account, activation fails with `invalid_events` and the list of events the account accepts.
+  - `post_analytics_updated`: opt-in. Upload-Post refreshed a post's analytics (on a read or a scheduled checkpoint); at most once per post and age bucket, with a daily cap per account.
+  - YouTube: `youtube_video_published`, `youtube_video_updated`. Only accepted while YouTube notifications are turned on (not available on every account yet).
+  - Post approvals: `post_approval_requested`, `post_approved`, `post_rejected`, `post_approval_expired`. Only accepted while post approvals are turned on for the account.
+  - While an event is not available on the account, Upload-Post answers `400 invalid_events` and the activation error names those events (*"These events are not available on this Upload-Post account: …"*); the error details list the events the account accepts now.
 - **Profile Name or ID** (optional): only events of that Upload-Post profile. Leave **All Profiles** for the whole account.
 - **Verify Signature** (on by default): rejects with `401` any request whose `X-Upload-Post-Signature` does not match the account webhook secret, or whose `X-Upload-Post-Timestamp` is more than 5 minutes off. The secret is read from `GET /api/uploadposts/users/notifications` and cached; if a signature fails, the node reads it again (at most once a minute) in case it was rotated.
 

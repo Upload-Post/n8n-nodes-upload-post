@@ -122,6 +122,36 @@ export class UploadPostTrigger implements INodeType {
 							'Google suggests updates to a Google Business Profile listing. Needs Google Business notifications turned on.',
 					},
 					{
+						name: 'Post Analytics Updated',
+						value: 'post_analytics_updated',
+						description:
+							'Upload-Post refreshed the analytics of a post (on a read or a scheduled checkpoint). Opt-in, at most once per post and age bucket, with a daily cap.',
+					},
+					{
+						name: 'Post Approval Expired',
+						value: 'post_approval_expired',
+						description:
+							'A post waiting for approval passed its date without a decision and will not be published. Needs post approvals turned on for the account.',
+					},
+					{
+						name: 'Post Approval Requested',
+						value: 'post_approval_requested',
+						description:
+							'A team member (Editor or Contributor) created a post that waits for approval. Needs post approvals turned on for the account.',
+					},
+					{
+						name: 'Post Approved',
+						value: 'post_approved',
+						description:
+							'A post waiting for approval was approved and scheduled. Needs post approvals turned on for the account.',
+					},
+					{
+						name: 'Post Rejected',
+						value: 'post_rejected',
+						description:
+							'A post waiting for approval was rejected. Needs post approvals turned on for the account.',
+					},
+					{
 						name: 'Review Received',
 						value: 'review_received',
 						description:
@@ -164,13 +194,13 @@ export class UploadPostTrigger implements INodeType {
 						name: 'YouTube Video Published',
 						value: 'youtube_video_published',
 						description:
-							'The YouTube channel of a profile published a video. Needs YouTube notifications turned on for the channel.',
+							'The YouTube channel of a profile published a video. Needs YouTube notifications turned on (not available on every account yet).',
 					},
 					{
 						name: 'YouTube Video Updated',
 						value: 'youtube_video_updated',
 						description:
-							'A video of that channel changed its title or description. Needs YouTube notifications turned on for the channel.',
+							'A video of that channel changed its title or description. Needs YouTube notifications turned on (not available on every account yet).',
 					},
 				],
 			},
@@ -245,7 +275,7 @@ export class UploadPostTrigger implements INodeType {
 
 				const response = await apiRequest.call(this, 'POST', SUBSCRIPTIONS_PATH, body);
 				if (response.statusCode !== 200 && response.statusCode !== 201) {
-					throwApiError.call(this, response);
+					throwApiError.call(this, response, events);
 				}
 				const subscription = (response.body.subscription ?? {}) as IDataObject;
 				if (!subscription.id) throwApiError.call(this, response);

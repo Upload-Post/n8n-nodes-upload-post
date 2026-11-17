@@ -73,7 +73,11 @@ export async function apiRequest(
 	};
 }
 
-const describeError = (statusCode: number, body: IDataObject): { message: string; description: string } => {
+const describeError = (
+	statusCode: number,
+	body: IDataObject,
+	requested: string[],
+): { message: string; description: string } => {
 	const reason = String(body.reason ?? '');
 	const apiMessage = String(body.message ?? '');
 	switch (reason) {
@@ -87,13 +91,24 @@ const describeError = (statusCode: number, body: IDataObject): { message: string
 					'(not https, or a private/local address). Run n8n behind a public https address and set its WEBHOOK_URL ' +
 					'environment variable to that address, then activate the workflow again.',
 			};
-		case 'invalid_events':
+		case 'invalid_events': {
+			// Gated events (YouTube push, post approvals) are refused while that
+			// feature is off on the account; name them, n8n shows only the message.
+			const allowed = Array.isArray(body.allowed_events) ? (body.allowed_events as string[]) : [];
+			let missing = allowed.length ? requested.filter((event) => !allowed.includes(event)) : [];
+			if (!missing.length) {
+				const listed = /Unknown webhook events:\s*(.+)$/.exec(apiMessage);
+				missing = listed ? listed[1].split(',').map((event) => event.trim()).filter(Boolean) : [];
+			}
 			return {
-				message: 'Upload-Post does not accept one of the selected events',
-				description: `${apiMessage}. Events this account accepts: ${
-					Array.isArray(body.allowed_events) ? (body.allowed_events as string[]).join(', ') : 'see the API documentation'
-				}.`,
+				message: missing.length
+					? `These events are not available on this Upload-Post account: ${missing.join(', ')}. Remove them or turn the feature on`
+					: 'Upload-Post does not accept one of the selected events',
+				description: `${apiMessage ? apiMessage + '. ' : ''}Events this account accepts now: ${
+					allowed.length ? allowed.join(', ') : 'see the API documentation'
+				}. YouTube video events need YouTube notifications on, post approval events need post approvals on.`,
 			};
+		}
 		case 'profile_not_found':
 			return { message: 'The selected Upload-Post profile does not exist', description: apiMessage };
 		case 'subscription_limit_reached':
@@ -122,8 +137,9 @@ const describeError = (statusCode: number, body: IDataObject): { message: string
 	};
 };
 
-export function throwApiError(this: Context, response: ApiResponse): never {
-	const { message, description } = describeError(response.statusCode, response.body);
+// requested: the events the node sent, to name the ones Upload-Post refused.
+export function throwApiError(this: Context, response: ApiResponse, requested: string[] = []): never {
+	const { message, description } = describeError(response.statusCode, response.body, requested);
 	throw new NodeApiError(this.getNode(), response.body as JsonObject, {
 		message,
 		description,

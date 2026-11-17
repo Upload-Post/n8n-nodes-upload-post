@@ -55,7 +55,7 @@ Agent → Content Generation → Upload Post Node → Multiple Platforms
 - **Webhook delivery log**: List Webhook Deliveries (7 days, status/attempts/HTTP code), Get Webhook Delivery (with payload), Redeliver Webhook. Webhooks are at-least-once: deduplicate by `X-Upload-Post-Delivery`
 
 #### Upload Post Trigger (webhook events)
-- **Upload Post Trigger** starts a workflow on Upload-Post events: `upload_completed` (published or failed), `social_account_*`, `comment_received` / `dm_received` / `telegram_update` (opt-in, the feature must be available on the account), Google Business and YouTube push events
+- **Upload Post Trigger** starts a workflow on Upload-Post events: `upload_completed` (published or failed), `social_account_*`, `comment_received` / `dm_received` / `telegram_update` / `post_analytics_updated` (opt-in), Google Business events, YouTube push events and post approval events (`post_approval_requested`, `post_approved`, `post_rejected`, `post_approval_expired`). YouTube and approval events are only accepted while that feature is on for the account; otherwise activation fails naming them (`invalid_events`)
 - Activation creates a webhook subscription for the node URL (`source: "n8n"`); deactivation deletes it. It never changes the account webhook URL
 - Needs n8n on a **public HTTPS** address (`WEBHOOK_URL`); a local n8n gets `400 invalid_url`
 - Signature check is on by default; each item carries the body plus `uploadPostDelivery` (`event`, `deliveryId`, `attempt`, `subscriptionId`). Deduplicate by `deliveryId`
