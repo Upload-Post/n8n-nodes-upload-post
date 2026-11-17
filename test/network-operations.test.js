@@ -448,3 +448,59 @@ test('upload document accepts Telegram with Send As', async () => {
 	assert.equal(f.telegram_performer, 'My Podcast');
 	assert.deepEqual(f['platform[]'], 'telegram');
 });
+
+test('upload text: paid broadcast and the other Telegram Bot API fields', async () => {
+	const req = await run(textUpload({
+		platform: ['telegram'],
+		telegramOptions: {
+			allowPaidBroadcast: true,
+			entities: '[{"type": "bold", "offset": 0, "length": 5}]',
+			replyParameters: '{"message_id": 7}',
+			suggestedPostParameters: '{"send_date": 1800000000}',
+			ephemeralMessageParameters: '{"receiver_user_id": 42}',
+			gameShortName: 'quiz',
+		},
+	}));
+	const f = formFields(req);
+	assert.equal(f.telegram_allow_paid_broadcast, 'true');
+	assert.equal(f.telegram_entities, '[{"type":"bold","offset":0,"length":5}]');
+	assert.equal(f.telegram_reply_parameters, '{"message_id":7}');
+	assert.equal(f.telegram_suggested_post_parameters, '{"send_date":1800000000}');
+	assert.equal(f.telegram_ephemeral_message_parameters, '{"receiver_user_id":42}');
+	assert.equal(f.telegram_game_short_name, 'quiz');
+});
+
+test('a post that went to approval (202 pending_approval) is returned without polling', async () => {
+	const calls = [];
+	const params = textUpload({ platform: ['x'], waitForCompletion: true, pollInterval: 1, pollTimeout: 5 });
+	const pending = {
+		success: true,
+		pending_approval: true,
+		approval_id: 'ap1',
+		approval_status: 'pending_approval',
+		job_id: null,
+		request_id: 'req1',
+	};
+	const ctx = {
+		getInputData: () => [{ json: {} }],
+		getNodeParameter: (name, _itemIndex, fallback) => {
+			if (Object.prototype.hasOwnProperty.call(params, name)) return params[name];
+			if (fallback !== undefined) return fallback;
+			throw new Error(`missing parameter ${name}`);
+		},
+		getNode: () => ({ id: 'node-1', name: 'Upload Post', type: 'uploadPost', typeVersion: 1 }),
+		getExecutionId: () => 'exec-1',
+		helpers: {
+			httpRequestWithAuthentication: async (_credential, options) => {
+				calls.push(options);
+				return calls.length === 1 ? pending : { status: 'pending_approval', approval_id: 'ap1' };
+			},
+			httpRequest: async () => {
+				throw new Error('unexpected unauthenticated request');
+			},
+		},
+	};
+	const [[item]] = await new UploadPost().execute.call(ctx);
+	assert.equal(calls.length, 1, 'no status polling for a post waiting for approval');
+	assert.deepEqual(item.json, pending);
+});

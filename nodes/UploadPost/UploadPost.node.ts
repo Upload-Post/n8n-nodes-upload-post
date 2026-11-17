@@ -167,7 +167,12 @@ const ensureArrayFromCommaSeparated = (value: string): string[] => {
 
 // Statuses after which /uploadposts/status will not change on its own. Anything
 // else (queued, pending, processing, in_progress) means the job is still moving.
-const TERMINAL_UPLOAD_STATUSES = ['completed', 'failed', 'error', 'retryable', 'scheduled', 'not_found'];
+// A team member's post waiting for approval does not move on its own either:
+// pending_approval and draft wait for a reviewer, the others are closed.
+const TERMINAL_UPLOAD_STATUSES = [
+	'completed', 'failed', 'error', 'retryable', 'scheduled', 'not_found',
+	'pending_approval', 'draft', 'rejected', 'withdrawn', 'expired',
+];
 
 // The API deduplicates an upload when the same idempotency key arrives twice within 24h.
 // The key must survive an n8n "Retry On Fail", otherwise a retried upload posts twice.
@@ -3903,7 +3908,7 @@ export class UploadPost implements INodeType {
 				name: 'waitForCompletion',
 				type: 'boolean',
 				default: true,
-				description: 'Whether to perform best-effort sleeping between status checks within this node. Not guaranteed to finish; for reliable long polling use a separate Wait node plus Get Upload Status.',
+				description: 'Whether to perform best-effort sleeping between status checks within this node. Not guaranteed to finish; for reliable long polling use a separate Wait node plus Get Upload Status. A post that goes to approval (pending_approval: an Editor or Contributor of a team) returns right away: it is published only once the owner or an Admin approves it.',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument']
@@ -4414,7 +4419,7 @@ export class UploadPost implements INodeType {
 				type: 'string',
 				required: true,
 				default: '',
-				description: 'Profile name to create',
+				description: 'Profile name to create. It must be new in the account (capitals ignored): a name already used answers 409 "Username already in use". With no profile left in the plan the API answers 403 PROFILE_LIMIT_REACHED.',
 				displayOptions: {
 					show: { operation: ['createUser'] }
 				},
@@ -7299,7 +7304,10 @@ export class UploadPost implements INodeType {
 			const responseData = parseJsonIfNeeded(rawResponse);
 
 			let finalData: any = responseData;
-			if (config.isUploadOperation && config.waitForCompletion) {
+			// 202 pending_approval (a team Editor or Contributor): nothing is published
+			// until the owner or an Admin approves it, so there is nothing to wait for.
+			const pendingApproval = Boolean(responseData && (responseData as any).pending_approval === true);
+			if (config.isUploadOperation && config.waitForCompletion && !pendingApproval) {
 				const requestId = responseData && (responseData as any).request_id
 					? ((responseData as any).request_id as string)
 					: undefined;
