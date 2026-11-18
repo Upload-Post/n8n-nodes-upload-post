@@ -11,6 +11,7 @@ import {
 	NodeOperationError,
 	sleep
 } from 'n8n-workflow';
+import { createHash } from 'crypto';
 
 import {
 	applyNetworkUploadOptions,
@@ -174,9 +175,6 @@ const TERMINAL_UPLOAD_STATUSES = [
 	'pending_approval', 'draft', 'rejected', 'withdrawn', 'expired',
 ];
 
-// The API deduplicates an upload when the same idempotency key arrives twice within 24h.
-// The key must survive an n8n "Retry On Fail", otherwise a retried upload posts twice.
-// Execution id, node id and item index are all stable across a node-level retry.
 // The API shallow-merges the notification payload, so toggling the webhook
 // channel would drop telegram/slack/whatsapp unless we resend them.
 const fetchNotificationChannels = async (ctx: ExecutionContext): Promise<IDataObject> => {
@@ -193,12 +191,55 @@ const fetchNotificationChannels = async (ctx: ExecutionContext): Promise<IDataOb
 	}
 };
 
-const buildIdempotencyKey = (ctx: ExecutionContext): string => {
+// How many times this node already ran in this execution ($runIndex). A loop
+// (Loop Over Items / Split In Batches) runs the node again with item 0 every
+// time, so the run index is what tells the passes apart; n8n's Retry On Fail
+// repeats the same run with the same index.
+const getRunIndex = (ctx: ExecutionContext): number => {
+	try {
+		const runIndex = ctx.node.getWorkflowDataProxy(ctx.itemIndex).$thisRunIndex;
+		return typeof runIndex === 'number' && Number.isFinite(runIndex) ? runIndex : 0;
+	} catch {
+		return 0;
+	}
+};
+
+// Short hash of what the upload sends: every form field, and each file by its
+// name, type and size (not its bytes). A retry of the same request sends the
+// same content; another post does not.
+const hashUploadContent = (formData: IDataObject | undefined): string => {
+	const hash = createHash('sha256');
+	const payload = buildMultipartPayload(formData ?? {});
+	for (const key of Object.keys(payload).sort()) {
+		const values = Array.isArray(payload[key]) ? (payload[key] as MultipartValue[]) : [payload[key] as MultipartValue];
+		for (const value of values) {
+			let part: string;
+			if (isBinaryFormField(value)) {
+				const size = typeof value.value === 'string' ? value.value.length : value.value.length;
+				part = `file:${value.options?.filename ?? ''}:${value.options?.contentType ?? ''}:${size}`;
+			} else {
+				part = `text:${value}`;
+			}
+			hash.update(`${key}\u0000${part.length}\u0000${part}\u0000`);
+		}
+	}
+	return hash.digest('hex').slice(0, 16);
+};
+
+// The API collapses two uploads with the same Idempotency-Key within 24 hours
+// into one post: it answers the second with the first one. The derived key has
+// to stay the same when n8n retries a request (Retry On Fail), or the upload
+// is posted twice, and change for every other post, or that post is dropped.
+// Execution, node, run index and item are stable across a retry; the run index
+// separates the passes of a loop and the content hash separates any two
+// different posts even where the run index does not move.
+const buildIdempotencyKey = (ctx: ExecutionContext, formData?: IDataObject): string => {
 	const override = String(ctx.node.getNodeParameter('idempotencyKey', ctx.itemIndex, '') ?? '').trim();
 	if (override) {
 		return override;
 	}
-	return `n8n:${ctx.node.getExecutionId()}:${ctx.node.getNode().id}:${ctx.itemIndex}`;
+	const base = `n8n:${ctx.node.getExecutionId()}:${ctx.node.getNode().id}`;
+	return `${base}:${getRunIndex(ctx)}:${ctx.itemIndex}:${hashUploadContent(formData)}`;
 };
 
 const getBinaryFieldFromItem = async (
@@ -3896,7 +3937,7 @@ export class UploadPost implements INodeType {
 				name: 'idempotencyKey',
 				type: 'string',
 				default: '',
-				description: 'Key the API uses to collapse duplicate uploads within 24 hours. Leave empty to derive one automatically from the execution, node and item, which is what prevents a retried upload from posting twice. Set it explicitly only when you drive retries yourself.',
+				description: 'Key the API uses to collapse duplicate uploads within 24 hours: a second upload with the same key returns the first post instead of publishing. Leave empty to derive one from the execution, the node, its run (each pass of a loop is a new run), the item and a hash of the content (fields plus file names and sizes). Retry On Fail then sends the same key and cannot post twice, while every pass of a loop gets its own. If a field changes on every attempt (for example built from $now), a retry counts as a new post: set the key yourself. Set it also when you drive retries yourself.',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument']
@@ -7271,7 +7312,7 @@ export class UploadPost implements INodeType {
 			if (config.isUploadOperation) {
 				requestOptions.headers = {
 					...(requestOptions.headers ?? {}),
-					'Idempotency-Key': buildIdempotencyKey(ctx),
+					'Idempotency-Key': buildIdempotencyKey(ctx, config.formData),
 					'X-Upload-Post-Source': 'n8n',
 				};
 			}

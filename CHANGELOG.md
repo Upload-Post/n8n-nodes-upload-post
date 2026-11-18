@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Uploads in a loop (Loop Over Items / Split In Batches) are all published. The derived `Idempotency-Key` now includes the run of the node and a hash of the content (fields plus file names, types and sizes): before, every pass of the loop sent the key of the first one and got the first post back. Retry On Fail still sends the same key.
+
 ## 0.9.0
 
 - New **Upload Post Trigger** node: starts a workflow when Upload-Post sends a webhook event.
