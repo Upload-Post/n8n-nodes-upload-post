@@ -4,6 +4,7 @@
 
 - Uploads in a loop (Loop Over Items / Split In Batches) are all published. The derived `Idempotency-Key` now includes the run of the node and a hash of the content (fields plus file names, types and sizes): before, every pass of the loop sent the key of the first one and got the first post back. Retry On Fail still sends the same key.
 - Get Upload History: **Limit** is a list of the values the API accepts (10, 20, 50, 100); a workflow saved with another number gets the closest one instead of a `400`, and a page below 1 is sent as 1.
+- Wait for Completion: a `429` while checking the status no longer fails the node; it waits (`Retry-After` when sent) and keeps checking within the timeout. A `404` (`not_found`) is read and checked again every 10 s; if it lasts a minute (or until the timeout) the node fails saying the request_id is unknown, instead of the bare HTTP error.
 
 ## 0.9.0
 

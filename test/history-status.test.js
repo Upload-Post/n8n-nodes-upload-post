@@ -62,3 +62,93 @@ test('the history limit is a list of the valid values', () => {
 	assert.deepEqual(prop.options.map((o) => o.value), [10, 20, 50, 100]);
 	assert.equal(prop.default, 20);
 });
+
+// Status polling. The fake behaves like n8n's helper: a status >= 400 throws
+// unless ignoreHttpStatusErrors, and returnFullResponse gives status + headers.
+const { mock } = require('node:test');
+
+const pollUpload = async (statusAnswers, { pollInterval = 1, pollTimeout = 120 } = {}) => {
+	const statusCalls = [];
+	const ctx = baseCtx({
+		resource: 'uploads',
+		operation: 'uploadText',
+		user: 'acme',
+		platform: ['x'],
+		title: 'Hello',
+		uploadAsync: true,
+		waitForCompletion: true,
+		pollInterval,
+		pollTimeout,
+	}, async (options) => {
+		if (options.method === 'POST') return { success: true, request_id: 'req-1' };
+		statusCalls.push(Date.now());
+		const answer = statusAnswers[Math.min(statusCalls.length - 1, statusAnswers.length - 1)];
+		const full = { statusCode: answer.code, headers: answer.headers ?? {}, body: answer.body };
+		if (answer.code >= 400 && !options.ignoreHttpStatusErrors) {
+			const err = new Error(`Request failed with status code ${answer.code}`);
+			err.httpCode = String(answer.code);
+			throw err;
+		}
+		return options.returnFullResponse ? full : full.body;
+	});
+	mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+	try {
+		let settled = false;
+		const result = new UploadPost().execute.call(ctx).then(
+			(value) => { settled = true; return { value }; },
+			(error) => { settled = true; return { error }; },
+		);
+		for (let i = 0; i < 2000 && !settled; i++) {
+			await new Promise((resolve) => setImmediate(resolve));
+			mock.timers.tick(500);
+		}
+		assert.ok(settled, 'polling never finished');
+		return { ...(await result), statusCalls };
+	} finally {
+		mock.timers.reset();
+	}
+};
+
+const completed = { code: 200, body: { success: true, status: 'completed', request_id: 'req-1' } };
+const notFound = { code: 404, body: { success: false, status: 'not_found', request_id: 'req-1' } };
+
+test('polling waits out a 429 (Retry-After) and goes on', async () => {
+	const { value, error, statusCalls } = await pollUpload([
+		{ code: 429, headers: { 'retry-after': '7' }, body: { success: false, message: 'Too many requests' } },
+		completed,
+	]);
+	assert.equal(error, undefined);
+	assert.equal(value[0][0].json.status, 'completed');
+	assert.equal(statusCalls.length, 2);
+	assert.ok(statusCalls[1] - statusCalls[0] >= 7000, `waited ${statusCalls[1] - statusCalls[0]} ms`);
+});
+
+test('polling a 429 stays inside the timeout', async () => {
+	const { value, error, statusCalls } = await pollUpload(
+		[{ code: 429, headers: { 'retry-after': '3600' }, body: {} }],
+		{ pollTimeout: 30 },
+	);
+	assert.equal(error, undefined);
+	assert.equal(value[0][0].json.message, 'Polling timed out');
+	assert.ok(statusCalls.every((t) => t <= 31000), String(statusCalls));
+});
+
+test('a not_found answer (404) is read and polling goes on', async () => {
+	const { value, error } = await pollUpload([notFound, completed]);
+	assert.equal(error, undefined);
+	assert.equal(value[0][0].json.status, 'completed');
+});
+
+test('a 404 that does not go away ends in a clear error, not a loop', async () => {
+	const { error, statusCalls } = await pollUpload([notFound], { pollTimeout: 600 });
+	assert.ok(error, 'expected an error');
+	assert.match(error.message, /req-1/);
+	assert.match(error.message, /not_found|not found/i);
+	assert.ok(statusCalls.length <= 8, `${statusCalls.length} status calls`);
+	assert.ok(statusCalls[statusCalls.length - 1] <= 75000, `last check at ${statusCalls[statusCalls.length - 1]} ms`);
+});
+
+test('another error status during polling still fails the node', async () => {
+	const { error } = await pollUpload([{ code: 401, body: { success: false, message: 'Invalid API key' } }]);
+	assert.ok(error, 'expected an error');
+});

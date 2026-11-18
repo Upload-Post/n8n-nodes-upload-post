@@ -7,6 +7,8 @@ import {
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
+	JsonObject,
+	NodeApiError,
 	NodeConnectionType,
 	NodeOperationError,
 	sleep
@@ -2459,6 +2461,22 @@ const appendBinaryValue = (form: NativeFormData, key: string, field: BinaryFormF
 	form.append(key, value, { filename, contentType });
 };
 
+// How long the status may stay not_found before the poll gives up on the
+// request_id (longer than the API keeps a not_found answer).
+const NOT_FOUND_GRACE_MS = 60 * 1000;
+// Checking a not_found request_id more often than this only gets the same answer.
+const NOT_FOUND_RECHECK_MS = 10 * 1000;
+
+// Retry-After in milliseconds: seconds or an HTTP date.
+const retryAfterMs = (headers: IDataObject | undefined): number | undefined => {
+	const raw = headers?.['retry-after'] ?? headers?.['Retry-After'];
+	if (raw === undefined || raw === null || raw === '') return undefined;
+	const seconds = Number(raw);
+	if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+	const date = Date.parse(String(raw));
+	return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
+};
+
 const pollUploadStatus = async (
 	node: IExecuteFunctions,
 	requestId: string,
@@ -2466,25 +2484,73 @@ const pollUploadStatus = async (
 	pollTimeout: number,
 ): Promise<any> => {
 	const start = Date.now();
+	const deadline = start + Math.max(5, pollTimeout) * 1000;
+	const interval = Math.max(1, pollInterval) * 1000;
 	let finalData: any = { success: false, message: 'Polling timed out', request_id: requestId };
+	let wait = interval;
+	let notFoundSince: number | undefined;
 	let isPolling = true; while (isPolling) {
-		await sleep(Math.max(1, pollInterval) * 1000);
-		if (Date.now() - start > Math.max(5, pollTimeout) * 1000) {
+		// Never sleep past the timeout, even when Retry-After asks for longer.
+		await sleep(Math.max(0, Math.min(wait, deadline - Date.now())));
+		if (Date.now() >= deadline) {
 			break;
 		}
+		wait = interval;
 		const statusOptions: IHttpRequestOptions = {
 			url: `${API_BASE_URL}/uploadposts/status`,
 			method: 'GET',
 			qs: { request_id: requestId },
 			headers: { 'X-Upload-Post-Source': 'n8n' },
 			json: true,
+			// 404 carries the not_found status and 429 only means "later": read
+			// them here instead of letting the helper throw.
+			ignoreHttpStatusErrors: true,
+			returnFullResponse: true,
 		};
-		const statusData = await node.helpers.httpRequestWithAuthentication.call(node, 'uploadPostApi', statusOptions);
+		const response = (await node.helpers.httpRequestWithAuthentication.call(
+			node,
+			'uploadPostApi',
+			statusOptions,
+		)) as { statusCode?: number; headers?: IDataObject; body?: unknown };
+		const statusCode = Number(response?.statusCode ?? 200);
+		const statusData = parseJsonIfNeeded(response?.body);
+		if (statusCode === 429) {
+			wait = Math.max(interval, retryAfterMs(response?.headers) ?? 0);
+			continue;
+		}
+		if (statusCode >= 400 && statusCode !== 404) {
+			throw new NodeApiError(node.getNode(), (statusData && typeof statusData === 'object' ? statusData : { message: String(statusData ?? '') }) as JsonObject, {
+				httpCode: String(statusCode),
+			});
+		}
 		finalData = statusData;
 		const statusValue = (statusData && (statusData as any).status) as string | undefined;
-		if (typeof statusValue === 'string' && TERMINAL_UPLOAD_STATUSES.includes(statusValue.toLowerCase())) {
+		const status = typeof statusValue === 'string' ? statusValue.toLowerCase() : statusCode === 404 ? 'not_found' : undefined;
+		if (status === 'not_found') {
+			// The API keeps a not_found answer for a short while, so give a new
+			// request_id that long before calling it unknown.
+			notFoundSince = notFoundSince ?? Date.now();
+			wait = Math.max(interval, NOT_FOUND_RECHECK_MS);
+			if (Date.now() - notFoundSince >= NOT_FOUND_GRACE_MS) {
+				throw new NodeOperationError(
+					node.getNode(),
+					`Upload-Post has no upload with request_id "${requestId}" (status not_found for ${Math.round((Date.now() - notFoundSince) / 1000)} s)`,
+					{ description: 'Check that the request_id belongs to this API key (team members: the owner account) and to an upload, not a scheduled job_id.' },
+				);
+			}
+			continue;
+		}
+		notFoundSince = undefined;
+		if (status && TERMINAL_UPLOAD_STATUSES.includes(status)) {
 			break;
 		}
+	}
+	if (notFoundSince !== undefined) {
+		throw new NodeOperationError(
+			node.getNode(),
+			`Upload-Post has no upload with request_id "${requestId}" (status not_found until the timeout)`,
+			{ description: 'Check that the request_id belongs to this API key (team members: the owner account) and to an upload, not a scheduled job_id.' },
+		);
 	}
 	return finalData;
 };
