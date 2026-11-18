@@ -7,10 +7,13 @@ import {
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
+	JsonObject,
+	NodeApiError,
 	NodeConnectionType,
 	NodeOperationError,
 	sleep
 } from 'n8n-workflow';
+import { createHash } from 'crypto';
 
 import {
 	applyNetworkUploadOptions,
@@ -152,6 +155,18 @@ type UploadPreparation = {
 	pollTimeout: number;
 };
 
+// /uploadposts/history answers 400 to any other limit. Workflows saved when the
+// field was a free number keep working: their value goes to the closest one
+// (a tie goes to the larger).
+const HISTORY_LIMITS = [10, 20, 50, 100];
+const closestHistoryLimit = (value: unknown): number => {
+	const wanted = Number(value);
+	if (!Number.isFinite(wanted)) return 20;
+	return HISTORY_LIMITS.reduce((best, limit) =>
+		Math.abs(limit - wanted) <= Math.abs(best - wanted) ? limit : best,
+	);
+};
+
 const normalizeDateInput = (value: string | undefined): string | undefined => {
 	if (!value) return undefined;
 	const hasTimezone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(value);
@@ -174,9 +189,6 @@ const TERMINAL_UPLOAD_STATUSES = [
 	'pending_approval', 'draft', 'rejected', 'withdrawn', 'expired',
 ];
 
-// The API deduplicates an upload when the same idempotency key arrives twice within 24h.
-// The key must survive an n8n "Retry On Fail", otherwise a retried upload posts twice.
-// Execution id, node id and item index are all stable across a node-level retry.
 // The API shallow-merges the notification payload, so toggling the webhook
 // channel would drop telegram/slack/whatsapp unless we resend them.
 const fetchNotificationChannels = async (ctx: ExecutionContext): Promise<IDataObject> => {
@@ -193,12 +205,55 @@ const fetchNotificationChannels = async (ctx: ExecutionContext): Promise<IDataOb
 	}
 };
 
-const buildIdempotencyKey = (ctx: ExecutionContext): string => {
+// How many times this node already ran in this execution ($runIndex). A loop
+// (Loop Over Items / Split In Batches) runs the node again with item 0 every
+// time, so the run index is what tells the passes apart; n8n's Retry On Fail
+// repeats the same run with the same index.
+const getRunIndex = (ctx: ExecutionContext): number => {
+	try {
+		const runIndex = ctx.node.getWorkflowDataProxy(ctx.itemIndex).$thisRunIndex;
+		return typeof runIndex === 'number' && Number.isFinite(runIndex) ? runIndex : 0;
+	} catch {
+		return 0;
+	}
+};
+
+// Short hash of what the upload sends: every form field, and each file by its
+// name, type and size (not its bytes). A retry of the same request sends the
+// same content; another post does not.
+const hashUploadContent = (formData: IDataObject | undefined): string => {
+	const hash = createHash('sha256');
+	const payload = buildMultipartPayload(formData ?? {});
+	for (const key of Object.keys(payload).sort()) {
+		const values = Array.isArray(payload[key]) ? (payload[key] as MultipartValue[]) : [payload[key] as MultipartValue];
+		for (const value of values) {
+			let part: string;
+			if (isBinaryFormField(value)) {
+				const size = typeof value.value === 'string' ? value.value.length : value.value.length;
+				part = `file:${value.options?.filename ?? ''}:${value.options?.contentType ?? ''}:${size}`;
+			} else {
+				part = `text:${value}`;
+			}
+			hash.update(`${key}\u0000${part.length}\u0000${part}\u0000`);
+		}
+	}
+	return hash.digest('hex').slice(0, 16);
+};
+
+// The API collapses two uploads with the same Idempotency-Key within 24 hours
+// into one post: it answers the second with the first one. The derived key has
+// to stay the same when n8n retries a request (Retry On Fail), or the upload
+// is posted twice, and change for every other post, or that post is dropped.
+// Execution, node, run index and item are stable across a retry; the run index
+// separates the passes of a loop and the content hash separates any two
+// different posts even where the run index does not move.
+const buildIdempotencyKey = (ctx: ExecutionContext, formData?: IDataObject): string => {
 	const override = String(ctx.node.getNodeParameter('idempotencyKey', ctx.itemIndex, '') ?? '').trim();
 	if (override) {
 		return override;
 	}
-	return `n8n:${ctx.node.getExecutionId()}:${ctx.node.getNode().id}:${ctx.itemIndex}`;
+	const base = `n8n:${ctx.node.getExecutionId()}:${ctx.node.getNode().id}`;
+	return `${base}:${getRunIndex(ctx)}:${ctx.itemIndex}:${hashUploadContent(formData)}`;
 };
 
 const getBinaryFieldFromItem = async (
@@ -1348,8 +1403,8 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 			};
 		}
 		case 'getHistory': {
-			const page = ctx.node.getNodeParameter('historyPage', ctx.itemIndex, 1) as number;
-			const limit = ctx.node.getNodeParameter('historyLimit', ctx.itemIndex, 20) as number;
+			const page = Math.max(1, Math.floor(Number(ctx.node.getNodeParameter('historyPage', ctx.itemIndex, 1)) || 1));
+			const limit = closestHistoryLimit(ctx.node.getNodeParameter('historyLimit', ctx.itemIndex, 20));
 			return {
 				endpoint: '/uploadposts/history',
 				method: 'GET',
@@ -2406,6 +2461,22 @@ const appendBinaryValue = (form: NativeFormData, key: string, field: BinaryFormF
 	form.append(key, value, { filename, contentType });
 };
 
+// How long the status may stay not_found before the poll gives up on the
+// request_id (longer than the API keeps a not_found answer).
+const NOT_FOUND_GRACE_MS = 60 * 1000;
+// Checking a not_found request_id more often than this only gets the same answer.
+const NOT_FOUND_RECHECK_MS = 10 * 1000;
+
+// Retry-After in milliseconds: seconds or an HTTP date.
+const retryAfterMs = (headers: IDataObject | undefined): number | undefined => {
+	const raw = headers?.['retry-after'] ?? headers?.['Retry-After'];
+	if (raw === undefined || raw === null || raw === '') return undefined;
+	const seconds = Number(raw);
+	if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+	const date = Date.parse(String(raw));
+	return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
+};
+
 const pollUploadStatus = async (
 	node: IExecuteFunctions,
 	requestId: string,
@@ -2413,25 +2484,73 @@ const pollUploadStatus = async (
 	pollTimeout: number,
 ): Promise<any> => {
 	const start = Date.now();
+	const deadline = start + Math.max(5, pollTimeout) * 1000;
+	const interval = Math.max(1, pollInterval) * 1000;
 	let finalData: any = { success: false, message: 'Polling timed out', request_id: requestId };
+	let wait = interval;
+	let notFoundSince: number | undefined;
 	let isPolling = true; while (isPolling) {
-		await sleep(Math.max(1, pollInterval) * 1000);
-		if (Date.now() - start > Math.max(5, pollTimeout) * 1000) {
+		// Never sleep past the timeout, even when Retry-After asks for longer.
+		await sleep(Math.max(0, Math.min(wait, deadline - Date.now())));
+		if (Date.now() >= deadline) {
 			break;
 		}
+		wait = interval;
 		const statusOptions: IHttpRequestOptions = {
 			url: `${API_BASE_URL}/uploadposts/status`,
 			method: 'GET',
 			qs: { request_id: requestId },
 			headers: { 'X-Upload-Post-Source': 'n8n' },
 			json: true,
+			// 404 carries the not_found status and 429 only means "later": read
+			// them here instead of letting the helper throw.
+			ignoreHttpStatusErrors: true,
+			returnFullResponse: true,
 		};
-		const statusData = await node.helpers.httpRequestWithAuthentication.call(node, 'uploadPostApi', statusOptions);
+		const response = (await node.helpers.httpRequestWithAuthentication.call(
+			node,
+			'uploadPostApi',
+			statusOptions,
+		)) as { statusCode?: number; headers?: IDataObject; body?: unknown };
+		const statusCode = Number(response?.statusCode ?? 200);
+		const statusData = parseJsonIfNeeded(response?.body);
+		if (statusCode === 429) {
+			wait = Math.max(interval, retryAfterMs(response?.headers) ?? 0);
+			continue;
+		}
+		if (statusCode >= 400 && statusCode !== 404) {
+			throw new NodeApiError(node.getNode(), (statusData && typeof statusData === 'object' ? statusData : { message: String(statusData ?? '') }) as JsonObject, {
+				httpCode: String(statusCode),
+			});
+		}
 		finalData = statusData;
 		const statusValue = (statusData && (statusData as any).status) as string | undefined;
-		if (typeof statusValue === 'string' && TERMINAL_UPLOAD_STATUSES.includes(statusValue.toLowerCase())) {
+		const status = typeof statusValue === 'string' ? statusValue.toLowerCase() : statusCode === 404 ? 'not_found' : undefined;
+		if (status === 'not_found') {
+			// The API keeps a not_found answer for a short while, so give a new
+			// request_id that long before calling it unknown.
+			notFoundSince = notFoundSince ?? Date.now();
+			wait = Math.max(interval, NOT_FOUND_RECHECK_MS);
+			if (Date.now() - notFoundSince >= NOT_FOUND_GRACE_MS) {
+				throw new NodeOperationError(
+					node.getNode(),
+					`Upload-Post has no upload with request_id "${requestId}" (status not_found for ${Math.round((Date.now() - notFoundSince) / 1000)} s)`,
+					{ description: 'Check that the request_id belongs to this API key (team members: the owner account) and to an upload, not a scheduled job_id.' },
+				);
+			}
+			continue;
+		}
+		notFoundSince = undefined;
+		if (status && TERMINAL_UPLOAD_STATUSES.includes(status)) {
 			break;
 		}
+	}
+	if (notFoundSince !== undefined) {
+		throw new NodeOperationError(
+			node.getNode(),
+			`Upload-Post has no upload with request_id "${requestId}" (status not_found until the timeout)`,
+			{ description: 'Check that the request_id belongs to this API key (team members: the owner account) and to an upload, not a scheduled job_id.' },
+		);
 	}
 	return finalData;
 };
@@ -3896,7 +4015,7 @@ export class UploadPost implements INodeType {
 				name: 'idempotencyKey',
 				type: 'string',
 				default: '',
-				description: 'Key the API uses to collapse duplicate uploads within 24 hours. Leave empty to derive one automatically from the execution, node and item, which is what prevents a retried upload from posting twice. Set it explicitly only when you drive retries yourself.',
+				description: 'Key the API uses to collapse duplicate uploads within 24 hours: a second upload with the same key returns the first post instead of publishing. Leave empty to derive one from the execution, the node, its run (each pass of a loop is a new run), the item and a hash of the content (fields plus file names and sizes). Retry On Fail then sends the same key and cannot post twice, while every pass of a loop gets its own. If a field changes on every attempt (for example built from $now), a retry counts as a new post: set the key yourself. Set it also when you drive retries yourself.',
 				displayOptions: {
 					show: {
 						operation: ['uploadPhotos','uploadVideo','uploadText','uploadDocument']
@@ -3972,8 +4091,9 @@ export class UploadPost implements INodeType {
 				displayName: 'Page',
 				name: 'historyPage',
 				type: 'number',
+				typeOptions: { minValue: 1 },
 				default: 1,
-				description: 'Page number for pagination',
+				description: 'Page number for pagination, from 1',
 				displayOptions: {
 					show: {
 						operation: ['getHistory']
@@ -3983,9 +4103,15 @@ export class UploadPost implements INodeType {
 			{
 				displayName: 'Limit',
 				name: 'historyLimit',
-				type: 'number',
+				type: 'options',
+				options: [
+					{ name: '10', value: 10 },
+					{ name: '20', value: 20 },
+					{ name: '50', value: 50 },
+					{ name: '100', value: 100 },
+				],
 				default: 20,
-				description: 'Items per page. Can be 20, 50, or 100.',
+				description: 'Items per page (the API accepts 10, 20, 50 or 100)',
 				displayOptions: {
 					show: {
 						operation: ['getHistory']
@@ -7271,7 +7397,7 @@ export class UploadPost implements INodeType {
 			if (config.isUploadOperation) {
 				requestOptions.headers = {
 					...(requestOptions.headers ?? {}),
-					'Idempotency-Key': buildIdempotencyKey(ctx),
+					'Idempotency-Key': buildIdempotencyKey(ctx, config.formData),
 					'X-Upload-Post-Source': 'n8n',
 				};
 			}

@@ -298,7 +298,9 @@ You have two ways to handle this in n8n:
 
 Every upload sends an `Idempotency-Key`. The API collapses two uploads carrying the same key within a 24-hour window into a single post, so a retried upload does not publish twice.
 
-The key is derived from the workflow execution, the node and the item index, so it stays the same when n8n's "Retry On Fail" re-runs the node, and changes when you genuinely start a new execution. Set the "Idempotency Key" field yourself only if you drive retries from outside n8n and need to control the key.
+The key is derived from the workflow execution, the node, the run of the node (`$runIndex`), the item index and a hash of the content (every field, plus the name, type and size of each file). It stays the same when n8n's "Retry On Fail" re-runs the node, and changes for every pass of a loop (Loop Over Items runs the node again with item 0 each time) and for any other content. Versions up to 0.9.0 left the run and the content out, so in a loop every pass after the first got the first post back instead of publishing.
+
+If a field changes on every attempt (an expression built from `$now`, for example), a retry counts as different content: set the "Idempotency Key" field yourself in that case, or when you drive retries from outside n8n and need to control the key.
 
 If you saw duplicate posts on an older version of this node, upgrade: versions before 0.1.51 sent no key at all, and a node-level retry after a network timeout would publish the post a second time.
 
