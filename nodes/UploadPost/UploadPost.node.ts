@@ -153,6 +153,18 @@ type UploadPreparation = {
 	pollTimeout: number;
 };
 
+// /uploadposts/history answers 400 to any other limit. Workflows saved when the
+// field was a free number keep working: their value goes to the closest one
+// (a tie goes to the larger).
+const HISTORY_LIMITS = [10, 20, 50, 100];
+const closestHistoryLimit = (value: unknown): number => {
+	const wanted = Number(value);
+	if (!Number.isFinite(wanted)) return 20;
+	return HISTORY_LIMITS.reduce((best, limit) =>
+		Math.abs(limit - wanted) <= Math.abs(best - wanted) ? limit : best,
+	);
+};
+
 const normalizeDateInput = (value: string | undefined): string | undefined => {
 	if (!value) return undefined;
 	const hasTimezone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(value);
@@ -1389,8 +1401,8 @@ const buildMonitoringRequest = (ctx: ExecutionContext): RequestConfig => {
 			};
 		}
 		case 'getHistory': {
-			const page = ctx.node.getNodeParameter('historyPage', ctx.itemIndex, 1) as number;
-			const limit = ctx.node.getNodeParameter('historyLimit', ctx.itemIndex, 20) as number;
+			const page = Math.max(1, Math.floor(Number(ctx.node.getNodeParameter('historyPage', ctx.itemIndex, 1)) || 1));
+			const limit = closestHistoryLimit(ctx.node.getNodeParameter('historyLimit', ctx.itemIndex, 20));
 			return {
 				endpoint: '/uploadposts/history',
 				method: 'GET',
@@ -4013,8 +4025,9 @@ export class UploadPost implements INodeType {
 				displayName: 'Page',
 				name: 'historyPage',
 				type: 'number',
+				typeOptions: { minValue: 1 },
 				default: 1,
-				description: 'Page number for pagination',
+				description: 'Page number for pagination, from 1',
 				displayOptions: {
 					show: {
 						operation: ['getHistory']
@@ -4024,9 +4037,15 @@ export class UploadPost implements INodeType {
 			{
 				displayName: 'Limit',
 				name: 'historyLimit',
-				type: 'number',
+				type: 'options',
+				options: [
+					{ name: '10', value: 10 },
+					{ name: '20', value: 20 },
+					{ name: '50', value: 50 },
+					{ name: '100', value: 100 },
+				],
 				default: 20,
-				description: 'Items per page. Can be 20, 50, or 100.',
+				description: 'Items per page (the API accepts 10, 20, 50 or 100)',
 				displayOptions: {
 					show: {
 						operation: ['getHistory']
