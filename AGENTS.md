@@ -63,7 +63,8 @@ Agent → Content Generation → Upload Post Node → Multiple Platforms
 #### Comments, AutoDM and DMs
 - **Get Post Comments** with Comment ID returns the replies (Instagram, Facebook, LinkedIn Pages, TikTok, Threads, YouTube)
 - **AutoDM rules (Instagram, account-wide)**: Create/List/Pause/Resume/Delete. One rule covers every post plus story replies, story mentions and keyword DMs, never expires, webhook only
-- **Direct Message**: Send DM and List Conversations on Instagram and Bluesky (Bluesky needs an app password with DM access)
+- **Direct Message**: Send DM and List Conversations on Instagram, WhatsApp and Bluesky (Bluesky needs an app password with DM access)
+- **WhatsApp** (messages only, it does not publish posts): the profile connects its own WhatsApp Business number; Recipient ID is the phone number (`+34600111222`). Free text only within 24 h of the person's last message, after that an approved template (`dmWhatsappTemplateName`). Send DM also takes attachments (URL or `media_id`), location, contacts, interactive reply buttons / list / link button, reactions and mark read / typing. Upload / Download WhatsApp Media, List / Create / Delete WhatsApp Templates, Get / Update WhatsApp Business Profile, WhatsApp QR codes
 - **Resolve LinkedIn Organization**: URL or vanity of any company Page to `{urn, name, mention}` for LinkedIn mentions
 
 #### Best time, queue and networks

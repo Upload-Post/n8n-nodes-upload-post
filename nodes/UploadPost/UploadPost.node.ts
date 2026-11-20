@@ -138,6 +138,51 @@ type RequestConfig = {
 	// Validate JWT authenticates with the profile token, not the API key, so the
 	// credential's Authorization header must not overwrite it.
 	skipCredentialAuth?: boolean;
+	// The API answers the raw file (Download Media): it goes to this binary
+	// property, named fileName plus the extension of its Content-Type.
+	binaryOutput?: { propertyName: string; fileName: string; json?: IDataObject };
+};
+
+const MIME_EXTENSIONS: Record<string, string> = {
+	'application/pdf': 'pdf',
+	'audio/aac': 'aac',
+	'audio/amr': 'amr',
+	'audio/mp4': 'm4a',
+	'audio/mpeg': 'mp3',
+	'audio/ogg': 'ogg',
+	'image/jpeg': 'jpg',
+	'image/png': 'png',
+	'image/webp': 'webp',
+	'text/plain': 'txt',
+	'video/3gpp': '3gp',
+	'video/mp4': 'mp4',
+};
+
+const binaryResponseItem = async (
+	node: IExecuteFunctions,
+	response: unknown,
+	output: NonNullable<RequestConfig['binaryOutput']>,
+	itemIndex: number,
+): Promise<INodeExecutionData> => {
+	const { statusCode, headers, body } = (response ?? {}) as { statusCode?: number; headers?: IDataObject; body?: BinaryBuffer };
+	const status = Number(statusCode ?? 200);
+	if (status >= 400) {
+		// Errors come back as JSON, read here as bytes.
+		const text = body === undefined || body === null ? '' : String(body);
+		const parsed = parseJsonIfNeeded(text);
+		throw new NodeApiError(node.getNode(), (parsed && typeof parsed === 'object' ? parsed : { message: text }) as JsonObject, {
+			httpCode: String(status),
+		});
+	}
+	const mimeType = String(headers?.['content-type'] ?? 'application/octet-stream').split(';')[0].trim() || 'application/octet-stream';
+	const extension = MIME_EXTENSIONS[mimeType] ?? (mimeType.split('/')[1] || 'bin').replace(/[^A-Za-z0-9]/g, '');
+	const fileName = `${output.fileName}.${extension}`;
+	const binary = await node.helpers.prepareBinaryData(body as BinaryBuffer, fileName, mimeType);
+	return {
+		json: { success: true, ...(output.json ?? {}), mime_type: mimeType, file_name: fileName, size: body ? body.length : 0 },
+		binary: { [output.propertyName]: binary },
+		pairedItem: { item: itemIndex },
+	};
 };
 
 type ExecutionContext = {
@@ -2010,84 +2055,216 @@ const parseJsonObjectParameter = (ctx: ExecutionContext, name: string, label: st
 	});
 };
 
-const buildDmRequest = (ctx: ExecutionContext): RequestConfig => {
+// Like parseJsonObjectParameter, for fields that take a list. One object is a
+// list of one.
+const parseJsonArrayParameter = (ctx: ExecutionContext, name: string, label: string): IDataObject[] => {
+	const raw = ctx.node.getNodeParameter(name, ctx.itemIndex, '') as string | IDataObject | IDataObject[];
+	if (raw === '' || raw === undefined || raw === null) return [];
+	let parsed: unknown = raw;
+	if (typeof raw === 'string') {
+		const trimmed = raw.trim();
+		if (!trimmed) return [];
+		try {
+			parsed = JSON.parse(trimmed);
+		} catch {
+			parsed = undefined;
+		}
+	}
+	if (Array.isArray(parsed)) return parsed as IDataObject[];
+	if (parsed && typeof parsed === 'object') return [parsed as IDataObject];
+	throw new NodeOperationError(ctx.node.getNode(), `${label} must be a JSON array (or one object)`, {
+		itemIndex: ctx.itemIndex,
+	});
+};
+
+// WhatsApp actions on a received message. React / Remove Reaction are sent as
+// `reaction` (not a sender action); all of them spend no DM quota.
+const WHATSAPP_ACTION_LABELS: Record<string, string> = {
+	react: 'React',
+	unreact: 'Remove Reaction',
+	mark_read: 'Mark Read',
+	typing_on: 'Typing On',
+};
+
+// Every WhatsApp field of /dms/send the node builds from its own parameters.
+// Anything else the API accepts goes through Extra Fields (JSON).
+const applyWhatsappSendFields = (ctx: ExecutionContext, body: IDataObject) => {
+	const param = <T>(name: string, fallback: T): T => ctx.node.getNodeParameter(name, ctx.itemIndex, fallback) as T;
+	const text = (name: string, fallback = ''): string => String(ctx.node.getNodeParameter(name, ctx.itemIndex, fallback) ?? '');
+	const fail = (message: string): never => {
+		throw new NodeOperationError(ctx.node.getNode(), message, { itemIndex: ctx.itemIndex });
+	};
+
+	const action = text('dmWhatsappAction', '');
+	if (action) {
+		const messageId = text('dmMessageId', '').trim();
+		if (!messageId) fail(`Message ID (the wamid of the received message) is required for the ${WHATSAPP_ACTION_LABELS[action] ?? action} action.`);
+		body.message_id = messageId;
+		if (action === 'react') {
+			const reaction = text('dmReaction', '');
+			if (!reaction) fail('Reaction (an emoji) is required for the React action.');
+			body.reaction = reaction;
+		} else if (action === 'unreact') {
+			// An empty string is dropped by the API as "not set": the object form keeps it.
+			body.reaction = { message_id: messageId, emoji: '' };
+		} else {
+			body.sender_action = action;
+			if (action === 'mark_read' && param('dmWhatsappTyping', false)) body.typing = true;
+		}
+	}
+
+	const attachments = ((param('dmWhatsappAttachments', {} as IDataObject).attachment as IDataObject[] | undefined) ?? [])
+		.filter(item => item.url || item.mediaId)
+		.map(item => {
+			const attachment: IDataObject = { type: item.type || 'image' };
+			if (item.mediaId) attachment.media_id = String(item.mediaId).trim();
+			else attachment.url = String(item.url).trim();
+			if (item.caption) attachment.caption = item.caption;
+			if (item.filename) attachment.filename = item.filename;
+			return attachment;
+		});
+	if (attachments.length > 0) body.attachments = attachments;
+
+	const templateName = text('dmWhatsappTemplateName', '').trim();
+	if (templateName) {
+		const template: IDataObject = {
+			name: templateName,
+			language: text('dmWhatsappTemplateLanguage', 'en_US').trim() || 'en_US',
+		};
+		const components = parseJsonArrayParameter(ctx, 'dmWhatsappTemplateComponents', 'Template Components (JSON)');
+		if (components.length > 0) template.components = components;
+		body.template = template;
+	}
+
+	const location = (param('dmWhatsappLocation', {} as IDataObject).location as IDataObject | undefined);
+	if (location) {
+		const latitude = Number(location.latitude);
+		const longitude = Number(location.longitude);
+		if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) fail('Location needs a numeric latitude and longitude.');
+		const value: IDataObject = { latitude, longitude };
+		if (location.name) value.name = location.name;
+		if (location.address) value.address = location.address;
+		body.location = value;
+	}
+
+	const contacts = parseJsonArrayParameter(ctx, 'dmWhatsappContacts', 'Contacts (JSON)');
+	if (contacts.length > 0) body.contacts = contacts;
+
+	const interactive = text('dmWhatsappInteractive', '');
+	if (interactive) {
+		if (!body.message) fail('Message is required: it is the body text of the interactive message (max 1,024 characters).');
+		if (interactive === 'buttons') {
+			const buttons = ((param('dmWhatsappButtons', {} as IDataObject).button as IDataObject[] | undefined) ?? [])
+				.filter(button => button.title)
+				.map(button => (button.id ? { title: button.title, id: button.id } : { title: button.title }));
+			if (buttons.length === 0) fail('Add at least one reply button (up to 3).');
+			body.buttons = buttons;
+		} else if (interactive === 'list') {
+			const list = parseJsonObjectParameter(ctx, 'dmWhatsappList', 'List (JSON)');
+			if (!list.sections) fail('List (JSON) needs sections, e.g. {"button": "Options", "sections": [{"rows": [{"id": "a", "title": "A"}]}]}.');
+			body.list = list;
+		} else if (interactive === 'cta_url') {
+			const displayText = text('dmWhatsappCtaText', '').trim();
+			const url = text('dmWhatsappCtaUrl', '').trim();
+			if (!displayText || !url) fail('Button Text and Button URL are required for a call-to-action button.');
+			body.cta_url = { display_text: displayText, url };
+		}
+		const header = text('dmWhatsappHeader', '');
+		if (header) body.header = header;
+		const footer = text('dmWhatsappFooter', '');
+		if (footer) body.footer = footer;
+	}
+};
+
+const DM_CONTENT_FIELDS = ['message', 'sender_action', 'attachments', 'template', 'location', 'contacts', 'reaction'];
+
+const buildDmRequest = async (ctx: ExecutionContext): Promise<RequestConfig> => {
 	const user = ctx.node.getNodeParameter('dmUser', ctx.itemIndex) as string;
-	const platform = ctx.node.getNodeParameter('dmPlatform', ctx.itemIndex, 'instagram') as string;
+	const param = <T>(name: string, fallback: T): T => ctx.node.getNodeParameter(name, ctx.itemIndex, fallback) as T;
+	const text = (name: string, fallback = ''): string => String(ctx.node.getNodeParameter(name, ctx.itemIndex, fallback) ?? '');
+	const json = (endpoint: string, method: RequestMethod, payload: { qs?: IDataObject; body?: IDataObject }): RequestConfig => ({
+		endpoint,
+		method,
+		...payload,
+		isUploadOperation: false,
+		waitForCompletion: false,
+	});
 
 	switch (ctx.operation) {
 		case 'sendDm': {
+			const platform = text('dmPlatform', 'instagram');
 			const body: IDataObject = { platform, user };
-			const recipientId = ctx.node.getNodeParameter('dmRecipientId', ctx.itemIndex, '') as string;
-			const conversationId = platform === 'bluesky'
-				? (ctx.node.getNodeParameter('dmConversationId', ctx.itemIndex, '') as string)
-				: '';
+			const recipientId = text('dmRecipientId', '');
+			const conversationId = platform === 'bluesky' ? text('dmConversationId', '') : '';
 			if (!recipientId && !conversationId) {
 				throw new NodeOperationError(
 					ctx.node.getNode(),
 					platform === 'bluesky'
 						? 'Set Recipient ID (handle, DID or profile link) or Conversation ID.'
-						: 'Recipient ID is required.',
+						: platform === 'whatsapp'
+							? 'Recipient ID (the phone number in international format, e.g. +34600111222) is required.'
+							: 'Recipient ID is required.',
 					{ itemIndex: ctx.itemIndex },
 				);
 			}
 			if (recipientId) body.recipient_id = recipientId;
 			if (conversationId) body.conversation_id = conversationId;
 
-			const message = ctx.node.getNodeParameter('dmMessage', ctx.itemIndex, '') as string;
+			const message = text('dmMessage', '');
 			if (message) body.message = message;
-			const replyTo = ctx.node.getNodeParameter('dmReplyTo', ctx.itemIndex, '') as string;
+			const replyTo = text('dmReplyTo', '');
 			if (replyTo) body.reply_to = replyTo;
 
-			const senderAction = ctx.node.getNodeParameter(
-				platform === 'bluesky' ? 'dmBlueskySenderAction' : 'dmInstagramSenderAction',
-				ctx.itemIndex,
-				'',
-			) as string;
-			if (senderAction) {
-				body.sender_action = senderAction;
-				const messageId = ctx.node.getNodeParameter('dmMessageId', ctx.itemIndex, '') as string;
-				if (messageId) body.message_id = messageId;
-				if (DM_ACTIONS_NEEDING_MESSAGE_ID.has(senderAction) && !messageId) {
-					throw new NodeOperationError(ctx.node.getNode(), `Message ID is required for the ${senderAction} action.`, {
-						itemIndex: ctx.itemIndex,
-					});
-				}
-				if (senderAction === 'react' || senderAction === 'unreact') {
-					const reaction = ctx.node.getNodeParameter('dmReaction', ctx.itemIndex, '') as string;
-					if (reaction) body.reaction = reaction;
-				}
-			}
-
-			if (platform === 'bluesky') {
-				const sharePostUrl = ctx.node.getNodeParameter('dmBlueskySharePostUrl', ctx.itemIndex, '') as string;
-				if (sharePostUrl) body.attachments = { type: 'post', url: sharePostUrl };
-			} else {
-				const buttons = ctx.node.getNodeParameter('dmButtons', ctx.itemIndex, {}) as IDataObject;
-				const buttonList = ((buttons.button as IDataObject[] | undefined) ?? [])
-					.filter(button => button.title && button.url)
-					.map(button => ({ title: button.title, url: button.url }));
-				if (buttonList.length > 0) body.buttons = buttonList;
+			if (platform === 'whatsapp') {
+				applyWhatsappSendFields(ctx, body);
 				Object.assign(body, parseJsonObjectParameter(ctx, 'dmExtraFields', 'Extra Fields (JSON)'));
+			} else {
+				const senderAction = param(platform === 'bluesky' ? 'dmBlueskySenderAction' : 'dmInstagramSenderAction', '');
+				if (senderAction) {
+					body.sender_action = senderAction;
+					const messageId = text('dmMessageId', '');
+					if (messageId) body.message_id = messageId;
+					if (DM_ACTIONS_NEEDING_MESSAGE_ID.has(senderAction) && !messageId) {
+						throw new NodeOperationError(ctx.node.getNode(), `Message ID is required for the ${senderAction} action.`, {
+							itemIndex: ctx.itemIndex,
+						});
+					}
+					if (senderAction === 'react' || senderAction === 'unreact') {
+						const reaction = text('dmReaction', '');
+						if (reaction) body.reaction = reaction;
+					}
+				}
+				if (platform === 'bluesky') {
+					const sharePostUrl = text('dmBlueskySharePostUrl', '');
+					if (sharePostUrl) body.attachments = { type: 'post', url: sharePostUrl };
+				} else {
+					const buttons = param('dmButtons', {} as IDataObject);
+					const buttonList = ((buttons.button as IDataObject[] | undefined) ?? [])
+						.filter(button => button.title && button.url)
+						.map(button => ({ title: button.title, url: button.url }));
+					if (buttonList.length > 0) body.buttons = buttonList;
+					Object.assign(body, parseJsonObjectParameter(ctx, 'dmExtraFields', 'Extra Fields (JSON)'));
+				}
 			}
 
-			if (!body.message && !body.sender_action && !body.attachments) {
-				throw new NodeOperationError(ctx.node.getNode(), 'Message is required unless you send a Sender Action or share a post.', {
-					itemIndex: ctx.itemIndex,
-				});
+			const hasContent = DM_CONTENT_FIELDS.some(field => body[field] !== undefined && body[field] !== null && (field === 'reaction' || body[field] !== ''));
+			if (!hasContent) {
+				throw new NodeOperationError(
+					ctx.node.getNode(),
+					platform === 'whatsapp'
+						? 'Message is required unless you send a template, attachments, a location, contacts or an action (react, mark read, typing).'
+						: 'Message is required unless you send a Sender Action or share a post.',
+					{ itemIndex: ctx.itemIndex },
+				);
 			}
-			return {
-				endpoint: '/uploadposts/dms/send',
-				method: 'POST',
-				body,
-				isUploadOperation: false,
-				waitForCompletion: false,
-			};
+			return json('/uploadposts/dms/send', 'POST', { body });
 		}
 		case 'listDmConversations': {
+			const platform = text('dmPlatform', 'instagram');
 			const qs: IDataObject = { platform, user };
-			const limit = ctx.node.getNodeParameter('dmLimit', ctx.itemIndex, 0) as number;
+			const limit = param('dmLimit', 0);
 			if (limit) qs.limit = limit;
-			const messagesLimit = ctx.node.getNodeParameter('dmMessagesLimit', ctx.itemIndex, 0) as number;
+			const messagesLimit = param('dmMessagesLimit', 0);
 			if (messagesLimit) qs.messages_limit = messagesLimit;
 			const stringParams: Array<[string, string]> = [
 				['dmCursor', 'cursor'],
@@ -2102,17 +2279,140 @@ const buildDmRequest = (ctx: ExecutionContext): RequestConfig => {
 					['dmReadState', 'read_state'],
 				);
 			}
-			for (const [param, field] of stringParams) {
-				const value = ctx.node.getNodeParameter(param, ctx.itemIndex, '') as string;
+			for (const [name, field] of stringParams) {
+				const value = param(name, '');
 				if (value) qs[field] = value;
 			}
+			return json('/uploadposts/dms/conversations', 'GET', { qs });
+		}
+		case 'uploadDmMedia': {
+			const property = text('dmMediaBinaryProperty', 'data').trim() || 'data';
+			const file = await getBinaryFieldFromItem(ctx, property, 'Binary data for media property');
+			const formData: IDataObject = { platform: 'whatsapp', user, file: file as unknown as IDataObject };
+			const type = text('dmMediaType', '');
+			if (type) formData.type = type;
 			return {
-				endpoint: '/uploadposts/dms/conversations',
-				method: 'GET',
-				qs,
+				endpoint: '/uploadposts/dms/media',
+				method: 'POST',
+				formData,
 				isUploadOperation: false,
 				waitForCompletion: false,
 			};
+		}
+		case 'downloadDmMedia': {
+			const mediaId = text('dmMediaId', '').trim();
+			if (!mediaId) {
+				throw new NodeOperationError(ctx.node.getNode(), 'Media ID is required.', { itemIndex: ctx.itemIndex });
+			}
+			return {
+				...json('/uploadposts/dms/media', 'GET', { qs: { platform: 'whatsapp', user, media_id: mediaId } }),
+				binaryOutput: {
+					propertyName: text('dmMediaOutputProperty', 'data').trim() || 'data',
+					fileName: `whatsapp-${mediaId.replace(/[^A-Za-z0-9_-]/g, '_')}`,
+					json: { media_id: mediaId },
+				},
+			};
+		}
+		case 'listDmTemplates': {
+			const qs: IDataObject = { platform: 'whatsapp', user };
+			const limit = param('dmTemplateLimit', 0);
+			if (limit) qs.limit = limit;
+			const status = text('dmTemplateStatus', '');
+			if (status) qs.status = status;
+			const name = text('dmTemplateNameFilter', '').trim();
+			if (name) qs.name = name;
+			return json('/uploadposts/dms/templates', 'GET', { qs });
+		}
+		case 'createDmTemplate': {
+			const name = text('dmTemplateName', '').trim().toLowerCase();
+			if (!/^[a-z0-9_]{1,512}$/.test(name)) {
+				throw new NodeOperationError(ctx.node.getNode(), 'Template Name must use lowercase letters, numbers and underscores only (e.g. order_update).', {
+					itemIndex: ctx.itemIndex,
+				});
+			}
+			const body: IDataObject = {
+				platform: 'whatsapp',
+				user,
+				name,
+				category: text('dmTemplateCategory', 'UTILITY'),
+				language: text('dmTemplateLanguage', 'en_US').trim() || 'en_US',
+			};
+			const components = parseJsonArrayParameter(ctx, 'dmTemplateComponents', 'Components (JSON)');
+			if (components.length > 0) {
+				body.components = components;
+			} else {
+				const bodyText = text('dmTemplateBody', '');
+				if (!bodyText) {
+					throw new NodeOperationError(ctx.node.getNode(), 'Body is required unless you pass Components (JSON).', { itemIndex: ctx.itemIndex });
+				}
+				body.body = bodyText;
+				const examples = ensureArrayFromCommaSeparated(text('dmTemplateExamples', ''));
+				if (examples.length > 0) body.examples = examples;
+				const header = text('dmTemplateHeader', '');
+				if (header) body.header = header;
+				const footer = text('dmTemplateFooter', '');
+				if (footer) body.footer = footer;
+				const buttons = ((param('dmTemplateButtons', {} as IDataObject).button as IDataObject[] | undefined) ?? [])
+					.filter(button => button.text)
+					.map(button => {
+						const value: IDataObject = { text: button.text };
+						if (button.url) value.url = button.url;
+						else if (button.phoneNumber) value.phone_number = button.phoneNumber;
+						return value;
+					});
+				if (buttons.length > 0) body.buttons = buttons;
+			}
+			return json('/uploadposts/dms/templates', 'POST', { body });
+		}
+		case 'deleteDmTemplate': {
+			const name = text('dmTemplateName', '').trim();
+			if (!name) throw new NodeOperationError(ctx.node.getNode(), 'Template Name is required.', { itemIndex: ctx.itemIndex });
+			return json('/uploadposts/dms/templates', 'DELETE', { qs: { platform: 'whatsapp', user, name } });
+		}
+		case 'getWhatsappProfile':
+			return json('/uploadposts/dms/whatsapp/profile', 'GET', { qs: { user } });
+		case 'updateWhatsappProfile': {
+			const fields = { ...param('dmWhatsappProfileFields', {} as IDataObject) };
+			for (const key of Object.keys(fields)) {
+				if (fields[key] === '' || fields[key] === undefined || fields[key] === null) delete fields[key];
+			}
+			const websites = fields.websites !== undefined ? ensureArrayFromCommaSeparated(String(fields.websites)) : undefined;
+			if (websites !== undefined) fields.websites = websites;
+			const photoProperty = text('dmWhatsappProfilePhoto', '').trim();
+			if (!photoProperty && Object.keys(fields).length === 0) {
+				throw new NodeOperationError(ctx.node.getNode(), 'Set at least one profile field or a profile photo.', { itemIndex: ctx.itemIndex });
+			}
+			if (photoProperty) {
+				// Multipart carries the photo; the API reads websites comma-separated there.
+				const file = await getBinaryFieldFromItem(ctx, photoProperty, 'Binary data for profile photo property');
+				const formData: IDataObject = { user, ...fields, file: file as unknown as IDataObject };
+				if (websites !== undefined) formData.websites = websites.join(',');
+				return {
+					endpoint: '/uploadposts/dms/whatsapp/profile',
+					method: 'POST',
+					formData,
+					isUploadOperation: false,
+					waitForCompletion: false,
+				};
+			}
+			return json('/uploadposts/dms/whatsapp/profile', 'POST', { body: { user, ...fields } });
+		}
+		case 'listWhatsappQrCodes':
+			return json('/uploadposts/dms/whatsapp/qr', 'GET', { qs: { user } });
+		case 'createWhatsappQrCode': {
+			const prefilledMessage = text('dmQrPrefilledMessage', '');
+			if (!prefilledMessage) {
+				throw new NodeOperationError(ctx.node.getNode(), 'Prefilled Message is required.', { itemIndex: ctx.itemIndex });
+			}
+			const body: IDataObject = { user, prefilled_message: prefilledMessage };
+			const code = text('dmQrCode', '').trim();
+			if (code) body.code = code;
+			return json('/uploadposts/dms/whatsapp/qr', 'POST', { body });
+		}
+		case 'deleteWhatsappQrCode': {
+			const code = text('dmQrCode', '').trim();
+			if (!code) throw new NodeOperationError(ctx.node.getNode(), 'QR Code ID is required.', { itemIndex: ctx.itemIndex });
+			return json('/uploadposts/dms/whatsapp/qr', 'DELETE', { qs: { user, code } });
 		}
 		default:
 			throw new NodeOperationError(ctx.node.getNode(), `Unsupported direct message operation: ${ctx.operation}`, {
@@ -3015,8 +3315,18 @@ export class UploadPost implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				options: [
-					{ name: 'List Conversations', value: 'listDmConversations', action: 'List DM conversations', description: 'List the DM conversations of the account connected to a profile (Instagram or Bluesky), newest first, with participants and recent messages' },
-					{ name: 'Send DM', value: 'sendDm', action: 'Send a direct message', description: 'Send a direct message, or a sender action (mark read, react...), from the Instagram or Bluesky account of a profile. Sender actions spend no daily DM quota.' },
+					{ name: 'Create or Update WhatsApp QR Code', value: 'createWhatsappQrCode', action: 'Create or update a whatsapp QR code', description: 'Create a QR code and wa.me link that open a WhatsApp chat with your number and a prefilled message, or change the message of an existing one (QR Code ID)' },
+					{ name: 'Create WhatsApp Template', value: 'createDmTemplate', action: 'Create a whatsapp message template', description: 'Submit a WhatsApp message template for Meta review (status PENDING, then APPROVED or REJECTED). Approved templates are the only messages WhatsApp delivers outside the 24-hour window.' },
+					{ name: 'Delete WhatsApp QR Code', value: 'deleteWhatsappQrCode', action: 'Delete a whatsapp QR code', description: 'Delete a QR code / wa.me link of the WhatsApp number' },
+					{ name: 'Delete WhatsApp Template', value: 'deleteDmTemplate', action: 'Delete a whatsapp message template', description: 'Delete a WhatsApp message template by name (every language of it)' },
+					{ name: 'Download WhatsApp Media', value: 'downloadDmMedia', action: 'Download whatsapp media', description: 'Download the file of a WhatsApp media_id (an image, audio, video or document someone sent you, from List Conversations or the dm_received webhook) as binary data' },
+					{ name: 'Get WhatsApp Business Profile', value: 'getWhatsappProfile', action: 'Get the whatsapp business profile', description: 'Read the business profile of the connected WhatsApp number (about, address, description, email, websites, category, photo) plus its phone number and verified name' },
+					{ name: 'List Conversations', value: 'listDmConversations', action: 'List DM conversations', description: 'List the DM conversations of the account connected to a profile (Instagram, WhatsApp or Bluesky), newest first, with participants and recent messages' },
+					{ name: 'List WhatsApp QR Codes', value: 'listWhatsappQrCodes', action: 'List whatsapp QR codes', description: 'List the QR codes / wa.me links of the WhatsApp number, with their prefilled message and image URL' },
+					{ name: 'List WhatsApp Templates', value: 'listDmTemplates', action: 'List whatsapp message templates', description: 'List the message templates of the WhatsApp Business account, with status (APPROVED, PENDING, REJECTED...), category, language and components' },
+					{ name: 'Send DM', value: 'sendDm', action: 'Send a direct message', description: 'Send a direct message, or an action (mark read, react, typing...), from the Instagram, WhatsApp or Bluesky account of a profile. Actions spend no daily DM quota.' },
+					{ name: 'Update WhatsApp Business Profile', value: 'updateWhatsappProfile', action: 'Update the whatsapp business profile', description: 'Change the business profile of the connected WhatsApp number: about, address, description, email, websites, category and profile photo' },
+					{ name: 'Upload WhatsApp Media', value: 'uploadDmMedia', action: 'Upload whatsapp media', description: 'Upload a file (binary data) to WhatsApp and get a media_id to send as an attachment with Send DM. Image 5 MB (JPEG/PNG), video 16 MB (MP4/3GPP), audio 16 MB, document 100 MB, sticker 500 KB (WebP).' },
 				],
 				default: 'sendDm',
 				displayOptions: { show: { resource: ['dms'] } },
@@ -3039,17 +3349,18 @@ export class UploadPost implements INodeType {
 				options: [
 					{ name: 'Bluesky', value: 'bluesky' },
 					{ name: 'Instagram', value: 'instagram' },
+					{ name: 'WhatsApp', value: 'whatsapp' },
 				],
 				default: 'instagram',
-				description: 'Network of the account. Bluesky needs an app password created with "Allow access to your direct messages" (otherwise 403 bluesky_dm_scope_missing: create a new app password and reconnect Bluesky). Instagram needs the person to have written to the account in the last 24 hours.',
-				displayOptions: { show: { resource: ['dms'] } },
+				description: 'Network of the account. WhatsApp: the WhatsApp Business number connected to the profile (messages only, WhatsApp does not publish posts); free text only within 24 hours of the person\'s last message, after that only an approved template (Meta bills conversations to your WhatsApp Business account). Instagram needs the person to have written to the account in the last 24 hours. Bluesky needs an app password created with "Allow access to your direct messages" (otherwise 403 bluesky_dm_scope_missing: create a new app password and reconnect Bluesky).',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm', 'listDmConversations'] } },
 			},
 			{
 				displayName: 'Recipient ID',
 				name: 'dmRecipientId',
 				type: 'string',
 				default: '',
-				description: 'Instagram: the Instagram-scoped ID of the person (from List Conversations or the dm_received webhook). Bluesky: handle (alice.bsky.social), DID (did:plc:...) or profile link; leave empty when Conversation ID is set.',
+				description: 'WhatsApp: the phone number in international format (+34600111222). Instagram: the Instagram-scoped ID of the person (from List Conversations or the dm_received webhook). Bluesky: handle (alice.bsky.social), DID (did:plc:...) or profile link; leave empty when Conversation ID is set.',
 				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'] } },
 			},
 			{
@@ -3065,7 +3376,7 @@ export class UploadPost implements INodeType {
 				name: 'dmMessage',
 				type: 'string',
 				default: '',
-				description: 'Text to send. Required unless you send a Sender Action or share a Bluesky post. Bluesky: up to 1,000 characters (an emoji counts as one); links, #hashtags and up to 10 different @handle mentions become clickable.',
+				description: 'Text to send. Required unless you send a Sender Action or share a Bluesky post (WhatsApp: a template, attachments, a location, contacts or an action). WhatsApp: up to 4,096 characters; the body text of an interactive message (max 1,024); the caption of a single image, video or document. Bluesky: up to 1,000 characters (an emoji counts as one); links, #hashtags and up to 10 different @handle mentions become clickable.',
 				typeOptions: { rows: 3 },
 				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'] } },
 			},
@@ -3074,7 +3385,7 @@ export class UploadPost implements INodeType {
 				name: 'dmReplyTo',
 				type: 'string',
 				default: '',
-				description: 'ID of a message in the same conversation to reply to',
+				description: 'ID of a message in the same conversation to reply to (WhatsApp: its wamid.…)',
 				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'] } },
 			},
 			{
@@ -3113,11 +3424,34 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['bluesky'] } },
 			},
 			{
+				displayName: 'Action',
+				name: 'dmWhatsappAction',
+				type: 'options',
+				options: [
+					{ name: 'Mark Read', value: 'mark_read' },
+					{ name: 'None', value: '' },
+					{ name: 'React', value: 'react' },
+					{ name: 'Remove Reaction', value: 'unreact' },
+					{ name: 'Typing On', value: 'typing_on' },
+				],
+				default: '',
+				description: 'An action on a message you received, sent instead of a message (Message, attachments and the rest are not sent with it). All of them need Message ID (the wamid of the received message) and spend no DM quota. Mark Read shows the blue ticks; Typing On marks the message read and shows "typing…" for up to 25 seconds or until you answer.',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'] } },
+			},
+			{
+				displayName: 'Show Typing',
+				name: 'dmWhatsappTyping',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to also show "typing…" while marking the message read',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'], dmWhatsappAction: ['mark_read'] } },
+			},
+			{
 				displayName: 'Message ID',
 				name: 'dmMessageId',
 				type: 'string',
 				default: '',
-				description: 'The message the sender action applies to',
+				description: 'The message the sender action applies to (WhatsApp: the wamid.… of the received message)',
 				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'] } },
 			},
 			{
@@ -3159,12 +3493,178 @@ export class UploadPost implements INodeType {
 				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['instagram'] } },
 			},
 			{
+				displayName: 'Template Name',
+				name: 'dmWhatsappTemplateName',
+				type: 'string',
+				default: '',
+				placeholder: 'order_update',
+				description: 'Send this approved WhatsApp template (see List WhatsApp Templates). Templates are the only messages WhatsApp delivers more than 24 hours after the person\'s last message (otherwise meta_error_code 131047).',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'] } },
+			},
+			{
+				displayName: 'Template Language',
+				name: 'dmWhatsappTemplateLanguage',
+				type: 'string',
+				default: 'en_US',
+				description: 'Language code the template was approved in (en_US, es, pt_BR...)',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'] } },
+			},
+			{
+				displayName: 'Template Components (JSON)',
+				name: 'dmWhatsappTemplateComponents',
+				type: 'json',
+				default: '',
+				placeholder: '[{"type": "body", "parameters": [{"type": "text", "text": "Ana"}]}]',
+				description: 'Values for the template variables, in Meta\'s components format (header, body and button parameters). Leave empty for a template without variables.',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'] } },
+			},
+			{
+				displayName: 'Attachments',
+				name: 'dmWhatsappAttachments',
+				type: 'fixedCollection',
+				typeOptions: { multipleValues: true, maxValue: 10 },
+				default: {},
+				placeholder: 'Add Attachment',
+				description: 'Up to 10 files, each sent as its own message. A single image, video or document takes Message as its caption.',
+				options: [
+					{
+						name: 'attachment',
+						displayName: 'Attachment',
+						values: [
+							{ displayName: 'Caption', name: 'caption', type: 'string', default: '', description: 'Image, video or document only' },
+							{ displayName: 'File Name', name: 'filename', type: 'string', default: '', description: 'Document only: the name the person sees' },
+							{ displayName: 'Media ID', name: 'mediaId', type: 'string', default: '', description: 'The media_id returned by Upload WhatsApp Media (or of a media you received)' },
+							{
+								displayName: 'Type',
+								name: 'type',
+								type: 'options',
+								options: [
+									{ name: 'Audio', value: 'audio' },
+									{ name: 'Document', value: 'document' },
+									{ name: 'Image', value: 'image' },
+									{ name: 'Sticker', value: 'sticker' },
+									{ name: 'Video', value: 'video' },
+								],
+								default: 'image',
+							},
+							{ displayName: 'URL', name: 'url', type: 'string', default: '', description: 'Public HTTPS link to the file. Leave empty when Media ID is set.' },
+						],
+					},
+				],
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'] } },
+			},
+			{
+				displayName: 'Location',
+				name: 'dmWhatsappLocation',
+				type: 'fixedCollection',
+				default: {},
+				placeholder: 'Add Location',
+				description: 'Send a map pin. If Message is also set it goes first, as text.',
+				options: [
+					{
+						name: 'location',
+						displayName: 'Location',
+						values: [
+							{ displayName: 'Latitude', name: 'latitude', type: 'number', typeOptions: { numberPrecision: 6 }, default: 0 },
+							{ displayName: 'Longitude', name: 'longitude', type: 'number', typeOptions: { numberPrecision: 6 }, default: 0 },
+							{ displayName: 'Name', name: 'name', type: 'string', default: '' },
+							{ displayName: 'Address', name: 'address', type: 'string', default: '' },
+						],
+					},
+				],
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'] } },
+			},
+			{
+				displayName: 'Contacts (JSON)',
+				name: 'dmWhatsappContacts',
+				type: 'json',
+				default: '',
+				placeholder: '[{"name": "Ana López", "phones": ["+34600111222"]}]',
+				description: '1-10 contact cards: Meta contact objects, at least a name ({"formatted_name": ...} or a string) and phones ([{"phone": ...}] or strings)',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'] } },
+			},
+			{
+				displayName: 'Interactive Message',
+				name: 'dmWhatsappInteractive',
+				type: 'options',
+				options: [
+					{ name: 'Call-to-Action URL Button', value: 'cta_url' },
+					{ name: 'List', value: 'list' },
+					{ name: 'None', value: '' },
+					{ name: 'Reply Buttons', value: 'buttons' },
+				],
+				default: '',
+				description: 'Send Message as the body of an interactive message (max 1,024 characters, no attachments)',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'] } },
+			},
+			{
+				displayName: 'Reply Buttons',
+				name: 'dmWhatsappButtons',
+				type: 'fixedCollection',
+				typeOptions: { multipleValues: true, maxValue: 3 },
+				default: {},
+				placeholder: 'Add Button',
+				description: 'Up to 3 reply buttons. The tap comes back as a dm_received message with the button ID.',
+				options: [
+					{
+						name: 'button',
+						displayName: 'Button',
+						values: [
+							{ displayName: 'Title', name: 'title', type: 'string', default: '', description: 'Button label (max 20 characters)' },
+							{ displayName: 'ID', name: 'id', type: 'string', default: '', description: 'Your ID for the button (optional)' },
+						],
+					},
+				],
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'], dmWhatsappInteractive: ['buttons'] } },
+			},
+			{
+				displayName: 'List (JSON)',
+				name: 'dmWhatsappList',
+				type: 'json',
+				default: '{\n  "button": "Options",\n  "sections": [\n    { "title": "Plans", "rows": [ { "id": "basic", "title": "Basic", "description": "For one brand" } ] }\n  ]\n}',
+				description: 'A list menu: button (max 20 characters) and sections with rows (ID, title max 24, description max 72); up to 10 rows in total',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'], dmWhatsappInteractive: ['list'] } },
+			},
+			{
+				displayName: 'Button Text',
+				name: 'dmWhatsappCtaText',
+				type: 'string',
+				default: '',
+				description: 'Label of the link button (max 20 characters)',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'], dmWhatsappInteractive: ['cta_url'] } },
+			},
+			{
+				displayName: 'Button URL',
+				name: 'dmWhatsappCtaUrl',
+				type: 'string',
+				default: '',
+				placeholder: 'https://example.com/offer',
+				description: 'Link the button opens',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'], dmWhatsappInteractive: ['cta_url'] } },
+			},
+			{
+				displayName: 'Header',
+				name: 'dmWhatsappHeader',
+				type: 'string',
+				default: '',
+				description: 'Text header of the interactive message (max 60 characters)',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'], dmWhatsappInteractive: ['buttons', 'list', 'cta_url'] } },
+			},
+			{
+				displayName: 'Footer',
+				name: 'dmWhatsappFooter',
+				type: 'string',
+				default: '',
+				description: 'Footer of the interactive message (max 60 characters)',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['whatsapp'], dmWhatsappInteractive: ['buttons', 'list', 'cta_url'] } },
+			},
+			{
 				displayName: 'Extra Fields (JSON)',
 				name: 'dmExtraFields',
 				type: 'json',
 				default: '',
-				description: 'Other Instagram DM fields, merged into the request body as is: attachments (objects with a type and a link or an attachment_id; types image, video, audio, file, like_heart, media_share), quick_replies (up to 13) or generic_template (up to 10 elements)',
-				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['instagram'] } },
+				description: 'Other DM fields, merged into the request body as is (they win over the fields above). Instagram: attachments (objects with a type and a link or an attachment_id; types image, video, audio, file, like_heart, media_share), quick_replies (up to 13) or generic_template (up to 10 elements). WhatsApp: any field of /dms/send, e.g. template, attachments, location, contacts, list, cta_url, buttons, header, footer, reaction, typing.',
+				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['instagram', 'whatsapp'] } },
 			},
 			{
 				displayName: 'Page Size',
@@ -3206,7 +3706,7 @@ export class UploadPost implements INodeType {
 				name: 'dmParticipantId',
 				type: 'string',
 				default: '',
-				description: 'Only your conversation with this person. Instagram: Instagram-scoped ID. Bluesky: handle or DID (reading never creates the conversation).',
+				description: 'Only your conversation with this person. WhatsApp: phone number in international format. Instagram: Instagram-scoped ID. Bluesky: handle or DID (reading never creates the conversation).',
 				displayOptions: { show: { resource: ['dms'], operation: ['listDmConversations'] } },
 			},
 			{
@@ -3249,6 +3749,244 @@ export class UploadPost implements INodeType {
 				default: '',
 				description: 'Bluesky: only conversations with unread messages',
 				displayOptions: { show: { resource: ['dms'], operation: ['listDmConversations'], dmPlatform: ['bluesky'] } },
+			},
+			{
+				displayName: 'Input Binary Field',
+				name: 'dmMediaBinaryProperty',
+				type: 'string',
+				default: 'data',
+				required: true,
+				description: 'Name of the binary property of the input item that holds the file',
+				displayOptions: { show: { resource: ['dms'], operation: ['uploadDmMedia'] } },
+			},
+			{
+				displayName: 'Media Type',
+				name: 'dmMediaType',
+				type: 'options',
+				options: [
+					{ name: 'Audio', value: 'audio' },
+					{ name: 'Automatic (From the File)', value: '' },
+					{ name: 'Document', value: 'document' },
+					{ name: 'Image', value: 'image' },
+					{ name: 'Sticker', value: 'sticker' },
+					{ name: 'Video', value: 'video' },
+				],
+				default: '',
+				description: 'How WhatsApp should treat the file. Automatic picks it from the MIME type; use Document to send an image or video as a file.',
+				displayOptions: { show: { resource: ['dms'], operation: ['uploadDmMedia'] } },
+			},
+			{
+				displayName: 'Media ID',
+				name: 'dmMediaId',
+				type: 'string',
+				default: '',
+				required: true,
+				description: 'The media_id of the file (in the messages of List Conversations or the dm_received webhook)',
+				displayOptions: { show: { resource: ['dms'], operation: ['downloadDmMedia'] } },
+			},
+			{
+				displayName: 'Put Output File in Field',
+				name: 'dmMediaOutputProperty',
+				type: 'string',
+				default: 'data',
+				required: true,
+				description: 'Name of the binary property the downloaded file goes to',
+				displayOptions: { show: { resource: ['dms'], operation: ['downloadDmMedia'] } },
+			},
+			{
+				displayName: 'Page Size',
+				name: 'dmTemplateLimit',
+				type: 'number',
+				typeOptions: { minValue: 0, maxValue: 200 },
+				default: 0,
+				description: 'Templates to return, 1-200. 0 = the default (100).',
+				displayOptions: { show: { resource: ['dms'], operation: ['listDmTemplates'] } },
+			},
+			{
+				displayName: 'Status',
+				name: 'dmTemplateStatus',
+				type: 'options',
+				options: [
+					{ name: 'All', value: '' },
+					{ name: 'Approved', value: 'APPROVED' },
+					{ name: 'Disabled', value: 'DISABLED' },
+					{ name: 'Paused', value: 'PAUSED' },
+					{ name: 'Pending', value: 'PENDING' },
+					{ name: 'Rejected', value: 'REJECTED' },
+				],
+				default: '',
+				description: 'Only templates in this review status',
+				displayOptions: { show: { resource: ['dms'], operation: ['listDmTemplates'] } },
+			},
+			{
+				displayName: 'Name',
+				name: 'dmTemplateNameFilter',
+				type: 'string',
+				default: '',
+				description: 'Only templates with this name',
+				displayOptions: { show: { resource: ['dms'], operation: ['listDmTemplates'] } },
+			},
+			{
+				displayName: 'Template Name',
+				name: 'dmTemplateName',
+				type: 'string',
+				default: '',
+				required: true,
+				placeholder: 'order_update',
+				description: 'Lowercase letters, numbers and underscores',
+				displayOptions: { show: { resource: ['dms'], operation: ['createDmTemplate', 'deleteDmTemplate'] } },
+			},
+			{
+				displayName: 'Category',
+				name: 'dmTemplateCategory',
+				type: 'options',
+				options: [
+					{ name: 'Authentication', value: 'AUTHENTICATION', description: 'One-time passcodes' },
+					{ name: 'Marketing', value: 'MARKETING', description: 'Offers, announcements, invitations' },
+					{ name: 'Utility', value: 'UTILITY', description: 'Updates about an order, account or booking the person asked for' },
+				],
+				default: 'UTILITY',
+				description: 'Meta reviews the template against its category and may change it',
+				displayOptions: { show: { resource: ['dms'], operation: ['createDmTemplate'] } },
+			},
+			{
+				displayName: 'Language',
+				name: 'dmTemplateLanguage',
+				type: 'string',
+				default: 'en_US',
+				description: 'Language code of the template (en_US, es, pt_BR...)',
+				displayOptions: { show: { resource: ['dms'], operation: ['createDmTemplate'] } },
+			},
+			{
+				displayName: 'Body',
+				name: 'dmTemplateBody',
+				type: 'string',
+				default: '',
+				typeOptions: { rows: 3 },
+				placeholder: 'Hi {{1}}, your order {{2}} has shipped.',
+				description: 'Text of the template, with variables {{1}}, {{2}}... Required unless you pass Components (JSON).',
+				displayOptions: { show: { resource: ['dms'], operation: ['createDmTemplate'] } },
+			},
+			{
+				displayName: 'Body Examples',
+				name: 'dmTemplateExamples',
+				type: 'string',
+				default: '',
+				placeholder: 'Ana, #1042',
+				description: 'Comma-separated sample values for the variables, in order (Meta requires them for review; missing ones are filled with placeholders)',
+				displayOptions: { show: { resource: ['dms'], operation: ['createDmTemplate'] } },
+			},
+			{
+				displayName: 'Header',
+				name: 'dmTemplateHeader',
+				type: 'string',
+				default: '',
+				description: 'Text header (max 60 characters)',
+				displayOptions: { show: { resource: ['dms'], operation: ['createDmTemplate'] } },
+			},
+			{
+				displayName: 'Footer',
+				name: 'dmTemplateFooter',
+				type: 'string',
+				default: '',
+				description: 'Footer text (max 60 characters)',
+				displayOptions: { show: { resource: ['dms'], operation: ['createDmTemplate'] } },
+			},
+			{
+				displayName: 'Buttons',
+				name: 'dmTemplateButtons',
+				type: 'fixedCollection',
+				typeOptions: { multipleValues: true, maxValue: 10 },
+				default: {},
+				placeholder: 'Add Button',
+				description: 'Up to 10 buttons: a link (URL), a call (Phone Number) or a quick reply (neither)',
+				options: [
+					{
+						name: 'button',
+						displayName: 'Button',
+						values: [
+							{ displayName: 'Text', name: 'text', type: 'string', default: '', description: 'Button label (max 25 characters)' },
+							{ displayName: 'URL', name: 'url', type: 'string', default: '' },
+							{ displayName: 'Phone Number', name: 'phoneNumber', type: 'string', default: '', placeholder: '+34600111222' },
+						],
+					},
+				],
+				displayOptions: { show: { resource: ['dms'], operation: ['createDmTemplate'] } },
+			},
+			{
+				displayName: 'Components (JSON)',
+				name: 'dmTemplateComponents',
+				type: 'json',
+				default: '',
+				description: 'The template in Meta\'s components format (HEADER, BODY, FOOTER, BUTTONS; media headers, examples...). When set, Body, Body Examples, Header, Footer and Buttons are ignored.',
+				displayOptions: { show: { resource: ['dms'], operation: ['createDmTemplate'] } },
+			},
+			{
+				displayName: 'Profile Fields',
+				name: 'dmWhatsappProfileFields',
+				type: 'collection',
+				placeholder: 'Add Field',
+				default: {},
+				options: [
+					{ displayName: 'About', name: 'about', type: 'string', default: '', description: 'Short status under the name (max 139 characters)' },
+					{ displayName: 'Address', name: 'address', type: 'string', default: '', description: 'Max 256 characters' },
+					{
+						displayName: 'Category',
+						name: 'vertical',
+						type: 'options',
+						options: [
+							{ name: 'Apparel', value: 'APPAREL' },
+							{ name: 'Automotive', value: 'AUTO' },
+							{ name: 'Beauty', value: 'BEAUTY' },
+							{ name: 'Education', value: 'EDU' },
+							{ name: 'Entertainment', value: 'ENTERTAIN' },
+							{ name: 'Event Planning', value: 'EVENT_PLAN' },
+							{ name: 'Finance', value: 'FINANCE' },
+							{ name: 'Government', value: 'GOVT' },
+							{ name: 'Grocery', value: 'GROCERY' },
+							{ name: 'Health', value: 'HEALTH' },
+							{ name: 'Hotel', value: 'HOTEL' },
+							{ name: 'Non-Profit', value: 'NONPROFIT' },
+							{ name: 'Not a Business', value: 'NOT_A_BIZ' },
+							{ name: 'Other', value: 'OTHER' },
+							{ name: 'Professional Services', value: 'PROF_SERVICES' },
+							{ name: 'Restaurant', value: 'RESTAURANT' },
+							{ name: 'Retail', value: 'RETAIL' },
+							{ name: 'Travel', value: 'TRAVEL' },
+							{ name: 'Undefined', value: 'UNDEFINED' },
+						],
+						default: 'OTHER',
+					},
+					{ displayName: 'Description', name: 'description', type: 'string', default: '', description: 'Max 512 characters' },
+					{ displayName: 'Email', name: 'email', type: 'string', placeholder: 'name@email.com', default: '', description: 'Max 128 characters' },
+					{ displayName: 'Websites', name: 'websites', type: 'string', default: '', description: 'Up to 2 http(s) links, comma-separated' },
+				],
+				displayOptions: { show: { resource: ['dms'], operation: ['updateWhatsappProfile'] } },
+			},
+			{
+				displayName: 'Profile Photo Binary Field',
+				name: 'dmWhatsappProfilePhoto',
+				type: 'string',
+				default: '',
+				description: 'Name of the binary property with a new profile photo (JPEG or PNG, max 5 MB). Leave empty to keep the photo.',
+				displayOptions: { show: { resource: ['dms'], operation: ['updateWhatsappProfile'] } },
+			},
+			{
+				displayName: 'Prefilled Message',
+				name: 'dmQrPrefilledMessage',
+				type: 'string',
+				default: '',
+				required: true,
+				description: 'Text the chat opens with (max 140 characters)',
+				displayOptions: { show: { resource: ['dms'], operation: ['createWhatsappQrCode'] } },
+			},
+			{
+				displayName: 'QR Code ID',
+				name: 'dmQrCode',
+				type: 'string',
+				default: '',
+				description: 'The code of an existing QR code (from List WhatsApp QR Codes). Create or Update: leave empty to create a new one.',
+				displayOptions: { show: { resource: ['dms'], operation: ['createWhatsappQrCode', 'deleteWhatsappQrCode'] } },
 			},
 
 			{
@@ -4612,13 +5350,14 @@ export class UploadPost implements INodeType {
 					{ name: 'Telegram', value: 'telegram' },
 					{ name: 'Threads', value: 'threads' },
 					{ name: 'TikTok', value: 'tiktok' },
+					{ name: 'WhatsApp (Direct Messages Only)', value: 'whatsapp' },
 					{ name: 'Whop', value: 'whop' },
 					{ name: 'WordPress', value: 'wordpress' },
 					{ name: 'X (Twitter)', value: 'x' },
 					{ name: 'YouTube', value: 'youtube' },
 				],
 				default: [],
-				description: 'Optional list of platforms to show for connection. Defaults to all supported platforms.',
+				description: 'Optional list of platforms to show for connection. Defaults to all supported platforms. WhatsApp connects a WhatsApp Business number for direct messages (it does not publish posts).',
 				displayOptions: { show: { operation: ['generateJwt'] } },
 			},
 			{
@@ -7418,6 +8157,12 @@ export class UploadPost implements INodeType {
 				// For requests without body (GET, etc)
 				requestOptions.json = true;
 			}
+			if (config.binaryOutput) {
+				requestOptions.json = false;
+				requestOptions.encoding = 'arraybuffer';
+				requestOptions.returnFullResponse = true;
+				requestOptions.ignoreHttpStatusErrors = true;
+			}
 
 			const rawResponse = config.skipCredentialAuth
 				? await this.helpers.httpRequest(requestOptions)
@@ -7426,6 +8171,11 @@ export class UploadPost implements INodeType {
 					'uploadPostApi',
 					requestOptions,
 				);
+
+			if (config.binaryOutput) {
+				returnData.push(await binaryResponseItem(this, rawResponse, config.binaryOutput, itemIndex));
+				continue;
+			}
 
 			const responseData = parseJsonIfNeeded(rawResponse);
 

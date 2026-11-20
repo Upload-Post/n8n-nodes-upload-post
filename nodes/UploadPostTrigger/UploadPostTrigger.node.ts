@@ -101,7 +101,7 @@ export class UploadPostTrigger implements INodeType {
 						name: 'Direct Message Received',
 						value: 'dm_received',
 						description:
-							'Someone sent a direct message to a connected Instagram or Bluesky account, or to your Telegram bot. Opt-in: the account must have direct messages available.',
+							'Someone sent a direct message to a connected Instagram, WhatsApp or Bluesky account, or to your Telegram bot. Opt-in: the account must have direct messages available.',
 					},
 					{
 						name: 'Listing Control Changed',

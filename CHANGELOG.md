@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0
+
+- **WhatsApp** direct messages, open to every account (WhatsApp is a messaging channel: it does not publish posts). Direct Message > Platform has **WhatsApp**: the profile's own WhatsApp Business number, Recipient ID = phone number in international format.
+  - Send DM sends every WhatsApp field of `/dms/send`: message, reply to, attachments (image, video, audio, document, sticker by HTTPS URL or `media_id`, with caption and file name), approved **template** (name, language, components; the only message delivered outside the 24-hour window), location, contacts, interactive messages (reply buttons, list, call-to-action URL button, header, footer), React / Remove Reaction, Mark Read (with typing) and Typing On. Extra Fields (JSON) also works for WhatsApp.
+  - List Conversations accepts WhatsApp (Participant ID = phone number).
+  - New operations: **Upload WhatsApp Media** (binary to `media_id`), **Download WhatsApp Media** (`media_id` to binary), **List / Create / Delete WhatsApp Templates**, **Get / Update WhatsApp Business Profile** (with profile photo) and **List / Create or Update / Delete WhatsApp QR Codes**.
+- Generate JWT: WhatsApp can be offered as a platform to connect (for direct messages).
+- Upload Post Trigger: `dm_received` also covers WhatsApp.
+
 ## 0.9.1
 
 - Uploads in a loop (Loop Over Items / Split In Batches) are all published. The derived `Idempotency-Key` now includes the run of the node and a hash of the content (fields plus file names, types and sizes): before, every pass of the loop sent the key of the first one and got the first post back. Retry On Fail still sends the same key.
