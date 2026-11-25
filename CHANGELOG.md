@@ -4,6 +4,7 @@
 
 - Options for the API features switched on in production on 2026-11-25 (nothing is sent unless it is filled):
   - **Threads Options** (Upload Photo(s) / Video / Text): GIF ID and Ghost Post (text), Spoiler Media (photos/video), Text Spoilers.
+  - **X Video and Clip Options**: video card title, description and call to action (Upload Video); clip of another post's video (Upload Text).
   - Upload Text: **Facebook Text Options** (Backdated Time and its granularity).
   - Upload Photo(s): **Instagram Options (Single Video)**: a single video is published as a Reel with Cover URL, Thumbnail Offset, Share to Feed and Audio Name.
   - Create Comment: **Image URL** on TikTok. Get Suggestions: **Trending** type and **Personalized** (TikTok).

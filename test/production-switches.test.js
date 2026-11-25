@@ -131,3 +131,19 @@ test('suggestions: trending with personalized', async () => {
 	const plain = await run({ resource: 'insights', operation: 'getSuggestions', insightsUser: 'acme', insightsPlatform: 'tiktok', suggestionsType: 'hashtags', suggestionsQuery: 'cats' });
 	assert.equal(plain.qs.personalized, undefined);
 });
+
+test('X: video card on videos, clip on text, nothing crosses over', async () => {
+	const options = { videoTitle: 'T', videoCta: 'watch_now', videoCtaUrl: 'https://e.com', clipPostId: '9', clipStartSeconds: 10, clipEndSeconds: 40 };
+	const video = formFields(await run(upload('uploadVideo', { platform: ['x'], xPostOptions: options })));
+	assert.equal(video.x_video_title, 'T');
+	assert.equal(video.x_video_cta, 'watch_now');
+	assert.equal(video.x_video_cta_url, 'https://e.com');
+	assert.equal(video.x_clip_post_id, undefined);
+	const text = formFields(await run(upload('uploadText', { platform: ['x'], xPostOptions: options })));
+	assert.equal(text.x_clip_post_id, '9');
+	assert.equal(text.x_clip_start_seconds, '10');
+	assert.equal(text.x_clip_end_seconds, '40');
+	assert.equal(text.x_video_title, undefined);
+	const other = formFields(await run(upload('uploadText', { platform: ['bluesky'], xPostOptions: options })));
+	assert.equal(other.x_clip_post_id, undefined);
+});

@@ -168,6 +168,19 @@ const THREADS_UPLOAD_OPTIONS: Array<[string, string, OptionKind, string[]?]> = [
 	['textSpoilers', 'threads_text_spoilers', 'json'],
 ];
 
+const X_UPLOAD_OPTIONS: Array<[string, string, OptionKind, string[]?]> = [
+	['clipEndSeconds', 'x_clip_end_seconds', 'number', ['uploadText']],
+	['clipPostId', 'x_clip_post_id', 'string', ['uploadText']],
+	['clipStartSeconds', 'x_clip_start_seconds', 'number', ['uploadText']],
+	['videoCta', 'x_video_cta', 'string', ['uploadVideo']],
+	['videoCtaAppStoreId', 'x_video_cta_app_store_id', 'string', ['uploadVideo']],
+	['videoCtaIpadAppStoreId', 'x_video_cta_ipad_app_store_id', 'string', ['uploadVideo']],
+	['videoCtaPlayStoreId', 'x_video_cta_play_store_id', 'string', ['uploadVideo']],
+	['videoCtaUrl', 'x_video_cta_url', 'string', ['uploadVideo']],
+	['videoDescription', 'x_video_description', 'string', ['uploadVideo']],
+	['videoTitle', 'x_video_title', 'string', ['uploadVideo']],
+];
+
 const FACEBOOK_TEXT_OPTIONS: Array<[string, string, OptionKind, string[]?]> = [
 	['backdatedTime', 'facebook_backdated_time', 'string', ['uploadText']],
 	['backdatedTimeGranularity', 'facebook_backdated_time_granularity', 'string', ['uploadText']],
@@ -240,6 +253,9 @@ export const applyNetworkUploadOptions = (
 	}
 	if (has('google_business')) {
 		applyCollection(ctx, 'gbpOptions', 'Google Business Options', GBP_UPLOAD_OPTIONS, formData);
+	}
+	if (has('x')) {
+		applyCollection(ctx, 'xPostOptions', 'X Options', X_UPLOAD_OPTIONS, formData);
 	}
 	if (has('threads')) {
 		applyCollection(ctx, 'threadsPostOptions', 'Threads Options', THREADS_UPLOAD_OPTIONS, formData);
@@ -435,6 +451,37 @@ export const uploadExtraProperties: INodeProperties[] = [
 			},
 			{ displayName: 'Scheduled Time (Google)', name: 'scheduledTime', type: 'string', default: '', description: 'Google\'s own scheduling: RFC 3339 with time zone, at most a year ahead. Cancelling in Upload-Post does not stop it (use Unpublish Post).' },
 			{ displayName: 'Upload To Gallery', name: 'uploadToGallery', type: 'boolean', default: true, description: 'Whether to publish the photo to the Media/Gallery tab (same as Post Type = Media)' },
+		],
+	},
+	{
+		displayName: 'X Video and Clip Options',
+		name: 'xPostOptions',
+		type: 'collection',
+		placeholder: 'Add X Option',
+		default: {},
+		displayOptions: { show: { operation: ['uploadVideo', 'uploadText'], platform: ['x', MANUAL_PLATFORM_VALUE] } },
+		options: [
+			{ displayName: 'Clip End (Seconds)', name: 'clipEndSeconds', type: 'number', default: 0, description: 'Upload Text: end of the clip' },
+			{ displayName: 'Clip Post ID', name: 'clipPostId', type: 'string', default: '', description: 'Upload Text: post a clip of the video of this post (it must have exactly one video, longer than 2 minutes)' },
+			{ displayName: 'Clip Start (Seconds)', name: 'clipStartSeconds', type: 'number', default: 0, description: 'Upload Text: start of the clip. The clip is 5 to 60 seconds and at most 30% of the video.' },
+			{
+				displayName: 'Video Call to Action',
+				name: 'videoCta',
+				type: 'options',
+				options: [
+					{ name: 'App Install', value: 'app_install' },
+					{ name: 'Visit Site', value: 'visit_site' },
+					{ name: 'Watch Now', value: 'watch_now' },
+				],
+				default: 'visit_site',
+				description: 'Upload Video: call to action on the video',
+			},
+			{ displayName: 'Video CTA App Store ID', name: 'videoCtaAppStoreId', type: 'string', default: '', description: 'Upload Video, App Install: Apple App Store iPhone app ID' },
+			{ displayName: 'Video CTA Google Play ID', name: 'videoCtaPlayStoreId', type: 'string', default: '', description: 'Upload Video, App Install: Google Play app ID' },
+			{ displayName: 'Video CTA iPad App Store ID', name: 'videoCtaIpadAppStoreId', type: 'string', default: '', description: 'Upload Video, App Install: Apple App Store iPad app ID' },
+			{ displayName: 'Video CTA URL', name: 'videoCtaUrl', type: 'string', default: '', description: 'Upload Video: https URL of Visit Site / Watch Now' },
+			{ displayName: 'Video Description', name: 'videoDescription', type: 'string', default: '', description: 'Upload Video: description shown on the video card' },
+			{ displayName: 'Video Title', name: 'videoTitle', type: 'string', default: '', description: 'Upload Video: title shown on the video card' },
 		],
 	},
 	{
