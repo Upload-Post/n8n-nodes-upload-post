@@ -2496,6 +2496,10 @@ const buildInstagramRequest = (ctx: ExecutionContext): RequestConfig => {
 			if (commentId) body.comment_id = commentId;
 			if (postId) body.post_id = postId;
 			if (postUrl && !postId) body.post_url = postUrl;
+			if (platform === 'tiktok') {
+				const imageUrl = String(ctx.node.getNodeParameter('createCommentImageUrl', ctx.itemIndex, '') ?? '').trim();
+				if (imageUrl) body.image_url = imageUrl;
+			}
 			return {
 				endpoint: '/uploadposts/comments/create',
 				method: 'POST',
@@ -2659,6 +2663,7 @@ const buildInsightsRequest = (ctx: ExecutionContext): RequestConfig => {
 			if (countryCode) qs.country_code = countryCode;
 			const language = ctx.node.getNodeParameter('suggestionsLanguage', ctx.itemIndex, '') as string;
 			if (language) qs.language = language;
+			if (ctx.node.getNodeParameter('suggestionsPersonalized', ctx.itemIndex, false) === true) qs.personalized = 'true';
 			return {
 				endpoint: '/uploadposts/suggestions',
 				method: 'GET',
@@ -3187,6 +3192,20 @@ export class UploadPost implements INodeType {
 				},
 			},
 			{
+				displayName: 'Image URL',
+				name: 'createCommentImageUrl',
+				type: 'string',
+				default: '',
+				description: 'TikTok: public URL of an image to post as (or with) the comment',
+				displayOptions: {
+					show: {
+						resource: ['instagram'],
+						operation: ['createComment'],
+						commentPlatform: ['tiktok'],
+					},
+				},
+			},
+			{
 				displayName: 'Post URL',
 				name: 'createCommentPostUrl',
 				type: 'string',
@@ -3663,7 +3682,7 @@ export class UploadPost implements INodeType {
 				name: 'dmExtraFields',
 				type: 'json',
 				default: '',
-				description: 'Other DM fields, merged into the request body as is (they win over the fields above). Instagram: attachments (objects with a type and a link or an attachment_id; types image, video, audio, file, like_heart, media_share), quick_replies (up to 13) or generic_template (up to 10 elements). WhatsApp: any field of /dms/send, e.g. template, attachments, location, contacts, list, cta_url, buttons, header, footer, reaction, typing.',
+				description: 'Other DM fields, merged into the request body as is (they win over the fields above). Instagram: attachments (objects with a type and a link or an attachment_id; types image, video, audio, file, like_heart, media_share), quick_replies (up to 13) or generic_template (up to 10 elements). WhatsApp: any field of /dms/send, e.g. template, attachments, location, contacts, list, cta_url, buttons, header, footer, reaction, typing, flow (a WhatsApp Flow: flow_id or flow_name, cta), location_request (true: ask for the location), carousel (media cards) or call_button ({display_text}); with flow, location_request and carousel the message is the body.',
 				displayOptions: { show: { resource: ['dms'], operation: ['sendDm'], dmPlatform: ['instagram', 'whatsapp'] } },
 			},
 			{
@@ -4250,10 +4269,19 @@ export class UploadPost implements INodeType {
 				options: [
 					{ name: 'Hashtags', value: 'hashtags' },
 					{ name: 'Keywords', value: 'keywords' },
+					{ name: 'Trending', value: 'trending' },
 				],
 				default: 'hashtags',
-				description: 'Which suggestions you want. Hashtags answers with a list of name and view_count; keywords answers with the searches people run around the word.',
+				description: 'Which suggestions you want. Hashtags answers with a list of name and view_count; keywords answers with the searches people run around the word; trending (no query) returns the 20 searches trending on TikTok now and needs the trend_search capability.',
 				displayOptions: { show: { resource: ['insights'], operation: ['getSuggestions'] } },
+			},
+			{
+				displayName: 'Personalized',
+				name: 'suggestionsPersonalized',
+				type: 'boolean',
+				default: false,
+				description: 'Whether TikTok personalizes the searches for this account (Keywords and Trending)',
+				displayOptions: { show: { resource: ['insights'], operation: ['getSuggestions'], suggestionsType: ['keywords', 'trending'] } },
 			},
 			{
 				displayName: 'Query',

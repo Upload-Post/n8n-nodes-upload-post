@@ -313,6 +313,13 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 
 ### Platform-Specific Options
 
+#### New in 0.11.0
+- **Threads Options**: GIF ID and Ghost Post (Upload Text), Spoiler Media (Upload Photo(s) / Video), Text Spoilers.
+- **Facebook Text Options**, Upload Text: Backdated Time and its granularity.
+- **Instagram Options (Single Video)**, Upload Photo(s): when the only item is a video it is published as a Reel with Cover URL, Thumbnail Offset, Share to Feed and Audio Name.
+- **Create Comment > Image URL** (TikTok) and **Get Suggestions > Trending / Personalized** (TikTok).
+- **Direct Message > Extra Fields (JSON)**, WhatsApp: flow, location_request, carousel and call_button.
+
 #### Facebook
 - **Page Selection**: Dynamic picker for Facebook pages (required for all operations).
 - **Media Type (Video)**: Reels or Stories.

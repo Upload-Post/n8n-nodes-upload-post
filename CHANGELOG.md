@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.0
+
+- Options for the API features switched on in production on 2026-11-25 (nothing is sent unless it is filled):
+  - **Threads Options** (Upload Photo(s) / Video / Text): GIF ID and Ghost Post (text), Spoiler Media (photos/video), Text Spoilers.
+  - Upload Text: **Facebook Text Options** (Backdated Time and its granularity).
+  - Upload Photo(s): **Instagram Options (Single Video)**: a single video is published as a Reel with Cover URL, Thumbnail Offset, Share to Feed and Audio Name.
+  - Create Comment: **Image URL** on TikTok. Get Suggestions: **Trending** type and **Personalized** (TikTok).
+  - Direct Message *Extra Fields (JSON)* lists the WhatsApp flow, location_request, carousel and call_button fields.
+
 ## 0.10.0
 
 - **WhatsApp** direct messages, open to every account (WhatsApp is a messaging channel: it does not publish posts). Direct Message > Platform has **WhatsApp**: the profile's own WhatsApp Business number, Recipient ID = phone number in international format.

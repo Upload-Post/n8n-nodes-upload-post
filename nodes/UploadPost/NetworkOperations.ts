@@ -159,16 +159,39 @@ const GBP_UPLOAD_OPTIONS: Array<[string, string, OptionKind]> = [
 	['uploadToGallery', 'gbp_upload_to_gallery', 'boolean'],
 ];
 
+// The 4th element, when present, lists the upload operations the field belongs
+// to; elsewhere it is not sent.
+const THREADS_UPLOAD_OPTIONS: Array<[string, string, OptionKind, string[]?]> = [
+	['ghostPost', 'threads_ghost_post', 'boolean', ['uploadText']],
+	['gifId', 'threads_gif_id', 'string', ['uploadText']],
+	['spoilerMedia', 'threads_spoiler_media', 'boolean', ['uploadPhotos', 'uploadVideo']],
+	['textSpoilers', 'threads_text_spoilers', 'json'],
+];
+
+const FACEBOOK_TEXT_OPTIONS: Array<[string, string, OptionKind, string[]?]> = [
+	['backdatedTime', 'facebook_backdated_time', 'string', ['uploadText']],
+	['backdatedTimeGranularity', 'facebook_backdated_time_granularity', 'string', ['uploadText']],
+];
+
+// A single video in Upload Photo(s) is published as a Reel and takes the Reel's fields.
+const INSTAGRAM_PHOTO_VIDEO_OPTIONS: Array<[string, string, OptionKind, string[]?]> = [
+	['audioName', 'audio_name', 'string', ['uploadPhotos']],
+	['coverUrl', 'cover_url', 'string', ['uploadPhotos']],
+	['shareToFeed', 'share_to_feed', 'boolean', ['uploadPhotos']],
+	['thumbOffset', 'thumb_offset', 'string', ['uploadPhotos']],
+];
+
 const applyCollection = (
 	ctx: NetworkContext,
 	collectionName: string,
 	label: string,
-	table: Array<[string, string, OptionKind]>,
+	table: Array<[string, string, OptionKind, string[]?]>,
 	formData: IDataObject,
 ) => {
 	const values = (param(ctx, collectionName, {}) ?? {}) as IDataObject;
-	for (const [key, field, kind] of table) {
+	for (const [key, field, kind, operations] of table) {
 		if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+		if (operations && !operations.includes(ctx.operation)) continue;
 		const value = values[key];
 		if (kind === 'boolean') {
 			// The option was added on purpose: send it as chosen (false included).
@@ -217,6 +240,15 @@ export const applyNetworkUploadOptions = (
 	}
 	if (has('google_business')) {
 		applyCollection(ctx, 'gbpOptions', 'Google Business Options', GBP_UPLOAD_OPTIONS, formData);
+	}
+	if (has('threads')) {
+		applyCollection(ctx, 'threadsPostOptions', 'Threads Options', THREADS_UPLOAD_OPTIONS, formData);
+	}
+	if (has('facebook') && operation === 'uploadText') {
+		applyCollection(ctx, 'facebookTextOptions', 'Facebook Options', FACEBOOK_TEXT_OPTIONS, formData);
+	}
+	if (has('instagram') && operation === 'uploadPhotos') {
+		applyCollection(ctx, 'instagramPhotoVideoOptions', 'Instagram Options (Single Video)', INSTAGRAM_PHOTO_VIDEO_OPTIONS, formData);
 	}
 };
 
@@ -403,6 +435,60 @@ export const uploadExtraProperties: INodeProperties[] = [
 			},
 			{ displayName: 'Scheduled Time (Google)', name: 'scheduledTime', type: 'string', default: '', description: 'Google\'s own scheduling: RFC 3339 with time zone, at most a year ahead. Cancelling in Upload-Post does not stop it (use Unpublish Post).' },
 			{ displayName: 'Upload To Gallery', name: 'uploadToGallery', type: 'boolean', default: true, description: 'Whether to publish the photo to the Media/Gallery tab (same as Post Type = Media)' },
+		],
+	},
+	{
+		displayName: 'Threads Options',
+		name: 'threadsPostOptions',
+		type: 'collection',
+		placeholder: 'Add Threads Option',
+		default: {},
+		displayOptions: { show: { operation: MEDIA_AND_TEXT, platform: ['threads', MANUAL_PLATFORM_VALUE] } },
+		options: [
+			{ displayName: 'Ghost Post', name: 'ghostPost', type: 'boolean', default: false, description: 'Whether to publish a ghost post: a temporary text post of up to 500 characters (Upload Text only; only text spoilers can go with it)' },
+			{ displayName: 'GIF ID', name: 'gifId', type: 'string', default: '', description: 'Upload Text: ID of a GIPHY GIF to attach' },
+			{ displayName: 'Spoiler Media', name: 'spoilerMedia', type: 'boolean', default: false, description: 'Whether to blur the images or videos as a spoiler (Upload Photo(s) / Upload Video)' },
+			{ displayName: 'Text Spoilers (JSON)', name: 'textSpoilers', type: 'json', default: '', description: 'Ranges of the text of the first post hidden as spoilers, e.g. [{"offset": 0, "length": 5}] (max 10)' },
+		],
+	},
+	{
+		displayName: 'Facebook Text Options',
+		name: 'facebookTextOptions',
+		type: 'collection',
+		placeholder: 'Add Facebook Option',
+		default: {},
+		displayOptions: { show: { operation: ['uploadText'], platform: ['facebook', MANUAL_PLATFORM_VALUE] } },
+		options: [
+			{ displayName: 'Backdated Time', name: 'backdatedTime', type: 'string', default: '', description: 'Backdate the Page post: a past Unix time or ISO 8601 date' },
+			{
+				displayName: 'Backdated Time Granularity',
+				name: 'backdatedTimeGranularity',
+				type: 'options',
+				options: [
+					{ name: 'Day', value: 'day' },
+					{ name: 'Hour', value: 'hour' },
+					{ name: 'Minute', value: 'minute' },
+					{ name: 'Month', value: 'month' },
+					{ name: 'Year', value: 'year' },
+				],
+				default: 'day',
+				description: 'How precisely Facebook shows the backdated time',
+			},
+		],
+	},
+	{
+		displayName: 'Instagram Options (Single Video)',
+		name: 'instagramPhotoVideoOptions',
+		type: 'collection',
+		placeholder: 'Add Instagram Option',
+		default: {},
+		description: 'When the only item is a video, Instagram publishes it as a Reel and takes these fields',
+		displayOptions: { show: { operation: ['uploadPhotos'], platform: ['instagram', MANUAL_PLATFORM_VALUE] } },
+		options: [
+			{ displayName: 'Audio Name', name: 'audioName', type: 'string', default: '', description: 'Name of the audio track embedded in the video' },
+			{ displayName: 'Cover URL', name: 'coverUrl', type: 'string', default: '', description: 'Public URL of a custom cover' },
+			{ displayName: 'Share to Feed', name: 'shareToFeed', type: 'boolean', default: true, description: 'Whether to also share the Reel to the feed' },
+			{ displayName: 'Thumbnail Offset', name: 'thumbOffset', type: 'string', default: '', description: 'Frame used as thumbnail, in milliseconds' },
 		],
 	},
 ];
