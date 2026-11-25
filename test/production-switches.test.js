@@ -61,7 +61,7 @@ const SOURCES = ['nodes/UploadPost/UploadPost.node.ts', 'nodes/UploadPost/Networ
 
 test('nothing that is off in production is offered', () => {
 	for (const marker of [
-		'/ads/meta', '/ads/tiktok', 'reposts_of_me', 'instagram_connection', 'instagram_audio_id', 'instagram_paid_partnership',
+		'/ads/meta', '/ads/tiktok', 'instagram_mention_received', 'message_reactions', 'messaging_seen', 'instagram_connection', 'instagram_audio_id', 'instagram_paid_partnership',
 		'instagram_poll', 'instagram_product_tags', 'threads_location_id', 'threads_enable_reply_approvals',
 		'threads_allowlisted_country_codes', 'threads_share_to_instagram', 'facebook_tags', 'linkedin/reactions',
 		'participant_ids', 'include_users', 'Not Generally Available Yet', 'whatsapp/flows', 'visitor-posts',
@@ -146,4 +146,25 @@ test('X: video card on videos, clip on text, nothing crosses over', async () => 
 	assert.equal(text.x_video_title, undefined);
 	const other = formFields(await run(upload('uploadText', { platform: ['bluesky'], xPostOptions: options })));
 	assert.equal(other.x_clip_post_id, undefined);
+});
+
+test('Instagram ice breakers and persistent menu', async () => {
+	const base = { resource: 'dms', dmUser: 'acme' };
+	const set = await run({ ...base, operation: 'setInstagramMessagingProfile', dmInstagramIceBreakers: '[{"question": "Hours?", "payload": "HOURS"}]' });
+	assert.equal(set.method, 'POST');
+	assert.equal(set.url, 'https://api.upload-post.com/api/uploadposts/dms/instagram/profile');
+	assert.deepEqual(set.body, { user: 'acme', ice_breakers: [{ question: 'Hours?', payload: 'HOURS' }] });
+	const get = await run({ ...base, operation: 'getInstagramMessagingProfile', dmInstagramProfileFields: ['persistent_menu'] });
+	assert.equal(get.method, 'GET');
+	assert.deepEqual(get.qs, { user: 'acme', fields: 'persistent_menu' });
+	const del = await run({ ...base, operation: 'deleteInstagramMessagingProfile', dmInstagramProfileFields: ['ice_breakers'], dmInstagramProfileConfirm: true });
+	assert.equal(del.method, 'DELETE');
+	assert.deepEqual(del.body, { user: 'acme', fields: ['ice_breakers'], confirm: true });
+	await assert.rejects(() => run({ ...base, operation: 'deleteInstagramMessagingProfile', dmInstagramProfileFields: ['ice_breakers'] }), /Confirm/);
+});
+
+test('create comment: Instagram top-level comment without Comment ID', async () => {
+	const req = await run({ resource: 'instagram', operation: 'createComment', instagramUser: 'acme', commentPlatform: 'instagram', createCommentMessage: 'Hi', createCommentPostId: '1789' });
+	assert.equal(req.body.post_id, '1789');
+	assert.equal(req.body.comment_id, undefined);
 });

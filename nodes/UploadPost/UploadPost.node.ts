@@ -2397,6 +2397,33 @@ const buildDmRequest = async (ctx: ExecutionContext): Promise<RequestConfig> => 
 			}
 			return json('/uploadposts/dms/whatsapp/profile', 'POST', { body: { user, ...fields } });
 		}
+		case 'getInstagramMessagingProfile': {
+			const qs: IDataObject = { user };
+			const fields = param<string[]>('dmInstagramProfileFields', []);
+			if (fields.length > 0) qs.fields = fields.join(',');
+			return json('/uploadposts/dms/instagram/profile', 'GET', { qs });
+		}
+		case 'setInstagramMessagingProfile': {
+			const body: IDataObject = { user };
+			const iceBreakers = parseJsonArrayParameter(ctx, 'dmInstagramIceBreakers', 'Ice Breakers (JSON)');
+			const menu = parseJsonArrayParameter(ctx, 'dmInstagramPersistentMenu', 'Persistent Menu (JSON)');
+			if (iceBreakers.length > 0) body.ice_breakers = iceBreakers;
+			if (menu.length > 0) body.persistent_menu = menu;
+			if (!body.ice_breakers && !body.persistent_menu) {
+				throw new NodeOperationError(ctx.node.getNode(), 'Set Ice Breakers (JSON), Persistent Menu (JSON) or both.', { itemIndex: ctx.itemIndex });
+			}
+			return json('/uploadposts/dms/instagram/profile', 'POST', { body });
+		}
+		case 'deleteInstagramMessagingProfile': {
+			const fields = param<string[]>('dmInstagramProfileFields', []);
+			if (fields.length === 0) {
+				throw new NodeOperationError(ctx.node.getNode(), 'Choose what to remove (Fields).', { itemIndex: ctx.itemIndex });
+			}
+			if (param<boolean>('dmInstagramProfileConfirm', false) !== true) {
+				throw new NodeOperationError(ctx.node.getNode(), 'Turn on Confirm to remove them from Instagram.', { itemIndex: ctx.itemIndex });
+			}
+			return json('/uploadposts/dms/instagram/profile', 'DELETE', { body: { user, fields, confirm: true } });
+		}
 		case 'listWhatsappQrCodes':
 			return json('/uploadposts/dms/whatsapp/qr', 'GET', { qs: { user } });
 		case 'createWhatsappQrCode': {
@@ -3170,7 +3197,7 @@ export class UploadPost implements INodeType {
 				name: 'createCommentCommentId',
 				type: 'string',
 				default: '',
-				description: 'Reply to this comment. Required for Instagram. On TikTok add it together with Post ID to reply instead of posting a top-level comment.',
+				description: 'Reply to this comment. On Instagram leave it empty and set Post ID (numeric media ID) or Post URL to post a top-level comment on your own post. On TikTok add it together with Post ID to reply instead of posting a top-level comment.',
 				displayOptions: {
 					show: {
 						resource: ['instagram'],
@@ -3336,14 +3363,17 @@ export class UploadPost implements INodeType {
 				options: [
 					{ name: 'Create or Update WhatsApp QR Code', value: 'createWhatsappQrCode', action: 'Create or update a whatsapp QR code', description: 'Create a QR code and wa.me link that open a WhatsApp chat with your number and a prefilled message, or change the message of an existing one (QR Code ID)' },
 					{ name: 'Create WhatsApp Template', value: 'createDmTemplate', action: 'Create a whatsapp message template', description: 'Submit a WhatsApp message template for Meta review (status PENDING, then APPROVED or REJECTED). Approved templates are the only messages WhatsApp delivers outside the 24-hour window.' },
+					{ name: 'Delete Instagram Ice Breakers or Menu', value: 'deleteInstagramMessagingProfile', action: 'Delete instagram ice breakers or menu', description: 'Remove the ice breakers and/or the persistent menu of the Instagram inbox' },
 					{ name: 'Delete WhatsApp QR Code', value: 'deleteWhatsappQrCode', action: 'Delete a whatsapp QR code', description: 'Delete a QR code / wa.me link of the WhatsApp number' },
 					{ name: 'Delete WhatsApp Template', value: 'deleteDmTemplate', action: 'Delete a whatsapp message template', description: 'Delete a WhatsApp message template by name (every language of it)' },
 					{ name: 'Download WhatsApp Media', value: 'downloadDmMedia', action: 'Download whatsapp media', description: 'Download the file of a WhatsApp media_id (an image, audio, video or document someone sent you, from List Conversations or the dm_received webhook) as binary data' },
+					{ name: 'Get Instagram Ice Breakers and Menu', value: 'getInstagramMessagingProfile', action: 'Get instagram ice breakers and menu', description: 'Read the ice breakers (starter questions) and the persistent menu of the Instagram inbox. Instagram Login connections only.' },
 					{ name: 'Get WhatsApp Business Profile', value: 'getWhatsappProfile', action: 'Get the whatsapp business profile', description: 'Read the business profile of the connected WhatsApp number (about, address, description, email, websites, category, photo) plus its phone number and verified name' },
 					{ name: 'List Conversations', value: 'listDmConversations', action: 'List DM conversations', description: 'List the DM conversations of the account connected to a profile (Instagram, WhatsApp or Bluesky), newest first, with participants and recent messages' },
 					{ name: 'List WhatsApp QR Codes', value: 'listWhatsappQrCodes', action: 'List whatsapp QR codes', description: 'List the QR codes / wa.me links of the WhatsApp number, with their prefilled message and image URL' },
 					{ name: 'List WhatsApp Templates', value: 'listDmTemplates', action: 'List whatsapp message templates', description: 'List the message templates of the WhatsApp Business account, with status (APPROVED, PENDING, REJECTED...), category, language and components' },
 					{ name: 'Send DM', value: 'sendDm', action: 'Send a direct message', description: 'Send a direct message, or an action (mark read, react, typing...), from the Instagram, WhatsApp or Bluesky account of a profile. Actions spend no daily DM quota.' },
+					{ name: 'Set Instagram Ice Breakers or Menu', value: 'setInstagramMessagingProfile', action: 'Set instagram ice breakers or menu', description: 'Replace the ice breakers and/or the persistent menu of the Instagram inbox. Tapping an ice breaker sends a dm_received webhook with its payload.' },
 					{ name: 'Update WhatsApp Business Profile', value: 'updateWhatsappProfile', action: 'Update the whatsapp business profile', description: 'Change the business profile of the connected WhatsApp number: about, address, description, email, websites, category and profile photo' },
 					{ name: 'Upload WhatsApp Media', value: 'uploadDmMedia', action: 'Upload whatsapp media', description: 'Upload a file (binary data) to WhatsApp and get a media_id to send as an attachment with Send DM. Image 5 MB (JPEG/PNG), video 16 MB (MP4/3GPP), audio 16 MB, document 100 MB, sticker 500 KB (WebP).' },
 				],
@@ -3931,6 +3961,42 @@ export class UploadPost implements INodeType {
 					},
 				],
 				displayOptions: { show: { resource: ['dms'], operation: ['createDmTemplate'] } },
+			},
+			{
+				displayName: 'Fields',
+				name: 'dmInstagramProfileFields',
+				type: 'multiOptions',
+				options: [
+					{ name: 'Ice Breakers', value: 'ice_breakers' },
+					{ name: 'Persistent Menu', value: 'persistent_menu' },
+				],
+				default: [],
+				description: 'Get: what to read (empty = both). Delete: what to remove.',
+				displayOptions: { show: { resource: ['dms'], operation: ['getInstagramMessagingProfile', 'deleteInstagramMessagingProfile'] } },
+			},
+			{
+				displayName: 'Confirm',
+				name: 'dmInstagramProfileConfirm',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to really remove them from Instagram',
+				displayOptions: { show: { resource: ['dms'], operation: ['deleteInstagramMessagingProfile'] } },
+			},
+			{
+				displayName: 'Ice Breakers (JSON)',
+				name: 'dmInstagramIceBreakers',
+				type: 'json',
+				default: '',
+				description: 'Up to 4 questions per locale: [{"question": "Opening hours?", "payload": "HOURS"}] (default locale) or [{"locale": "default", "call_to_actions": [{"question", "payload"}]}]. Replaces what Instagram had.',
+				displayOptions: { show: { resource: ['dms'], operation: ['setInstagramMessagingProfile'] } },
+			},
+			{
+				displayName: 'Persistent Menu (JSON)',
+				name: 'dmInstagramPersistentMenu',
+				type: 'json',
+				default: '',
+				description: '[{"locale": "default", "call_to_actions": [{"type": "postback", "title": "Talk to us", "payload": "TALK"}, {"type": "web_url", "title": "Shop", ...}]}]: a web_url button also takes the page link (https). One default entry is required; Meta recommends at most 5 items. Replaces what Instagram had.',
+				displayOptions: { show: { resource: ['dms'], operation: ['setInstagramMessagingProfile'] } },
 			},
 			{
 				displayName: 'Components (JSON)',

@@ -318,6 +318,8 @@ If you saw duplicate posts on an older version of this node, upgrade: versions b
 - **X Video and Clip Options**: video card title, description and call to action (Upload Video); clip of another post's video (Upload Text).
 - **Facebook Text Options**, Upload Text: Backdated Time and its granularity.
 - **Instagram Options (Single Video)**, Upload Photo(s): when the only item is a video it is published as a Reel with Cover URL, Thumbnail Offset, Share to Feed and Audio Name.
+- **Direct Message > Get / Set / Delete Instagram Ice Breakers or Menu**: starter questions and persistent menu of the Instagram inbox (Instagram Login connections).
+- **Create Comment**: a top-level comment on your own Instagram post (Post ID or Post URL, no Comment ID).
 - **Create Comment > Image URL** (TikTok) and **Get Suggestions > Trending / Personalized** (TikTok).
 - **Direct Message > Extra Fields (JSON)**, WhatsApp: flow, location_request, carousel and call_button.
 
