@@ -289,7 +289,7 @@ test('a pending_regulatory purchase says a declined review keeps the payment', a
 		phoneProfile: 'acme', phoneCountry: 'de', phonePurchaseIntentId: 'n8n-exec-1-0',
 		phoneEndUserFirstName: 'Ana', phoneEndUserLastName: 'Ruiz', phoneEndUserPhone: '+34600111222',
 		phoneEndUserStreet: 'Hauptstr. 1', phoneEndUserLocality: 'Berlin', phoneEndUserPostalCode: '10115',
-		phoneEndUserCountryCode: 'de', phoneAcceptTerms: true, phoneTermsVersion: '2026-11-27',
+		phoneEndUserCountryCode: 'de', phoneAcceptTerms: true, phoneTermsVersion: '2026-11-28', phoneImmediateStartConsent: true,
 	};
 	const { out } = await phone('submitPhoneNumberKyc', BUYER, { response: { success: true, status: 'pending_regulatory' } });
 	assert.match(out.next_step, /payment is kept/);
@@ -334,4 +334,64 @@ test('public texts never name the carrier or an internal switch', () => {
 	].map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
 	assert.doesNotMatch(texts, /tel[n]yx/i);
 	assert.doesNotMatch(texts, /PHONE_[A-Z_]+|TEL[N]YX_|[A-Z]+_ALLOWLIST|UPLOADPOSTS_[A-Z_]+|[A-Z]+_ENABLED\b/);
+});
+
+// ---------------------------------------------------------------- update 2
+
+const CONSUMER = {
+	phoneProfile: 'acme', phoneCountry: 'es', phonePurchaseIntentId: 'n8n-exec-1-0', phoneEndUserType: 'individual',
+	phoneEndUserFirstName: 'Ana', phoneEndUserLastName: 'Ruiz', phoneEndUserPhone: '+34600111222',
+	phoneEndUserStreet: 'Calle Mayor 1', phoneEndUserLocality: 'Madrid', phoneEndUserPostalCode: '28013',
+	phoneEndUserCountryCode: 'es', phoneAcceptTerms: true, phoneTermsVersion: '2026-11-28',
+};
+
+test('an individual end user needs the immediate start consent, a business does not send it', async () => {
+	for (const operation of ['purchasePhoneNumber', 'submitPhoneNumberKyc']) {
+		await assert.rejects(phone(operation, CONSUMER), /Immediate Start Consent.*14-day withdrawal period/s, operation);
+		await assert.rejects(phone(operation, CONSUMER), /immediate_start_consent_required/, operation);
+		const { req } = await phone(operation, { ...CONSUMER, phoneImmediateStartConsent: true });
+		assert.equal(req.body.immediate_start_consent, true, operation);
+		assert.equal(req.body.terms_version, '2026-11-28');
+		const business = (await phone(operation, {
+			...CONSUMER, phoneEndUserType: 'business', phoneEndUserBusinessName: 'Acme SL', phoneImmediateStartConsent: true,
+		})).req;
+		assert.equal(business.body.immediate_start_consent, undefined, operation);
+	}
+	const prop = new UploadPost().description.properties.find((p) => p.name === 'phoneImmediateStartConsent');
+	assert.deepEqual(prop.displayOptions.show.phoneEndUserType, ['individual']);
+	assert.match(prop.description, /I ask Upload-Post to start providing this number now/);
+	const terms = new UploadPost().description.properties.find((p) => p.name === 'phoneTermsVersion');
+	assert.equal(terms.placeholder, '2026-11-28');
+});
+
+test('an order_unknown fix says it is resolved automatically', async () => {
+	const { out } = await phone('remediatePhoneNumberKyc', { ...N, phoneKycValues: '{"req_tax": "B1"}' }, {
+		response: { success: true, status: 'pending_regulatory', order: 'order_unknown' },
+	});
+	assert.match(out.next_step, /resolved automatically/);
+	assert.match(out.next_step, /no second order/);
+	const same = await phone('remediatePhoneNumberKyc', { ...N, phoneKycValues: '{"req_tax": "B1"}' }, {
+		response: { success: true, status: 'pending_regulatory', order: 'same_order' },
+	});
+	assert.doesNotMatch(same.out.next_step, /resolved automatically/);
+});
+
+test('remediation in progress and capacity still fail the node; the README documents them and the KYC link guide', async () => {
+	for (const [statusCode, code] of [[409, 'phone_number_remediation_in_progress'], [503, 'phone_numbers_capacity']]) {
+		await assert.rejects(
+			phone('remediatePhoneNumberKyc', { ...N, phoneKycValues: '{"req_tax": "B1"}' }, { response: { success: false, error_code: code }, statusCode }),
+			(error) => error.httpCode === String(statusCode),
+			code,
+		);
+	}
+	const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+	for (const text of [
+		'phone_number_remediation_in_progress',
+		'503 phone_numbers_capacity',
+		'order_unknown',
+		'immediate_start_consent_required',
+		'https://docs.upload-post.com/guides/phone-number-kyc-link',
+	]) {
+		assert.ok(readme.includes(text), text);
+	}
 });

@@ -58,6 +58,9 @@ const KYC_LINK_LANGUAGES = [
 	{ name: 'Portuguese (Brazil)', value: 'pt-BR' },
 	{ name: 'Spanish', value: 'es' },
 ];
+// Consumers (individual end users) must ask to start at once within the 14-day withdrawal period.
+const IMMEDIATE_START_CONSENT =
+	'I ask Upload-Post to start providing this number now, within the 14-day withdrawal period. I understand that if I withdraw I will pay for the days already provided, and that I lose the right of withdrawal once the service has been fully provided.';
 // A declined identity review keeps the payment: one text for every place that says it.
 const DECLINED_TEXT =
 	'If it is declined (phone_number_declined webhook) the payment is kept and the monthly charge paused: see why with Get Identity Review and fix it with Fix Identity Review (no second charge). 30 days without a fix, or releasing it, cancels and refunds it.';
@@ -370,9 +373,18 @@ export const phoneNumberProperties: INodeProperties[] = [
 		type: 'string',
 		required: true,
 		default: '',
-		placeholder: '2026-11-27',
+		placeholder: '2026-11-28',
 		description: 'The terms_version of Get Config (the version you accepted)',
 		displayOptions: show(BUY_OPS),
+	},
+	{
+		displayName: 'Immediate Start Consent',
+		name: 'phoneImmediateStartConsent',
+		type: 'boolean',
+		default: false,
+		description:
+			`Whether the end user (a consumer) asks to start the service at once. Required for an individual (ignored for a business): "${IMMEDIATE_START_CONSENT}" Show this text to the end user and turn it on only if they accept. Without it the API answers 400 immediate_start_consent_required.`,
+		displayOptions: show(BUY_OPS, { phoneEndUserType: ['individual'] }),
 	},
 
 	// ---- Identity documents ----
@@ -409,7 +421,7 @@ export const phoneNumberProperties: INodeProperties[] = [
 	// ---- Fix Identity Review ----
 	{
 		displayName:
-			'A declined number keeps its payment and its monthly charge is paused. Send only what the reviewer declined (Get Identity Review: needs_fix): it is submitted again, the number goes back to pending_regulatory and nothing is charged again. 30 days without a fix, or releasing it, cancels and refunds it.',
+			'A declined number keeps its payment and its monthly charge is paused. Send only what the reviewer declined (Get Identity Review: needs_fix): it is submitted again, the number goes back to pending_regulatory and nothing is charged again. 30 days without a fix, or releasing it, cancels and refunds it. 409 phone_number_remediation_in_progress (another correction is being sent) and 503 phone_numbers_capacity (a new order is not possible right now) keep the payment: try again later.',
 		name: 'phoneFixNotice',
 		type: 'notice',
 		default: '',
@@ -672,6 +684,12 @@ const purchaseBody = (ctx: NetworkContext): IDataObject => {
 		fail(ctx, 'Turn on Accept Terms to buy a number (no emergency calls, acceptable use, porting and carrier data processing)');
 	}
 	const type = str(ctx, 'phoneEndUserType') || 'individual';
+	if (type === 'individual' && !bool(ctx, 'phoneImmediateStartConsent')) {
+		fail(
+			ctx,
+			`An individual end user must give the Immediate Start Consent (otherwise 400 immediate_start_consent_required). Show them this text and turn it on only if they accept: "${IMMEDIATE_START_CONSENT}"`,
+		);
+	}
 	const address: IDataObject = {
 		street_address: requireStr(ctx, 'phoneEndUserStreet', 'Street Address'),
 		locality: requireStr(ctx, 'phoneEndUserLocality', 'City (Address)'),
@@ -698,6 +716,7 @@ const purchaseBody = (ctx: NetworkContext): IDataObject => {
 		accept_terms: true,
 		terms_version: requireStr(ctx, 'phoneTermsVersion', 'Terms Version'),
 	};
+	if (type === 'individual') body.immediate_start_consent = true;
 	putFilled(ctx, body, [['phoneNumberToBuy', 'phone_number'], ['phoneAreaCode', 'area_code']]);
 	return body;
 };
@@ -951,9 +970,13 @@ export const withPhoneNumberNextStep = (operation: string, data: unknown): unkno
 			);
 		}
 		if (answer.status === 'pending_regulatory') {
+			const unknown =
+				answer.order === 'order_unknown'
+					? ' Our carrier did not confirm the new order in time: it is resolved automatically, do not send it again (no second order).'
+					: '';
 			return withNextStep(
 				answer,
-				'Corrections sent; nothing was charged again. Our carrier reviews the identity again (phone_number_kyc_resubmitted webhook). On approval the number becomes active and the monthly charge resumes (phone_number_activated); if it is declined again, fix it again with Fix Identity Review. Reviewer messages arrive as phone_number_kyc_comment.',
+				`Corrections sent; nothing was charged again. Our carrier reviews the identity again (phone_number_kyc_resubmitted webhook). On approval the number becomes active and the monthly charge resumes (phone_number_activated); if it is declined again, fix it again with Fix Identity Review. Reviewer messages arrive as phone_number_kyc_comment.${unknown}`,
 			);
 		}
 		return data;

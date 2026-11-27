@@ -53,7 +53,8 @@ const BUYER = {
 	phoneEndUserPostalCode: '28013',
 	phoneEndUserCountryCode: 'es',
 	phoneAcceptTerms: true,
-	phoneTermsVersion: '2026-11-27',
+	phoneTermsVersion: '2026-11-28',
+	phoneImmediateStartConsent: true,
 };
 
 test('config, countries and usage need no number', async () => {
@@ -86,7 +87,8 @@ test('purchase sends the documented body with end_user and the terms', async () 
 		purchase_intent_id: 'n8n-exec-1-0',
 		area_code: '91',
 		accept_terms: true,
-		terms_version: '2026-11-27',
+		terms_version: '2026-11-28',
+		immediate_start_consent: true,
 		end_user: {
 			type: 'individual',
 			first_name: 'Ana',

@@ -8,6 +8,8 @@
   - **Fix Identity Review**: only the corrected Identity Values, Documents (from binary properties, sent as base64) and/or New End User (a new address). `409 phone_number_unavailable` (`keeps_payment: true`) comes back as the item with `http_status` and a `next_step` instead of failing the node: run it again with the corrections and a **Replacement Phone Number** of the same country and type with no higher price.
   - **Reply to Reviewer**: a message (up to 2,000 characters) with optional attachments from binary properties.
   - **Create KYC Link**, **List KYC Links**, **Revoke KYC Link**: a white-label, single-use page (7 days, at most 20 active) where your end user fills in the identity and documents for one number; the purchase is billed to your account. Branding (company name, logo URL, brand color), HTTPS Redirect URL and page language (en, es, pt-BR).
+  - **Immediate Start Consent** on Purchase and Submit Identity Documents (current terms version `2026-11-28`): required for an individual end user (a consumer's request to start at once within the 14-day withdrawal period; the node shows the consent text and refuses without it, the API answers `400 immediate_start_consent_required`); sent as `immediate_start_consent`, never for a business.
+  - Fix Identity Review documents `409 phone_number_remediation_in_progress`, `503 phone_numbers_capacity` (payment kept, try later) and `order: order_unknown` (resolved automatically, no second order).
 - Upload Post Trigger: `phone_number_kyc_comment` (the identity reviewer wrote) and `phone_number_kyc_resubmitted` (the corrections were sent), opt-in like the other phone number events.
 
 ## 0.12.0
