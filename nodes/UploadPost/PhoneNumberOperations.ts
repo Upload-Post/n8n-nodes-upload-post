@@ -981,13 +981,19 @@ export const withPhoneNumberNextStep = (operation: string, data: unknown): unkno
 		}
 		return data;
 	}
-	if (operation === 'getPhoneNumberKycRemediation') {
+	if (operation === 'getPhoneNumberKycRemediation' || operation === 'getPhoneNumber') {
 		const number = answer.phone_number as IDataObject | undefined;
 		if (number && number.status === 'regulatory_declined') {
-			return withNextStep(
-				answer,
-				'Declined: the payment is kept and the monthly charge is paused. Send only the requirements with needs_fix (and a new address if it was declined) with Fix Identity Review; ask the reviewer with Reply to Reviewer. 30 days without a fix, or releasing the number, cancels and refunds it.',
-			);
+			// remediation_deadline_at = declined_at + 30 days; after it the purchase is cancelled and refunded.
+			const deadline = typeof number.remediation_deadline_at === 'string' && number.remediation_deadline_at ? number.remediation_deadline_at : '';
+			const until = deadline
+				? `Fix it before ${deadline} (remediation_deadline_at): after that, or if you release the number, the purchase is cancelled and refunded.`
+				: '30 days without a fix, or releasing the number, cancels and refunds it.';
+			const how =
+				operation === 'getPhoneNumber'
+					? 'See what was declined with Get Identity Review and send only those requirements with Fix Identity Review.'
+					: 'Send only the requirements with needs_fix (and a new address if it was declined) with Fix Identity Review; ask the reviewer with Reply to Reviewer.';
+			return withNextStep(answer, `Declined: the payment is kept and the monthly charge is paused. ${how} ${until}`);
 		}
 		return data;
 	}

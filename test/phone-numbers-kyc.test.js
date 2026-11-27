@@ -395,3 +395,29 @@ test('remediation in progress and capacity still fail the node; the README docum
 		assert.ok(readme.includes(text), text);
 	}
 });
+
+// ---------------------------------------------------------------- deadline
+
+test('a declined number shows remediation_deadline_at in the next_step of Get Identity Review and Get', async () => {
+	const number = {
+		id: 'pn_abc123',
+		status: 'regulatory_declined',
+		declined_at: '2026-11-28T10:00:00Z',
+		remediation_deadline_at: '2026-12-28T10:00:00Z',
+	};
+	const review = await phone('getPhoneNumberKycRemediation', N, { response: { success: true, phone_number: number } });
+	assert.match(review.out.next_step, /Fix it before 2026-12-28T10:00:00Z/);
+	assert.match(review.out.next_step, /cancelled and refunded/);
+	assert.doesNotMatch(review.out.next_step, /30 days/);
+	assert.equal(review.out.phone_number.declined_at, '2026-11-28T10:00:00Z');
+	const get = await phone('getPhoneNumber', N, { response: { success: true, phone_number: number } });
+	assert.match(get.out.next_step, /Get Identity Review/);
+	assert.match(get.out.next_step, /Fix it before 2026-12-28T10:00:00Z/);
+	// Without the field the generic 30 days text stays; an active number gets nothing.
+	const old = await phone('getPhoneNumberKycRemediation', N, { response: { success: true, phone_number: { status: 'regulatory_declined' } } });
+	assert.match(old.out.next_step, /30 days/);
+	const active = await phone('getPhoneNumber', N, { response: { success: true, phone_number: { status: 'active', remediation_deadline_at: null } } });
+	assert.equal(active.out.next_step, undefined);
+	const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+	assert.ok(readme.includes('`declined_at`') && readme.includes('`remediation_deadline_at`'));
+});
