@@ -233,6 +233,17 @@ Real phone numbers bought for a profile: receive SMS, calls and voicemail, send 
 - **Get Usage**: From / To (default: this month). Returns line items (`kind`: `sms_outbound`, `forwarding`, `recording`, `transcription`, `inbound_minutes`, with quantity and amount) and `totals`, `total`, `today` and `daily_cap`, all in the account's billing currency (`currency`). Outbound SMS, forwarded minutes, recording and transcription are billed at 2x our carrier's cost, inbound call minutes at cost, inbound SMS free, on the next subscription invoice. Over the daily usage limit, outbound SMS, forwarding and recording stop until midnight UTC (`429 phone_usage_daily_cap`).
 - Numbers that receive many one-time codes from many senders, or are used for crypto exchanges and similar, go to review or are suspended; suspended numbers are not released automatically.
 
+### TikTok Ad Actions
+
+Run TikTok ads on your own TikTok ad account ([guide](https://docs.upload-post.com/api/tiktok-ads)). TikTok charges the ad spend to that ad account; Upload-Post never does. Everything is created **paused** unless Status is Active.
+- **Get Connect Link**: the TikTok page where the ad account owner approves Upload-Post (optional Profile to link it, Redirect URL). **List Accounts**, **Get Account** (live balance and status), **Disconnect Account** (or only unlink a profile; campaigns keep running in TikTok).
+- Pick the ad account with **Profile** (only the account linked to it) or **Ad Account ID**; empty = the only one or the default one.
+- **Boost Post**: campaign + ad group + Spark Ad in one step for a post of the TikTok account linked to the ad account. **List Identities** gives the Identity ID, **List Posts** the Post ID (`item_id`). Goal (Reach, Video Views, Traffic, Followers), Budget (TikTok refuses less than about 20 EUR a day per ad group), Countries, Targeting Options (age, gender, interests, languages, audiences; without an age range only 18+), Schedule, Landing Page URL and Call to Action (a button needs a landing page; View Profile only with Followers), Frequency Cap (Reach: default 3 every 7 days). **Pause All Levels** (on by default) also pauses the ad group and the ad: resume the ad, the ad group and the campaign to start it.
+- **Create Campaign**, **Create Ad Group**, **Create Ad** (a post of the linked TikTok account; its text is the post's caption), **List Campaigns / Ad Groups / Ads**, **Update Campaign / Ad Group** (name, budget; a campaign without its own budget is changed through its ad groups) and **Update Ad** (name).
+- **Pause**, **Resume** (can start spending right away) and **Delete** (needs Confirm Delete, cannot be undone) for campaigns, ad groups and ads.
+- **Get Report**: spend, impressions, clicks, CTR, CPC, CPM, reach, video views and follows by level, with a breakdown by day, age, gender, country or platform.
+- **List Countries** (per goal), **List Interests**, **List Audiences**, **Create Customer File Audience** (emails or phones, hashed with SHA-256 before they leave Upload-Post), **Create Lookalike Audience**, **Delete Audience**, **Upload Video** / **Upload Image** (by URL, for ads of a new video).
+
 ### Scheduled Posts
 - **List Scheduled Posts**: Lists future scheduled jobs.
 - **Cancel Scheduled Post**: Cancels a scheduled job by its Job ID.

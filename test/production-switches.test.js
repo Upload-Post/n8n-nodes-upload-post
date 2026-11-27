@@ -56,12 +56,12 @@ const upload = (operation, extra) => ({
 
 
 const fs = require('node:fs');
-const SOURCES = ['nodes/UploadPost/UploadPost.node.ts', 'nodes/UploadPost/NetworkOperations.ts', 'README.md']
+const SOURCES = ['nodes/UploadPost/UploadPost.node.ts', 'nodes/UploadPost/NetworkOperations.ts', 'nodes/UploadPost/TikTokAdsOperations.ts', 'README.md']
 	.map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n');
 
 test('nothing that is off in production is offered', () => {
 	for (const marker of [
-		'/ads/meta', '/ads/tiktok', 'instagram_mention_received', 'message_reactions', 'messaging_seen', 'instagram_connection', 'instagram_audio_id', 'instagram_paid_partnership',
+		'/ads/meta', 'spark/authorize-post', 'tiktok_spark_scope_missing', 'authorization_days', 'post_auth_code', 'instagram_mention_received', 'message_reactions', 'messaging_seen', 'instagram_connection', 'instagram_audio_id', 'instagram_paid_partnership',
 		'instagram_poll', 'instagram_product_tags', 'threads_location_id', 'threads_enable_reply_approvals',
 		'threads_allowlisted_country_codes', 'threads_share_to_instagram', 'facebook_tags', 'linkedin/reactions',
 		'participant_ids', 'include_users', 'Not Generally Available Yet', 'whatsapp/flows', 'visitor-posts',

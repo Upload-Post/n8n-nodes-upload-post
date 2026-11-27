@@ -29,6 +29,7 @@ import {
 	youtubeUploadProperties,
 } from './YouTubeOperations';
 import { buildPhoneNumberRequest, phoneNumberProperties, withPhoneNumberNextStep } from './PhoneNumberOperations';
+import { buildTiktokAdsRequest, tiktokAdsProperties } from './TikTokAdsOperations';
 
 const MANUAL_USER_VALUE = '__manual_user__';
 const MANUAL_FACEBOOK_VALUE = '__manual_facebook__';
@@ -2743,6 +2744,9 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 	if (resource === 'phoneNumbers') {
 		return buildPhoneNumberRequest(ctx.node, ctx.itemIndex, ctx.operation);
 	}
+	if (resource === 'tiktokAds') {
+		return buildTiktokAdsRequest(ctx.node, ctx.itemIndex, ctx.operation);
+	}
 	if (resource === 'youtube') {
 		return buildYoutubeRequest(ctx.node, ctx.itemIndex, ctx.operation);
 	}
@@ -2949,6 +2953,7 @@ export class UploadPost implements INodeType {
 					{ name: 'Queue & Best Time', value: 'queue' },
 					{ name: 'Status & History', value: 'monitoring' },
 					{ name: 'Telegram', value: 'telegram' },
+					{ name: 'TikTok Ad', value: 'tiktokAds' },
 					{ name: 'Upload', value: 'uploads' },
 					{ name: 'User', value: 'users' },
 					{ name: 'YouTube', value: 'youtube' },
@@ -2958,6 +2963,7 @@ export class UploadPost implements INodeType {
 			...networkProperties,
 			...youtubeProperties,
 			...phoneNumberProperties,
+			...tiktokAdsProperties,
 			{
 				displayName: 'Operation',
 				name: 'operation',

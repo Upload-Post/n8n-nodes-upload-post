@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.0
+
+- New **TikTok Ad** resource (launch release: published when TikTok Ads is switched on for every customer). Ads on your own TikTok ad account: TikTok charges the spend, Upload-Post never does, and everything is created paused unless Status is Active.
+  - **Get Connect Link**, **List Accounts**, **Get Account**, **Disconnect Account**; the ad account is chosen with Profile or Ad Account ID.
+  - **Boost Post** (campaign + ad group + Spark Ad for a post of the TikTok account linked to the ad account; Identity ID from **List Identities**, Post ID from **List Posts**), with **Pause All Levels** on by default.
+  - **Create / List / Update** campaigns, ad groups and ads, and **Pause**, **Resume** and **Delete** (needs Confirm Delete) at each level.
+  - **Get Report** (by level, breakdown by day, age, gender, country or platform), **List Countries**, **List Interests**, **List Audiences**, **Create Customer File Audience**, **Create Lookalike Audience**, **Delete Audience**, **Upload Video** and **Upload Image**.
+  - The node checks TikTok's rules before sending: a Call to Action needs a Landing Page URL, View Profile only with the Followers goal, the Traffic goal needs a Landing Page URL.
+
 ## 0.13.0
 
 - Phone numbers (still not generally available: the API answers `403 phone_numbers_not_available` until phone numbers are available for your account):
