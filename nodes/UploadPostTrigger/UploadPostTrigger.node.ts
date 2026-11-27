@@ -137,7 +137,19 @@ export class UploadPostTrigger implements INodeType {
 						name: 'Phone Number Declined',
 						value: 'phone_number_declined',
 						description:
-							'Our carrier declined the identity review of a phone number: it was not activated and the charge was refunded (reason field). Opt-in. Needs phone numbers available on the account (not generally available yet).',
+							'Our carrier declined the identity review of a phone number (reason field). The payment is kept and the monthly charge paused: fix it with Fix Identity Review (no second charge); 30 days without a fix, or a release, cancels and refunds it. Opt-in. Needs phone numbers available on the account (not generally available yet).',
+					},
+					{
+						name: 'Phone Number KYC Comment',
+						value: 'phone_number_kyc_comment',
+						description:
+							'The identity reviewer of our carrier wrote about one of your phone numbers (one event per message: the comment field has the body; the number field the number). Answer with Reply to Reviewer. Opt-in. Needs phone numbers available on the account (not generally available yet).',
+					},
+					{
+						name: 'Phone Number KYC Resubmitted',
+						value: 'phone_number_kyc_resubmitted',
+						description:
+							'The corrections of Fix Identity Review were sent and the number is back under review (number and order fields; nothing is charged again). Opt-in. Needs phone numbers available on the account (not generally available yet).',
 					},
 					{
 						name: 'Phone Number Port Out',

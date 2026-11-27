@@ -18,6 +18,8 @@ export type NetworkRequest = {
 	qs?: IDataObject;
 	isUploadOperation: boolean;
 	waitForCompletion: boolean;
+	// API error codes returned as the item (with http_status) instead of failing the node.
+	answerErrors?: string[];
 };
 
 export const NETWORK_RESOURCES = ['queue', 'telegram', 'bluesky', 'googleBusiness'];

@@ -220,11 +220,11 @@ test('WhatsApp verification and port-out', async () => {
 	assert.equal(portOut.url, `${API}/pn_abc123/port-out`);
 });
 
-test('the resource is offered with its 17 operations', async () => {
+test('the resource is offered with its 23 operations', async () => {
 	const props = new UploadPost().description.properties;
 	assert.ok(props.find((p) => p.name === 'resource').options.some((o) => o.value === 'phoneNumbers'));
 	const ops = props.find((p) => p.name === 'operation' && p.displayOptions?.show?.resource?.includes('phoneNumbers')).options;
-	assert.equal(ops.length, 17);
+	assert.equal(ops.length, 23);
 });
 
 test('public texts never name an internal switch', () => {

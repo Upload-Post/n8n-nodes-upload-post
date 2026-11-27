@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.0
+
+- Phone numbers (still not generally available: the API answers `403 phone_numbers_not_available` until phone numbers are available for your account):
+  - **A declined identity review keeps the payment** (before, it was refunded at once). The number stays `regulatory_declined` with the monthly charge paused; fix it with **Fix Identity Review** (no second charge). If nothing is fixed within 30 days, or the number is released, the purchase is cancelled and refunded. On approval the number becomes active and the monthly charge resumes (no new proration). The `next_step` of a `pending_regulatory` purchase, the Phone Number Declined trigger event and the Release text say so.
+  - **Get Identity Review**: review status, the requirements to fix (`needs_fix`), the fields to send again and the reviewer thread, plus a `next_step` while the number is declined.
+  - **Fix Identity Review**: only the corrected Identity Values, Documents (from binary properties, sent as base64) and/or New End User (a new address). `409 phone_number_unavailable` (`keeps_payment: true`) comes back as the item with `http_status` and a `next_step` instead of failing the node: run it again with the corrections and a **Replacement Phone Number** of the same country and type with no higher price.
+  - **Reply to Reviewer**: a message (up to 2,000 characters) with optional attachments from binary properties.
+  - **Create KYC Link**, **List KYC Links**, **Revoke KYC Link**: a white-label, single-use page (7 days, at most 20 active) where your end user fills in the identity and documents for one number; the purchase is billed to your account. Branding (company name, logo URL, brand color), HTTPS Redirect URL and page language (en, es, pt-BR).
+- Upload Post Trigger: `phone_number_kyc_comment` (the identity reviewer wrote) and `phone_number_kyc_resubmitted` (the corrections were sent), opt-in like the other phone number events.
+
 ## 0.12.0
 
 - New **Phone Number** resource (not generally available yet: the API answers `403 phone_numbers_not_available` until phone numbers are available for your account; paid plans only; no emergency calls). Real numbers bought for a profile:

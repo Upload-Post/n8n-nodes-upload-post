@@ -28,7 +28,9 @@
     "phone_number_activated",
     "phone_number_declined",
     "phone_number_released",
-    "phone_number_port_out"
+    "phone_number_port_out",
+    "phone_number_kyc_comment",
+    "phone_number_kyc_resubmitted"
   ],
   "note": "linkedin_page_activity and instagram_mention_received are in the API catalog but not offered by the trigger yet."
 }

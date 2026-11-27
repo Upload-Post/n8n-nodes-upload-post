@@ -14,7 +14,8 @@ import {
 
 // Upload-Post phone numbers: buy a real number for a profile, receive SMS,
 // calls and voicemail, send SMS, read one-time codes (WhatsApp verification) and
-// see the usage. Not generally available yet: the API answers 403
+// see the usage, fix a declined identity review and share a KYC link with an end
+// user. Not generally available yet: the API answers 403
 // phone_numbers_not_available until phone numbers are available for the account.
 // Paid plans only. These numbers cannot call emergency services.
 
@@ -34,7 +35,13 @@ const call = (
 const show = (operation: string[], extra: IDataObject = {}) => ({ show: { resource: [RESOURCE], operation, ...extra } });
 
 const BUY_OPS = ['purchasePhoneNumber', 'submitPhoneNumberKyc'];
+const FIX_OP = 'remediatePhoneNumberKyc';
+const REPLY_OP = 'replyPhoneNumberKycReviewer';
+const LINK_OP = 'createPhoneNumberKycLink';
 const NUMBER_OPS = [
+	'getPhoneNumberKycRemediation',
+	FIX_OP,
+	REPLY_OP,
 	'getPhoneNumber',
 	'releasePhoneNumber',
 	'updatePhoneNumberVoice',
@@ -45,7 +52,15 @@ const NUMBER_OPS = [
 	'preparePhoneNumberWhatsapp',
 	'getPhoneNumberPortOutInfo',
 ];
-const COUNTRY_OPS = ['searchAvailablePhoneNumbers', 'getPhoneNumberKycFields', ...BUY_OPS];
+const COUNTRY_OPS = ['searchAvailablePhoneNumbers', 'getPhoneNumberKycFields', ...BUY_OPS, LINK_OP];
+const KYC_LINK_LANGUAGES = [
+	{ name: 'English', value: 'en' },
+	{ name: 'Portuguese (Brazil)', value: 'pt-BR' },
+	{ name: 'Spanish', value: 'es' },
+];
+// A declined identity review keeps the payment: one text for every place that says it.
+const DECLINED_TEXT =
+	'If it is declined (phone_number_declined webhook) the payment is kept and the monthly charge paused: see why with Get Identity Review and fix it with Fix Identity Review (no second charge). 30 days without a fix, or releasing it, cancels and refunds it.';
 const LANGUAGES = [
 	{ name: 'English', value: 'en' },
 	{ name: 'French', value: 'fr' },
@@ -67,19 +82,25 @@ export const phoneNumberProperties: INodeProperties[] = [
 		type: 'options',
 		noDataExpression: true,
 		options: [
+			{ name: 'Create KYC Link', value: LINK_OP, action: 'Create a shareable kyc link for an end user', description: 'White-label page (no login, single use, 7 days) where your end user fills in the identity and documents for one number; the purchase is billed to your account' },
+			{ name: 'Fix Identity Review', value: FIX_OP, action: 'Fix a declined identity review', description: 'Send only the corrected values, documents or end user address; the review is submitted again and nothing is charged again' },
 			{ name: 'Get', value: 'getPhoneNumber', action: 'Get a phone number', description: 'One number with its status, price, call settings and flags' },
 			{ name: 'Get Codes', value: 'listPhoneNumberCodes', action: 'Get the verification codes a phone number received', description: 'One-time codes (4-8 digits) found in the SMS and call transcripts of the last 30 minutes' },
 			{ name: 'Get Config', value: 'getPhoneNumbersConfig', action: 'Get the phone numbers configuration', description: 'Whether this account can buy a number now (and why not), the current terms version and terms URL' },
 			{ name: 'Get Identity Fields', value: 'getPhoneNumberKycFields', action: 'Get the identity fields a country needs', description: 'End-user fields and the documents our carrier needs for a country and number type' },
+			{ name: 'Get Identity Review', value: 'getPhoneNumberKycRemediation', action: 'Get why the identity review of a phone number was declined', description: 'Review status, the requirements to fix (needs_fix), the fields to send again and the reviewer thread' },
 			{ name: 'Get Port-Out Info', value: 'getPhoneNumberPortOutInfo', action: 'Get what the new carrier needs to port a number out', description: 'Name, address, account number and number to give the new carrier (account owner only)' },
 			{ name: 'Get Usage', value: 'getPhoneNumbersUsage', action: 'Get the phone usage and charges', description: 'Billable usage with line items and totals in the account\'s billing currency, charged on the next subscription invoice' },
 			{ name: 'List', value: 'listPhoneNumbers', action: 'List phone numbers', description: 'Numbers of the account (pending and active unless Status says otherwise)' },
 			{ name: 'List Calls', value: 'listPhoneNumberCalls', action: 'List the calls of a phone number', description: 'Calls and voicemails newest first, with transcript and a recording link valid for 1 hour' },
 			{ name: 'List Countries', value: 'listPhoneNumberCountries', action: 'List phone number countries and prices', description: 'Countries and number types on sale, cheapest first, with the real monthly price (it varies by country and type) in the account\'s billing currency and what they support' },
+			{ name: 'List KYC Links', value: 'listPhoneNumberKycLinks', action: 'List the shareable kyc links', description: 'Your KYC links newest first, with their status (active, used, expired, revoked) and the number each one bought' },
 			{ name: 'List Messages', value: 'listPhoneNumberMessages', action: 'List the sms of a phone number', description: 'Inbound and outbound SMS newest first' },
 			{ name: 'Prepare WhatsApp Verification', value: 'preparePhoneNumberWhatsapp', action: 'Prepare a phone number for the whatsapp code', description: 'For 30 minutes calls are answered and transcribed so the code Meta reads out shows in Get Codes' },
 			{ name: 'Purchase', value: 'purchasePhoneNumber', action: 'Buy a phone number', description: 'Buy a number for a profile. Charged on the account subscription; some countries first answer kyc_required.' },
 			{ name: 'Release', value: 'releasePhoneNumber', action: 'Release a phone number', description: 'Give the number back. Final: needs Confirm Release.' },
+			{ name: 'Reply to Reviewer', value: REPLY_OP, action: 'Reply to the identity reviewer of a phone number', description: 'Add a message, with optional files, to the reviewer thread of Get Identity Review' },
+			{ name: 'Revoke KYC Link', value: 'revokePhoneNumberKycLink', action: 'Revoke a shareable kyc link', description: 'The link stops working at once (a link already used cannot be revoked: release the number instead)' },
 			{ name: 'Search Available', value: 'searchAvailablePhoneNumbers', action: 'Search phone numbers to buy', description: 'Numbers available now in a country, with their monthly price' },
 			{ name: 'Send SMS', value: 'sendPhoneNumberSms', action: 'Send an sms from a phone number', description: 'Send an SMS from one of your numbers (not from US or Canadian numbers yet)' },
 			{ name: 'Submit Identity Documents', value: 'submitPhoneNumberKyc', action: 'Send identity documents and buy a phone number', description: 'Answer to kyc_required: the purchase plus the identity values and documents our carrier asked for' },
@@ -146,7 +167,7 @@ export const phoneNumberProperties: INodeProperties[] = [
 		default: '',
 		description: 'Profile the number belongs to. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 		typeOptions: { loadOptionsMethod: 'getUserProfiles' },
-		displayOptions: show(BUY_OPS),
+		displayOptions: show([...BUY_OPS, LINK_OP]),
 	},
 	{
 		displayName: 'Country',
@@ -173,7 +194,7 @@ export const phoneNumberProperties: INodeProperties[] = [
 		default: '',
 		placeholder: '+34911234567',
 		description: 'A number from Search Available. Empty = the first available one.',
-		displayOptions: show(BUY_OPS),
+		displayOptions: show([...BUY_OPS, LINK_OP]),
 	},
 	{
 		displayName: 'Area Code',
@@ -360,8 +381,9 @@ export const phoneNumberProperties: INodeProperties[] = [
 		name: 'phoneKycValues',
 		type: 'json',
 		default: '',
-		description: 'Text and date requirements of Get Identity Fields: {"requirement_id": "value"}',
-		displayOptions: show(['submitPhoneNumberKyc']),
+		description:
+			'Text and date requirements of Get Identity Fields: {"requirement_id": "value"}. For Fix Identity Review only the corrected ones (needs_fix in Get Identity Review).',
+		displayOptions: show(['submitPhoneNumberKyc', FIX_OP]),
 	},
 	{
 		displayName: 'Documents',
@@ -370,18 +392,154 @@ export const phoneNumberProperties: INodeProperties[] = [
 		typeOptions: { multipleValues: true },
 		placeholder: 'Add Document',
 		default: {},
-		description: 'File requirements of Get Identity Fields, each from a binary property (PDF, JPG or PNG, up to 10 MB). Documents go to our carrier and are not kept by Upload-Post.',
-		displayOptions: show(['submitPhoneNumberKyc']),
+		description: 'File requirements of Get Identity Fields, each from a binary property (PDF, JPG or PNG, up to 10 MB). For Fix Identity Review only the corrected ones. Documents go to our carrier and are not kept by Upload-Post.',
+		displayOptions: show(['submitPhoneNumberKyc', FIX_OP]),
 		options: [
 			{
 				displayName: 'Document',
 				name: 'document',
 				values: [
-					{ displayName: 'Requirement ID', name: 'requirementId', type: 'string', default: '', description: 'The requirement_id of Get Identity Fields' },
+					{ displayName: 'Requirement ID', name: 'requirementId', type: 'string', default: '', description: 'The requirement_id of Get Identity Fields (or of Get Identity Review)' },
 					{ displayName: 'Input Binary Field', name: 'binaryProperty', type: 'string', default: 'data', description: 'Binary property of the input item that holds the file' },
 				],
 			},
 		],
+	},
+
+	// ---- Fix Identity Review ----
+	{
+		displayName:
+			'A declined number keeps its payment and its monthly charge is paused. Send only what the reviewer declined (Get Identity Review: needs_fix): it is submitted again, the number goes back to pending_regulatory and nothing is charged again. 30 days without a fix, or releasing it, cancels and refunds it.',
+		name: 'phoneFixNotice',
+		type: 'notice',
+		default: '',
+		displayOptions: show([FIX_OP]),
+	},
+	{
+		displayName: 'New End User',
+		name: 'phoneFixEndUser',
+		type: 'collection',
+		placeholder: 'Add Field',
+		default: {},
+		description:
+			'Only to correct the end user or its address. The whole end user is sent again: fill type, first and last name, contact phone, street, city, postal code and address country (and business name for a business).',
+		displayOptions: show([FIX_OP]),
+		options: [
+			{ displayName: 'Address Country', name: 'countryCode', type: 'string', default: '', placeholder: 'ES', description: 'ISO country code of the address' },
+			{ displayName: 'Address Line 2', name: 'extendedAddress', type: 'string', default: '' },
+			{ displayName: 'Business Name', name: 'businessName', type: 'string', default: '', description: 'Legal name of the business (business only)' },
+			{ displayName: 'City (Address)', name: 'locality', type: 'string', default: '' },
+			{ displayName: 'Contact Phone', name: 'phone', type: 'string', default: '', placeholder: '+34600111222', description: 'Contact phone of the end user in international format' },
+			{ displayName: 'Email', name: 'email', type: 'string', placeholder: 'name@email.com', default: '' },
+			{
+				displayName: 'End User Type',
+				name: 'type',
+				type: 'options',
+				options: [
+					{ name: 'Business', value: 'business' },
+					{ name: 'Individual', value: 'individual' },
+				],
+				default: 'individual',
+			},
+			{ displayName: 'First Name', name: 'firstName', type: 'string', default: '' },
+			{ displayName: 'Last Name', name: 'lastName', type: 'string', default: '' },
+			{ displayName: 'Postal Code', name: 'postalCode', type: 'string', default: '' },
+			{ displayName: 'State / Region', name: 'administrativeArea', type: 'string', default: '' },
+			{ displayName: 'Street Address', name: 'street', type: 'string', default: '' },
+		],
+	},
+	{
+		displayName: 'Replacement Phone Number',
+		name: 'phoneFixReplacementNumber',
+		type: 'string',
+		default: '',
+		placeholder: '+34911234567',
+		description:
+			'Only after 409 phone_number_unavailable (the number is gone): another number of the same country and type with no higher price, from Search Available. Send it with the corrections again. The payment is kept and nothing is charged again.',
+		displayOptions: show([FIX_OP]),
+	},
+
+	// ---- Reply to Reviewer ----
+	{
+		displayName: 'Message',
+		name: 'phoneReviewerText',
+		type: 'string',
+		typeOptions: { rows: 4 },
+		required: true,
+		default: '',
+		description: 'Your answer to the reviewer (up to 2,000 characters). It shows in the thread of Get Identity Review.',
+		displayOptions: show([REPLY_OP]),
+	},
+	{
+		displayName: 'Attachments',
+		name: 'phoneReviewerAttachments',
+		type: 'fixedCollection',
+		typeOptions: { multipleValues: true },
+		placeholder: 'Add Attachment',
+		default: {},
+		description: 'Files for the reviewer, each from a binary property (PDF, JPG or PNG, up to 10 MB)',
+		displayOptions: show([REPLY_OP]),
+		options: [
+			{
+				displayName: 'Attachment',
+				name: 'attachment',
+				values: [
+					{ displayName: 'Input Binary Field', name: 'binaryProperty', type: 'string', default: 'data', description: 'Binary property of the input item that holds the file' },
+				],
+			},
+		],
+	},
+
+	// ---- KYC links ----
+	{
+		displayName:
+			'Your end user opens the link (no login, single use, valid 7 days), fills in the identity and documents and accepts the phone number terms. The purchase is billed to your account (paid plan, checked now and when the page is submitted). Then the page sends them to Redirect URL with ?kyc=submitted&country=XX. At most 20 active links.',
+		name: 'phoneKycLinkNotice',
+		type: 'notice',
+		default: '',
+		displayOptions: show([LINK_OP]),
+	},
+	{
+		displayName: 'Redirect URL',
+		name: 'phoneKycLinkRedirectUrl',
+		type: 'string',
+		required: true,
+		default: '',
+		placeholder: 'https://example.com/done',
+		description: 'HTTPS page the end user goes to after submitting (with ?kyc=submitted&country=XX)',
+		displayOptions: show([LINK_OP]),
+	},
+	{
+		displayName: 'Page Language',
+		name: 'phoneKycLinkLanguage',
+		type: 'options',
+		options: KYC_LINK_LANGUAGES,
+		default: 'en',
+		displayOptions: show([LINK_OP]),
+	},
+	{
+		displayName: 'Branding',
+		name: 'phoneKycLinkBranding',
+		type: 'collection',
+		placeholder: 'Add Branding',
+		default: {},
+		description: 'Your brand on the page (it never shows Upload-Post account details)',
+		displayOptions: show([LINK_OP]),
+		options: [
+			{ displayName: 'Brand Color', name: 'brandColor', type: 'color', default: '#4F46E5', description: 'Hex color #RRGGBB' },
+			{ displayName: 'Company Name', name: 'companyName', type: 'string', default: '', description: 'Up to 80 characters' },
+			{ displayName: 'Logo URL', name: 'logoUrl', type: 'string', default: '', placeholder: 'https://example.com/logo.png', description: 'HTTPS image URL' },
+		],
+	},
+	{
+		displayName: 'Link ID',
+		name: 'phoneKycLinkId',
+		type: 'string',
+		required: true,
+		default: '',
+		placeholder: 'kl_3f9c0a1b2c3d4e5f6a7b8c9d',
+		description: 'The ID of the link (kl_…) from Create KYC Link or List KYC Links, not the token',
+		displayOptions: show(['revokePhoneNumberKycLink']),
 	},
 
 	// ---- Release ----
@@ -391,7 +549,7 @@ export const phoneNumberProperties: INodeProperties[] = [
 		type: 'boolean',
 		default: false,
 		description:
-			'Whether you confirm the release. It is final: WhatsApp and anything else using the number stop working, our carrier may give the number to someone else later, and the monthly charge stops (no proration). Without it nothing is sent.',
+			'Whether you confirm the release. It is final: WhatsApp and anything else using the number stop working, our carrier may give the number to someone else later, and the monthly charge stops (no proration). A number declined by the identity review is cancelled and refunded instead. Without it nothing is sent.',
 		displayOptions: show(['releasePhoneNumber']),
 	},
 
@@ -544,25 +702,114 @@ const purchaseBody = (ctx: NetworkContext): IDataObject => {
 	return body;
 };
 
+// A file of the input item as {filename, content_base64}, the JSON form of the API.
+const binaryFile = async (ctx: NetworkContext, rawProperty: unknown, fallbackName: string): Promise<IDataObject> => {
+	const property = String(rawProperty ?? '').trim() || 'data';
+	let content: string;
+	try {
+		const buffer = await ctx.node.helpers.getBinaryDataBuffer(ctx.itemIndex, property);
+		content = buffer.toString('base64');
+	} catch (error) {
+		const message = error instanceof Error ? ` (${error.message})` : '';
+		return fail(ctx, `Binary property '${property}' was not found in item ${ctx.itemIndex}${message}`);
+	}
+	const fileName = ctx.node.getInputData()[ctx.itemIndex]?.binary?.[property]?.fileName ?? fallbackName;
+	return { filename: fileName, content_base64: content };
+};
+
 const kycDocuments = async (ctx: NetworkContext): Promise<IDataObject> => {
 	const raw = param(ctx, 'phoneKycDocuments', {}) as { document?: Array<{ requirementId?: string; binaryProperty?: string }> };
 	const documents: IDataObject = {};
 	for (const entry of raw?.document ?? []) {
 		const requirementId = String(entry.requirementId ?? '').trim();
-		const property = String(entry.binaryProperty ?? '').trim() || 'data';
-		if (!requirementId) fail(ctx, 'Each document needs its Requirement ID (from Get Identity Fields)');
-		let content: string;
-		try {
-			const buffer = await ctx.node.helpers.getBinaryDataBuffer(ctx.itemIndex, property);
-			content = buffer.toString('base64');
-		} catch (error) {
-			const message = error instanceof Error ? ` (${error.message})` : '';
-			return fail(ctx, `Binary property '${property}' was not found in item ${ctx.itemIndex}${message}`);
-		}
-		const fileName = ctx.node.getInputData()[ctx.itemIndex]?.binary?.[property]?.fileName ?? `${requirementId}`;
-		documents[requirementId] = { filename: fileName, content_base64: content };
+		if (!requirementId) fail(ctx, 'Each document needs its Requirement ID (from Get Identity Fields or Get Identity Review)');
+		documents[requirementId] = await binaryFile(ctx, entry.binaryProperty, requirementId);
 	}
 	return documents;
+};
+
+// Fix Identity Review: the end user goes whole (the API validates it as on a purchase).
+const fixEndUser = (ctx: NetworkContext): IDataObject | undefined => {
+	const raw = (param(ctx, 'phoneFixEndUser', {}) ?? {}) as IDataObject;
+	const get = (name: string) => (typeof raw[name] === 'string' ? (raw[name] as string).trim() : '');
+	const filled = Object.keys(raw).filter((name) => name !== 'type' && get(name));
+	if (!filled.length) return undefined;
+	const need = (name: string, label: string) => get(name) || fail(ctx, `New End User needs ${label} (the whole end user is sent again)`);
+	const type = get('type') || 'individual';
+	const address: IDataObject = {
+		street_address: need('street', 'Street Address'),
+		locality: need('locality', 'City (Address)'),
+		postal_code: need('postalCode', 'Postal Code'),
+		country_code: need('countryCode', 'Address Country').toUpperCase(),
+	};
+	if (get('extendedAddress')) address.extended_address = get('extendedAddress');
+	if (get('administrativeArea')) address.administrative_area = get('administrativeArea');
+	const endUser: IDataObject = {
+		type,
+		first_name: need('firstName', 'First Name'),
+		last_name: need('lastName', 'Last Name'),
+		phone: need('phone', 'Contact Phone'),
+	};
+	if (type === 'business') endUser.business_name = need('businessName', 'Business Name');
+	if (get('email')) endUser.email = get('email');
+	endUser.address = address;
+	return endUser;
+};
+
+const fixBody = async (ctx: NetworkContext): Promise<IDataObject> => {
+	const body: IDataObject = {};
+	const values = jsonObjectParam(ctx, 'phoneKycValues', 'Identity Values (JSON)');
+	if (Object.keys(values).length) body.values = values;
+	const documents = await kycDocuments(ctx);
+	if (Object.keys(documents).length) body.documents = documents;
+	const endUser = fixEndUser(ctx);
+	if (endUser) body.end_user = endUser;
+	if (!Object.keys(body).length) {
+		fail(ctx, 'Nothing to fix: add the corrected Identity Values, Documents or New End User (see needs_fix in Get Identity Review)');
+	}
+	putFilled(ctx, body, [['phoneFixReplacementNumber', 'phone_number']]);
+	return body;
+};
+
+const replyBody = async (ctx: NetworkContext): Promise<IDataObject> => {
+	const text = requireStr(ctx, 'phoneReviewerText', 'Message');
+	if (text.length > 2000) fail(ctx, 'Message is limited to 2,000 characters');
+	const raw = param(ctx, 'phoneReviewerAttachments', {}) as { attachment?: Array<{ binaryProperty?: string }> };
+	const attachments: IDataObject[] = [];
+	for (const entry of raw?.attachment ?? []) {
+		attachments.push(await binaryFile(ctx, entry.binaryProperty, `attachment-${attachments.length + 1}`));
+	}
+	return attachments.length ? { text, attachments } : { text };
+};
+
+const httpsUrl = (ctx: NetworkContext, value: string, label: string): string => {
+	if (!/^https:\/\/\S+$/i.test(value)) fail(ctx, `${label} must be an https:// URL`);
+	return value;
+};
+
+const kycLinkBody = (ctx: NetworkContext): IDataObject => {
+	const body: IDataObject = {
+		profile_username: requireStr(ctx, 'phoneProfile', 'Profile'),
+		country: country(ctx),
+		number_type: str(ctx, 'phoneNumberType') || 'local',
+		redirect_url: httpsUrl(ctx, requireStr(ctx, 'phoneKycLinkRedirectUrl', 'Redirect URL'), 'Redirect URL'),
+		language: str(ctx, 'phoneKycLinkLanguage') || 'en',
+	};
+	putFilled(ctx, body, [['phoneNumberToBuy', 'phone_number']]);
+	const raw = (param(ctx, 'phoneKycLinkBranding', {}) ?? {}) as IDataObject;
+	const get = (name: string) => (typeof raw[name] === 'string' ? (raw[name] as string).trim() : '');
+	const branding: IDataObject = {};
+	if (get('companyName')) {
+		if (get('companyName').length > 80) fail(ctx, 'Company Name is limited to 80 characters');
+		branding.company_name = get('companyName');
+	}
+	if (get('logoUrl')) branding.logo_url = httpsUrl(ctx, get('logoUrl'), 'Logo URL');
+	if (get('brandColor')) {
+		if (!/^#[0-9a-f]{6}$/i.test(get('brandColor'))) fail(ctx, 'Brand Color must be a hex color like #4F46E5');
+		branding.brand_color = get('brandColor');
+	}
+	if (Object.keys(branding).length) body.branding = branding;
+	return body;
 };
 
 const voiceBody = (ctx: NetworkContext): IDataObject => {
@@ -667,35 +914,76 @@ export const buildPhoneNumberRequest = async (
 			putFilled(ctx, qs, [['phoneUsageFrom', 'from'], ['phoneUsageTo', 'to']]);
 			return call('GET', `${P}/usage`, qs);
 		}
+		case 'getPhoneNumberKycRemediation':
+			return call('GET', numberPath(ctx, '/remediate'), {});
+		case FIX_OP: {
+			const path = numberPath(ctx, '/remediate');
+			// 409 phone_number_unavailable is an answer, not a failure: the payment is kept.
+			return { ...call('POST', path, await fixBody(ctx)), answerErrors: ['phone_number_unavailable'] };
+		}
+		case REPLY_OP: {
+			const path = numberPath(ctx, '/remediate/reply');
+			return call('POST', path, await replyBody(ctx));
+		}
+		case LINK_OP:
+			return call('POST', `${P}/kyc/share`, kycLinkBody(ctx));
+		case 'listPhoneNumberKycLinks':
+			return call('GET', `${P}/kyc/share`, {});
+		case 'revokePhoneNumberKycLink':
+			return call('DELETE', `${P}/kyc/share/${encodeURIComponent(requireStr(ctx, 'phoneKycLinkId', 'Link ID'))}`, {});
 	}
 	return fail(ctx, `Unsupported phone number operation: ${operation}`);
 };
 
 // Purchase and Submit Identity Documents answer 202 when the number is not
-// active yet. The answer is returned as is, plus a next_step that says what to do.
+// active yet; Get / Fix Identity Review answer about a declined review. The answer
+// is returned as is, plus a next_step that says what to do.
+const withNextStep = (data: IDataObject, next_step: string): IDataObject => ({ ...data, next_step });
+
 export const withPhoneNumberNextStep = (operation: string, data: unknown): unknown => {
-	if (!BUY_OPS.includes(operation) || !data || typeof data !== 'object' || Array.isArray(data)) return data;
-	const status = (data as IDataObject).status;
+	if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+	const answer = data as IDataObject;
+	if (operation === FIX_OP) {
+		if (answer.error_code === 'phone_number_unavailable') {
+			return withNextStep(
+				answer,
+				'Your payment is kept and nothing was charged again, but this number is no longer available. Pick another number of the same country and type with the same or a lower price (Search Available) and run Fix Identity Review again with the same corrections and that number in Replacement Phone Number.',
+			);
+		}
+		if (answer.status === 'pending_regulatory') {
+			return withNextStep(
+				answer,
+				'Corrections sent; nothing was charged again. Our carrier reviews the identity again (phone_number_kyc_resubmitted webhook). On approval the number becomes active and the monthly charge resumes (phone_number_activated); if it is declined again, fix it again with Fix Identity Review. Reviewer messages arrive as phone_number_kyc_comment.',
+			);
+		}
+		return data;
+	}
+	if (operation === 'getPhoneNumberKycRemediation') {
+		const number = answer.phone_number as IDataObject | undefined;
+		if (number && number.status === 'regulatory_declined') {
+			return withNextStep(
+				answer,
+				'Declined: the payment is kept and the monthly charge is paused. Send only the requirements with needs_fix (and a new address if it was declined) with Fix Identity Review; ask the reviewer with Reply to Reviewer. 30 days without a fix, or releasing the number, cancels and refunds it.',
+			);
+		}
+		return data;
+	}
+	if (!BUY_OPS.includes(operation)) return data;
+	const status = answer.status;
 	if (status === 'kyc_required') {
-		return {
-			...(data as IDataObject),
-			next_step:
-				'Identity documents needed; nothing was charged and no number was bought yet. Get the requirements with Get Identity Fields (same country and number type) and send them with Submit Identity Documents, with the same Purchase Intent ID and fields.',
-		};
+		return withNextStep(
+			answer,
+			'Identity documents needed; nothing was charged and no number was bought yet. Get the requirements with Get Identity Fields (same country and number type) and send them with Submit Identity Documents, with the same Purchase Intent ID and fields.',
+		);
 	}
 	if (status === 'pending_payment') {
-		return {
-			...(data as IDataObject),
-			next_step:
-				'Paid; the order with our carrier is still being confirmed. Use Get in a minute and do not buy again: the same Purchase Intent ID returns the same number. It ends active (phone_number_activated webhook) or failed with the charge refunded, within about 15 minutes.',
-		};
+		return withNextStep(
+			answer,
+			'Paid; the order with our carrier is still being confirmed. Use Get in a minute and do not buy again: the same Purchase Intent ID returns the same number. It ends active (phone_number_activated webhook) or failed with the charge refunded, within about 15 minutes.',
+		);
 	}
 	if (status === 'pending_regulatory') {
-		return {
-			...(data as IDataObject),
-			next_step:
-				'Paid; our carrier is reviewing the identity. The number becomes active (phone_number_activated webhook) or is declined and refunded (phone_number_declined webhook).',
-		};
+		return withNextStep(answer, `Paid; our carrier is reviewing the identity. The number becomes active (phone_number_activated webhook). ${DECLINED_TEXT}`);
 	}
 	return data;
 };

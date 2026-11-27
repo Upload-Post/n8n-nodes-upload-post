@@ -142,6 +142,10 @@ type RequestConfig = {
 	// The API answers the raw file (Download Media): it goes to this binary
 	// property, named fileName plus the extension of its Content-Type.
 	binaryOutput?: { propertyName: string; fileName: string; json?: IDataObject };
+	// API error codes that are an answer, not a failure (Fix Identity Review:
+	// phone_number_unavailable keeps the payment): returned as the item with
+	// http_status; any other error still fails the node.
+	answerErrors?: string[];
 };
 
 const MIME_EXTENSIONS: Record<string, string> = {
@@ -157,6 +161,20 @@ const MIME_EXTENSIONS: Record<string, string> = {
 	'text/plain': 'txt',
 	'video/3gpp': '3gp',
 	'video/mp4': 'mp4',
+};
+
+// A full response whose error code is in answerErrors comes back as data with
+// http_status; other errors fail the node as usual.
+const answeredResponse = (node: IExecuteFunctions, response: unknown, answerErrors: string[]): unknown => {
+	const { statusCode, body } = (response ?? {}) as { statusCode?: number; body?: unknown };
+	const status = Number(statusCode ?? 200);
+	const parsed = parseJsonIfNeeded(body);
+	if (status < 400) return parsed;
+	const data = (parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : { message: String(parsed ?? '') }) as IDataObject;
+	if (typeof data.error_code === 'string' && answerErrors.includes(data.error_code)) {
+		return { ...data, http_status: status };
+	}
+	throw new NodeApiError(node.getNode(), data as JsonObject, { httpCode: String(status) });
 };
 
 const binaryResponseItem = async (
@@ -8257,6 +8275,10 @@ export class UploadPost implements INodeType {
 				// For requests without body (GET, etc)
 				requestOptions.json = true;
 			}
+			if (config.answerErrors?.length) {
+				requestOptions.returnFullResponse = true;
+				requestOptions.ignoreHttpStatusErrors = true;
+			}
 			if (config.binaryOutput) {
 				requestOptions.json = false;
 				requestOptions.encoding = 'arraybuffer';
@@ -8277,7 +8299,10 @@ export class UploadPost implements INodeType {
 				continue;
 			}
 
-			const responseData = withPhoneNumberNextStep(operation, parseJsonIfNeeded(rawResponse));
+			const responseData = withPhoneNumberNextStep(
+				operation,
+				config.answerErrors?.length ? answeredResponse(this, rawResponse, config.answerErrors) : parseJsonIfNeeded(rawResponse),
+			);
 
 			let finalData: any = responseData;
 			// 202 pending_approval (a team Editor or Contributor): nothing is published
