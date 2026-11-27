@@ -6,6 +6,7 @@
   - **Get Config**, **List Countries**, **Search Available**, **Purchase** (end user, terms, idempotent Purchase Intent ID with a per-execution default), **Get Identity Fields** and **Submit Identity Documents** (values plus files from binary properties).
   - Purchase and Submit Identity Documents return the API answer plus a `next_step` when it is `202`: `kyc_required` (nothing charged, send the documents) or `pending_regulatory` (paid, our carrier is reviewing).
   - **List**, **Get**, **Release** (final, needs Confirm Release), **Update Voice Settings** (forwarding, voicemail, recording, transcription), **Send SMS**, **List Messages**, **List Calls**, **Get Codes**, **Prepare WhatsApp Verification**, **Get Port-Out Info** and **Get Usage**.
+  - Prices and usage are in the account's billing currency (USD, EUR or GBP, same numeric amount); an account billed in another currency gets `409 phone_numbers_currency_unsupported`.
 - Upload Post Trigger: the phone number events `sms_received`, `call_received`, `voicemail_received`, `phone_number_activated`, `phone_number_declined`, `phone_number_released` and `phone_number_port_out` (opt-in, only accepted while phone numbers are available on the account).
 
 ## 0.11.0
