@@ -75,7 +75,7 @@ export const phoneNumberProperties: INodeProperties[] = [
 			{ name: 'Get Usage', value: 'getPhoneNumbersUsage', action: 'Get the phone usage and charges', description: 'Billable usage with line items and totals in the account\'s billing currency, charged on the next subscription invoice' },
 			{ name: 'List', value: 'listPhoneNumbers', action: 'List phone numbers', description: 'Numbers of the account (pending and active unless Status says otherwise)' },
 			{ name: 'List Calls', value: 'listPhoneNumberCalls', action: 'List the calls of a phone number', description: 'Calls and voicemails newest first, with transcript and a recording link valid for 1 hour' },
-			{ name: 'List Countries', value: 'listPhoneNumberCountries', action: 'List phone number countries and prices', description: 'Countries and number types on sale, cheapest first, with the monthly price in the account\'s billing currency and what they support' },
+			{ name: 'List Countries', value: 'listPhoneNumberCountries', action: 'List phone number countries and prices', description: 'Countries and number types on sale, cheapest first, with the real monthly price (it varies by country and type) in the account\'s billing currency and what they support' },
 			{ name: 'List Messages', value: 'listPhoneNumberMessages', action: 'List the sms of a phone number', description: 'Inbound and outbound SMS newest first' },
 			{ name: 'Prepare WhatsApp Verification', value: 'preparePhoneNumberWhatsapp', action: 'Prepare a phone number for the whatsapp code', description: 'For 30 minutes calls are answered and transcribed so the code Meta reads out shows in Get Codes' },
 			{ name: 'Purchase', value: 'purchasePhoneNumber', action: 'Buy a phone number', description: 'Buy a number for a profile. Charged on the account subscription; some countries first answer kyc_required.' },
@@ -681,6 +681,13 @@ export const withPhoneNumberNextStep = (operation: string, data: unknown): unkno
 			...(data as IDataObject),
 			next_step:
 				'Identity documents needed; nothing was charged and no number was bought yet. Get the requirements with Get Identity Fields (same country and number type) and send them with Submit Identity Documents, with the same Purchase Intent ID and fields.',
+		};
+	}
+	if (status === 'pending_payment') {
+		return {
+			...(data as IDataObject),
+			next_step:
+				'Paid; the order with our carrier is still being confirmed. Use Get in a minute and do not buy again: the same Purchase Intent ID returns the same number. It ends active (phone_number_activated webhook) or failed with the charge refunded, within about 15 minutes.',
 		};
 	}
 	if (status === 'pending_regulatory') {

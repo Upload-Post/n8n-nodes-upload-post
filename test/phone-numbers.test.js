@@ -121,6 +121,10 @@ test('a 202 kyc_required answer comes back with a next_step and nothing else cha
 	assert.match(out.next_step, /Submit Identity Documents/);
 	const pending = await phone('purchasePhoneNumber', BUYER, { response: { success: true, status: 'pending_regulatory' } });
 	assert.match(pending.out.next_step, /phone_number_activated/);
+	const paying = await phone('submitPhoneNumberKyc', BUYER, { response: { success: true, status: 'pending_payment' } });
+	assert.equal(paying.out.status, 'pending_payment');
+	assert.match(paying.out.next_step, /do not buy again/);
+	assert.match(paying.out.next_step, /same Purchase Intent ID/);
 	const active = await phone('purchasePhoneNumber', BUYER, { response: { success: true, status: 'active' } });
 	assert.equal(active.out.next_step, undefined);
 	// Other operations are returned untouched.
