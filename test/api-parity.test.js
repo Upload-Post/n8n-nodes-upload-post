@@ -7,8 +7,8 @@ const root = path.join(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'nodes/UploadPost/UploadPost.node.ts'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
-test('package version is 0.11.0', () => {
-	assert.equal(pkg.version, '0.11.0');
+test('package version is 0.12.0', () => {
+	assert.equal(pkg.version, '0.12.0');
 });
 
 test('upload platforms include the credential channels from the current API', () => {

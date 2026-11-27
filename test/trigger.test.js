@@ -463,8 +463,8 @@ test('the trigger is registered and its events are exactly the API catalog', () 
 test('events gated by an account feature say so in their description', () => {
 	const options = node.description.properties.find((p) => p.name === 'events').options;
 	for (const option of options) {
-		if (/^(youtube_video_|post_approval_|post_approved|post_rejected)/.test(option.value)) {
-			assert.match(option.description, /Needs .* turned on/, option.value);
+		if (/^(youtube_video_|post_approval_|post_approved|post_rejected|sms_received|call_received|voicemail_received|phone_number_)/.test(option.value)) {
+			assert.match(option.description, /Needs .* (turned on|available on the account)/, option.value);
 		}
 	}
 });

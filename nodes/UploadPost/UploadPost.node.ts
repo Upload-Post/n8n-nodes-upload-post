@@ -28,6 +28,7 @@ import {
 	youtubeProperties,
 	youtubeUploadProperties,
 } from './YouTubeOperations';
+import { buildPhoneNumberRequest, phoneNumberProperties, withPhoneNumberNextStep } from './PhoneNumberOperations';
 
 const MANUAL_USER_VALUE = '__manual_user__';
 const MANUAL_FACEBOOK_VALUE = '__manual_facebook__';
@@ -2721,6 +2722,9 @@ const buildRequestConfig = async (ctx: ExecutionContext): Promise<RequestConfig>
 	}
 
 	const resource = ctx.node.getNodeParameter('resource', ctx.itemIndex) as string;
+	if (resource === 'phoneNumbers') {
+		return buildPhoneNumberRequest(ctx.node, ctx.itemIndex, ctx.operation);
+	}
 	if (resource === 'youtube') {
 		return buildYoutubeRequest(ctx.node, ctx.itemIndex, ctx.operation);
 	}
@@ -2922,6 +2926,7 @@ export class UploadPost implements INodeType {
 					{ name: 'Direct Message', value: 'dms' },
 					{ name: 'Google Business', value: 'googleBusiness' },
 					{ name: 'Insight', value: 'insights' },
+					{ name: 'Phone Number', value: 'phoneNumbers' },
 					{ name: 'Post Action', value: 'postActions' },
 					{ name: 'Queue & Best Time', value: 'queue' },
 					{ name: 'Status & History', value: 'monitoring' },
@@ -2934,6 +2939,7 @@ export class UploadPost implements INodeType {
 			},
 			...networkProperties,
 			...youtubeProperties,
+			...phoneNumberProperties,
 			{
 				displayName: 'Operation',
 				name: 'operation',
@@ -8271,7 +8277,7 @@ export class UploadPost implements INodeType {
 				continue;
 			}
 
-			const responseData = parseJsonIfNeeded(rawResponse);
+			const responseData = withPhoneNumberNextStep(operation, parseJsonIfNeeded(rawResponse));
 
 			let finalData: any = responseData;
 			// 202 pending_approval (a team Editor or Contributor): nothing is published

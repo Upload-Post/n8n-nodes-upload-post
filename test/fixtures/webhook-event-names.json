@@ -1,6 +1,6 @@
 {
   "source": "Upload-Post API spec, components.schemas.WebhookEventName (backend profiles._webhook_event_names). Update it together with the trigger event list.",
-  "copied": "2026-11-17",
+  "copied": "2026-11-27",
   "events": [
     "upload_completed",
     "social_account_connected",
@@ -21,6 +21,14 @@
     "post_approval_requested",
     "post_approved",
     "post_rejected",
-    "post_approval_expired"
-  ]
+    "post_approval_expired",
+    "sms_received",
+    "call_received",
+    "voicemail_received",
+    "phone_number_activated",
+    "phone_number_declined",
+    "phone_number_released",
+    "phone_number_port_out"
+  ],
+  "note": "linkedin_page_activity and instagram_mention_received are in the API catalog but not offered by the trigger yet."
 }

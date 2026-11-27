@@ -106,7 +106,7 @@ const describeError = (
 					: 'Upload-Post does not accept one of the selected events',
 				description: `${apiMessage ? apiMessage + '. ' : ''}Events this account accepts now: ${
 					allowed.length ? allowed.join(', ') : 'see the API documentation'
-				}. YouTube video events need YouTube notifications on, post approval events need post approvals on.`,
+				}. YouTube video events need YouTube notifications on, post approval events need post approvals on, phone number events need phone numbers available on the account.`,
 			};
 		}
 		case 'profile_not_found':

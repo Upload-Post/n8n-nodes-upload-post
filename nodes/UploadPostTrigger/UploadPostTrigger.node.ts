@@ -86,6 +86,12 @@ export class UploadPostTrigger implements INodeType {
 				description: 'The Upload-Post events that start this workflow',
 				options: [
 					{
+						name: 'Call Received',
+						value: 'call_received',
+						description:
+							'Someone called one of your Upload-Post phone numbers (the call field has the caller, duration and status). Opt-in. Needs phone numbers available on the account (not generally available yet).',
+					},
+					{
 						name: 'Comment Received',
 						value: 'comment_received',
 						description:
@@ -120,6 +126,30 @@ export class UploadPostTrigger implements INodeType {
 						value: 'listing_google_update',
 						description:
 							'Google suggests updates to a Google Business Profile listing. Needs Google Business notifications turned on.',
+					},
+					{
+						name: 'Phone Number Activated',
+						value: 'phone_number_activated',
+						description:
+							'A phone number you bought is active (also after an identity review). Opt-in. Needs phone numbers available on the account (not generally available yet).',
+					},
+					{
+						name: 'Phone Number Declined',
+						value: 'phone_number_declined',
+						description:
+							'Our carrier declined the identity review of a phone number: it was not activated and the charge was refunded (reason field). Opt-in. Needs phone numbers available on the account (not generally available yet).',
+					},
+					{
+						name: 'Phone Number Port Out',
+						value: 'phone_number_port_out',
+						description:
+							'A phone number is being moved, or was moved, to another carrier (port_out_status field). Opt-in. Needs phone numbers available on the account (not generally available yet).',
+					},
+					{
+						name: 'Phone Number Released',
+						value: 'phone_number_released',
+						description:
+							'A phone number was released, by you or after the subscription ended (reason field). Opt-in. Needs phone numbers available on the account (not generally available yet).',
 					},
 					{
 						name: 'Post Analytics Updated',
@@ -164,6 +194,12 @@ export class UploadPostTrigger implements INodeType {
 							'A review of a Google Business Profile location was edited. Needs Google Business notifications turned on.',
 					},
 					{
+						name: 'SMS Received',
+						value: 'sms_received',
+						description:
+							'One of your Upload-Post phone numbers received an SMS (the message field has the sender and the text). Opt-in. Needs phone numbers available on the account (not generally available yet).',
+					},
+					{
 						name: 'Social Account Connected',
 						value: 'social_account_connected',
 						description: 'A social account was connected or reconnected to a profile',
@@ -189,6 +225,12 @@ export class UploadPostTrigger implements INodeType {
 						value: 'upload_completed',
 						description:
 							'An upload finished, published or failed: check the success field of each platform result',
+					},
+					{
+						name: 'Voicemail Received',
+						value: 'voicemail_received',
+						description:
+							'A caller left a voicemail on one of your Upload-Post phone numbers (the call field has the recording link and the transcript). Opt-in. Needs phone numbers available on the account (not generally available yet).',
 					},
 					{
 						name: 'YouTube Video Published',
